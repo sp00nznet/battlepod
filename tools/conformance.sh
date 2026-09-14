@@ -67,6 +67,14 @@ for cmd in 's\r3\r05\r01\r' 's\r2\r80\r05\r' 's\r1\r80\rBATTLTEC\r'; do
         --steps 20000000 --top 0 >> "$OUT" 2>&1 || true
 done
 
+# Scenario 4: hand the booted firmware one received packet through the stubbed
+# boot monitor and check it consumes it - the release-buffer service is called
+# exactly once in response.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
+    --duart 11000 --rstub 3FF00000 --monitor --clock 2000808 \
+    --poke 50001000=55000000 --set 40000100=1234567 \
+    --packet 00 --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
 # One checkpoint per line: each is a string the firmware must still print.
 CHECKS="BTS2--Up
 TI Reset Sent
@@ -92,7 +100,8 @@ Time 00:00:00:00 Raw Clock: 0
 Lamp number in hex (00 - 3b, 50 - 53 and 60)
 01 00 03 03 D3 05 01 D9
 01 00 03 03 D2 80 05 57
-01 00 0A 0A D1 80 42 41 54 54 4C 54 45 43 A4"
+01 00 0A 0A D1 80 42 41 54 54 4C 54 45 43 A4
+  +1C  x1"
 
 pass=0
 total=0

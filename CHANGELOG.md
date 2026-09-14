@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `--packet` hands the booted firmware one received packet through the stubbed
+  boot monitor. The firmware consumes it and releases the buffer, which is how
+  delivery is confirmed.
 - `--monitor` installs a stub service table for the pod's boot monitor, which
   is not in the release, and reports which slots the firmware calls. With it the
   cockpit boots all the way to its main loop instead of dying on a null call.
@@ -62,6 +65,12 @@ All notable changes to this project are documented here. The format follows
 - The boot now ends with the cockpit idling in its main loop, polling for a
   packet that never arrives - which is what a pod does while it waits for the
   operator console.
+- A received packet is a word, a body length, then the body; the first body byte
+  is the opcode. Opcode 0 formats `GAME RUNNING %d %d %d GAME_NAME` and replies;
+  opcodes 1-7, 0x20 and 0x21 share a handler; 0xC7 and 0xE4 have their own.
+- Everything else goes to the inter-centre modem router - the code behind
+  `Dial_List`, with `Master router ready`, `NETWORK OVERLOAD` and the AT command
+  timeouts - not to the game layer.
 
 ### Fixed
 

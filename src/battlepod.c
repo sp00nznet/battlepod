@@ -211,27 +211,64 @@ static char *unescape(const char *s)
  * safe answer for a poll, and counts which slots the firmware actually calls -
  * that enumeration is the monitor's API surface. */
 
-#define MON_SLOTS 32
-#define MON_STUB_OFF 0x200
+#define MON_SLOTS    32
+#define MON_STUB_OFF  0x200
+#define MON_STUB_SZ   16
+#define MON_PKT_OFF   0x400		/* received-packet buffer, past the stubs */
+#define MON_SLOT_RECV 6			/* +0x18: poll for a received packet */
 
 static uint32_t g_mon, g_monstub;
 static uint32_t g_moncall[MON_SLOTS];
+static uint8_t  g_pkt[512];
+static uint32_t g_pktlen;
+static int      g_pkt_delivered;
+
+/* moveq #0,D0 ; suba.l A0,A0 ; rts - returns NULL with Z set, which the
+ * firmware's thunks read as "nothing available, no error". */
+static const uint8_t MON_STUB_NULL[6] = { 0x70,0x00, 0x91,0xC8, 0x4E,0x75 };
+
+static void mon_slot(uint32_t slot, const uint8_t *code, uint32_t n)
+{
+	uint32_t at = g_monstub + slot * MON_STUB_SZ, i;
+	for (i = 0; i < n; i++) m68k_write_memory_8(at + i, code[i]);
+}
 
 static void mon_install(uint32_t base)
 {
-	/* moveq #0,D0 ; suba.l A0,A0 ; rts ; nop  - clears the result, sets Z */
-	static const uint8_t stub[8] = { 0x70,0x00, 0x91,0xC8, 0x4E,0x75, 0x4E,0x71 };
-	uint32_t i, j;
+	uint32_t i;
 
 	ram_add(base, 0x1000);
 	g_mon = base;
 	g_monstub = base + MON_STUB_OFF;
 
 	for (i = 0; i < MON_SLOTS; i++) {
-		uint32_t s = g_monstub + i * 8;
-		for (j = 0; j < sizeof stub; j++) m68k_write_memory_8(s + j, stub[j]);
-		m68k_write_memory_32(base + i * 4, s);
+		mon_slot(i, MON_STUB_NULL, sizeof MON_STUB_NULL);
+		m68k_write_memory_32(base + i * 4, g_monstub + i * MON_STUB_SZ);
 	}
+
+	if (!g_pktlen) return;
+
+	/* Hand the firmware one packet. Its header is a word it does not read
+	 * here, then the body length, then the body - the receive path takes the
+	 * length from [pkt+2] and the opcode from [pkt+4]. */
+	{
+		uint32_t buf = base + MON_PKT_OFF;
+		uint8_t  ret[10] = { 0x20,0x7C, 0,0,0,0, 0x4A,0x88, 0x4E,0x75 };
+		m68k_write_memory_32(buf, g_pktlen);	/* [+0] word, [+2] length */
+		for (i = 0; i < g_pktlen; i++) m68k_write_memory_8(buf + 4 + i, g_pkt[i]);
+		ret[2] = (uint8_t)(buf >> 24); ret[3] = (uint8_t)(buf >> 16);
+		ret[4] = (uint8_t)(buf >> 8);  ret[5] = (uint8_t)buf;
+		mon_slot(MON_SLOT_RECV, ret, sizeof ret);	/* movea.l #buf,A0; tst.l A0; rts */
+	}
+}
+
+/* Deliver the packet exactly once: on the second poll, put the NULL stub back
+ * before it executes. */
+static void mon_recv_polled(void)
+{
+	if (!g_pktlen) return;
+	if (g_pkt_delivered) mon_slot(MON_SLOT_RECV, MON_STUB_NULL, sizeof MON_STUB_NULL);
+	else g_pkt_delivered = 1;
 }
 
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
@@ -969,6 +1006,20 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--entry") && i + 1 < argc) { g_entry = (uint32_t)strtoul(argv[++i], NULL, 16); g_have_entry = 1; }
 		else if (!strcmp(a, "--sp") && i + 1 < argc)      sp = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--vbr") && i + 1 < argc)     vbr = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--packet") && i + 1 < argc) {
+			const char *h = argv[++i];
+			g_pktlen = 0;
+			while (*h && g_pktlen < sizeof g_pkt) {
+				char *e;
+				long b;
+				while (*h == ' ' || *h == ',') h++;
+				if (!*h) break;
+				b = strtol(h, &e, 16);
+				if (e == h) { fprintf(stderr, "--packet wants hex bytes\n"); return 1; }
+				g_pkt[g_pktlen++] = (uint8_t)b;
+				h = e;
+			}
+		}
 		else if (!strcmp(a, "--monitor")) {
 			monitor_base = (i + 1 < argc && argv[i+1][0] != '-')
 			             ? (uint32_t)strtoul(argv[++i], NULL, 16) : 0x02000400u;
@@ -1093,8 +1144,12 @@ int main(int argc, char **argv)
 
 		m68k_set_irq(duart_irq() ? (unsigned)irq_level : 0);
 		if ((step % g_clock_div) == 0) clock_tick();
-		if (g_monstub && (pc - g_monstub) < MON_SLOTS * 8 && !((pc - g_monstub) & 7))
-			g_moncall[(pc - g_monstub) >> 3]++;
+		if (g_monstub && (pc - g_monstub) < MON_SLOTS * MON_STUB_SZ &&
+		    !((pc - g_monstub) % MON_STUB_SZ)) {
+			uint32_t slot = (pc - g_monstub) / MON_STUB_SZ;
+			g_moncall[slot]++;
+			if (slot == MON_SLOT_RECV) mon_recv_polled();
+		}
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }

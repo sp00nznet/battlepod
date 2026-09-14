@@ -126,6 +126,11 @@ over; the clock, and the Remote I/O submenus, work as they are.
 
 ### Remote I/O board
 
+Menu item `q`, "turn on all remote I/O displays and lights", still emits nothing
+even with interrupts and the monitor stubbed, while the individual device
+commands under `s` all work. Unexplained.
+
+
 `s` opens a submenu — Display, Bar Graph, Lamp — and each prompts with its own
 valid range. That is the cockpit's device map, given up by the firmware:
 
@@ -245,6 +250,45 @@ firmware boots through it and settles into its main loop polling `+0x18`,
 which is exactly what a cockpit does while it waits for the operator console to
 send it a game. Reaching that point is where the boot currently ends — not on a
 fault, but on an empty network.
+
+## The network packet interface
+
+The firmware's main loop polls monitor slot `+0x18` and, when it gets a pointer,
+reads the packet like this (`0x02122E96`):
+
+```
+pkt = monitor_get()           ; +0x18, NULL when nothing waiting
+if (!pkt) keep idling
+len    = (word)[pkt+2]        ; sign-extended
+body   = pkt + 4
+opcode = (byte)[body]
+```
+
+So a received packet is a short header - a word the receive path does not read,
+then the body length - followed by the body, whose first byte is the opcode.
+`--packet` feeds one in through the stubbed monitor; the firmware consumes it
+and calls `+0x1C` once, which is how delivery is confirmed.
+
+The dispatch at `0x02122FBC`:
+
+| opcode | goes to |
+|---|---|
+| `0x00` | `0x02122ED0` — formats `GAME RUNNING %d %d %d GAME_NAME` and sends a reply |
+| `0x01`-`0x07`, `0x20`, `0x21` | `0x02122F32` |
+| `0xC7` | `0x02122F78` |
+| `0xE4` | `0x02122F3C` |
+| anything else | `0x02145E90` |
+
+`0x02145E90` is not the game layer — the strings around it are
+`Master router ready`, `Slave router ready, trip time %d`,
+`Timeout, no CONNECT after dial command OK`, `*** NETWORK OVERLOAD ***`,
+`----- ROUTER -----`. That is the inter-centre modem link from `Dial_List`,
+where one pod per side acts as the router. It filters on a pair of bytes at
+`0x0218AEB6`/`B7` against `0x02179D32`/`33` — a node and game identity the
+packet must match at `body[2]` and `body[3]`.
+
+Whatever starts a game is therefore among the low opcodes, and that is the next
+thing to pin down.
 
 ## Renderer command 6
 

@@ -31,13 +31,20 @@ packet.
 
 ## Next
 
-**Speak to it over the network.** The pod is idling on the monitor's `+0x18`
-poll, waiting for the operator console. Everything OpsCon sends is derived from
-plaintext files already in the release (`Game_Setup`, `Team_List`,
-`Vehicle_List`, `Scenario_List`, `Net_Configuration`), so the next step is to
-work out the packet format the firmware expects and hand it a game to start.
-That is what turns a booting cockpit into a running one - and it arrives far
-earlier than the original plan assumed, because none of it needs a Macintosh.
+**Start a game over the network.** Packets can now be handed to the firmware and
+it consumes them, and the opcode dispatch is mapped. What is still unknown is
+which opcode starts a game and what its body looks like. The low opcodes are the
+place to look - `0x00` is a status reply and everything above the special cases
+goes to the inter-centre modem router, not the game layer. Everything OpsCon
+would send derives from plaintext already in the release (`Game_Setup`,
+`Team_List`, `Vehicle_List`, `Scenario_List`, `Net_Configuration`), and none of
+it needs a Macintosh.
+
+**The geometry is nearby.** The renderer code carries `Out of Solids...`,
+`Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and
+`Suspect cylinder data... shape %d` - so solids, cylinders and "ARES" are the
+display list's primitive types. That is a thread straight into the resource
+archive.
 
 **Resource archive.** Four type classes, 467 resources, index already printed
 by the firmware. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
