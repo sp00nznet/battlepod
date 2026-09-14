@@ -8,11 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Interrupts. `src/battlepod_m68kconf.h` turns on Musashi's interrupt
+  acknowledge hook so the DUART's programmed vector is honoured, and the DUART
+  model tracks IMR, the command registers and the interrupt status register.
+- `--vbr`, `--sr` and `--irq-level`. VBR now defaults to `0x02000000`, which is
+  where the firmware's own vector writes say the boot monitor left it.
+- `--clock ADDR[:N]`, a free-running counter standing in for the timebase the
+  boot monitor maintained at `0x02000808`.
+- Remote I/O packets are captured and hex-dumped, and the stop report names the
+  last exception vector fetched.
 - `--duart` models the cockpit's MC68681 DUART, both channels, including the
   receive path — so the firmware can be typed at, not just listened to.
 - `--duart-in` types at the console receiver.
 - Channel A transmits are captured and hex-dumped as the Remote I/O protocol.
-- Conformance now also drives the firmware's diagnostic monitor: 20 checkpoints.
+- Conformance now also drives the firmware's diagnostic monitor and checks the
+  Remote I/O packets byte for byte: 23 checkpoints.
 
 ### Changed
 
@@ -30,9 +40,16 @@ All notable changes to this project are documented here. The format follows
 - Remote I/O device map, from the monitor's own prompts: lamps `0x00`-`0x3B`,
   `0x50`-`0x53`, `0x60`; displays `0x80`-`0x91`; bar graphs `0x80`-`0x91`
   except `0x8C`, `0x8D`, `0x8F`.
-- RIO packets are framed `01 <node> <len> <csum> <payload> <csum>`; a lamp
-  payload is `D3 <lamp> <brightness>`. Transmission is interrupt-driven and
-  queues in RAM, so nothing reaches the wire until interrupts are modelled.
+- RIO packets are framed `01 <node> <len> <node+len> <payload> <sum(payload)>`.
+  Opcodes: `D1` display (id plus 8 ASCII characters), `D2` bar graph (id plus a
+  bar count), `D3` lamp (id plus brightness). All three now reach the wire with
+  both checksums verifying.
+- VBR is `0x02000000`. Nothing in the release sets it, but the firmware writes
+  vector 71 to `0x0200011C` and the DUART's vector register is `0x47`.
+- `0x02000808` is read in 336 places and written in none: the timebase came
+  from the boot monitor, which is not in the dump.
+- The boot now ends at a dispatch through an uninstalled object at
+  `0x0212C740`, `[[0x0216FADE] + 0x18]`.
 
 ### Fixed
 

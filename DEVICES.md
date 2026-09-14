@@ -153,13 +153,79 @@ Payloads are framed by `rio_send` at `0x0215B924`:
 with the node byte from `[0x021822F8]` and a raw-passthrough mode selected by
 `[0x0218230B]`.
 
-**Nothing reaches the wire yet.** `rio_send` only appends to a queue at
-`[0x021822FE]`; an interrupt service routine drains it into the DUART. With no
-interrupts modelled the queue simply fills. Making that work is the next step,
-and it needs two things settled: the DUART is configured for vectored
-interrupts (IVR `0x47`), and `ROM3_0` contains no `MOVEC` to VBR — so the
-vector table is expected at address 0, which nothing in the release writes.
-The pod's own boot monitor, which is not in the dump, presumably installs it.
+`rio_send` only appends to a queue at `[0x021822FE]`; the DUART's transmit
+interrupt drains it. With interrupts modelled, packets reach the wire:
+
+| command | bytes on channel A |
+|---|---|
+| lamp `0x05`, brightness `0x01` | `01 00 03 03 D3 05 01 D9` |
+| bar graph `0x80`, 5 bars | `01 00 03 03 D2 80 05 57` |
+| display `0x80`, `"BATTLTEC"` | `01 00 0A 0A D1 80 42 41 54 54 4C 54 45 43 A4` |
+
+Both checksums verify in every case: the header one is `node + len`, the
+trailing one is the sum of the payload alone (`D2` is cleared between them).
+
+| opcode | device | payload after the opcode |
+|---|---|---|
+| `0xD1` | display | id, then 8 ASCII characters |
+| `0xD2` | bar graph | id, then the number of bars to light |
+| `0xD3` | lamp | id, then brightness |
+
+## Interrupts
+
+`ROM3_0` contains no `MOVEC` to VBR, yet `0x0215B9C2` — the first thing the
+boot function calls — writes vectors to absolute addresses:
+
+```
+move.l #$214c708, $2000108.l     ; vector 66
+move.l #$215b69a, $200011c.l     ; vector 71 = 0x47, the DUART
+move.l #$215b69a, $20003fc.l     ; vector 255
+```
+
+So **VBR is `0x02000000`**, the CPU board's RAM base, left there by the pod's
+boot monitor. The DUART's own interrupt vector register is programmed to
+`0x47`, which is vector 71 — exactly the slot the firmware fills.
+
+The handler at `0x0215B6A4` is short:
+
+```
+movem.l D0/A0, -(A7)
+move.b  $1100a.l, D0     ; ISR
+btst    #$1, D0          ; RxRDY A  -> receive handler at 0215B6CC
+btst    #$0, D0          ; TxRDY A  -> transmit handler at 0215B8D0
+movem.l (A7)+, D0/A0
+rte
+```
+
+`0x0215B5B2` sets `IMR = 0x03` (channel A transmit and receive) and leaves the
+channel A transmitter *disabled* with `CRA = 0x08`. Queueing a packet enables
+it; the transmit handler disables it again when the queue drains, which is what
+stops the interrupt re-asserting. Modelling TxRDY as simply "the transmitter is
+enabled" reproduces that exactly.
+
+## The timebase lives outside the dump
+
+`0x02000808` — just past the vector table — is read in **336 places in
+`ROM3_0` and written in none**. It is a free-running counter the boot monitor
+maintained, and it is the firmware's universal timebase. Without one, every
+timeout in the game waits forever, so the harness supplies it.
+
+## Where the boot ends now
+
+After the audio download the firmware reaches a dispatch through an object that
+was never installed:
+
+```
+0212C72C  movem.l D1/A0-A1/A6, -(A7)
+0212C730  movea.l $216fae2.l, A6
+0212C736  movea.l $216fade.l, A0
+0212C73C  movea.l ($18,A0), A1      ; method at +0x18
+0212C740  jsr     (A1)              ; null
+```
+
+Neither `0x0216FADE` nor `0x0216FAE2` is written with an immediate anywhere in
+`ROM3_0`, so both are installed at runtime by a subsystem the stubs have not
+brought up. That is the next thread.
 
 ### The renderer is a TMS340x0
 

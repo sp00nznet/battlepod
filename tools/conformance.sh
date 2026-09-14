@@ -56,6 +56,14 @@ trap 'rm -f "$OUT"' EXIT
     --duart 11000 --set 2138A64=4E754E75 --duart-in 's\r3\r' \
     --steps 8000000 --top 0 >> "$OUT" 2>&1 || true
 
+# Scenario 3: with interrupts running, drive one of each Remote I/O device and
+# check the packets that reach the wire, checksums and all.
+for cmd in 's\r3\r05\r01\r' 's\r2\r80\r05\r' 's\r1\r80\rBATTLTEC\r'; do
+    "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
+        --duart 11000 --set 2138A64=4E754E75 --duart-in "$cmd" \
+        --steps 20000000 --top 0 >> "$OUT" 2>&1 || true
+done
+
 # One checkpoint per line: each is a string the firmware must still print.
 CHECKS="BTS2--Up
 TI Reset Sent
@@ -76,7 +84,10 @@ renderer commands: 5 posted
 BattleTech 2 Test Program
 y - START TEST GAME
 Time 00:00:00:00 Raw Clock: 0
-Lamp number in hex (00 - 3b, 50 - 53 and 60)"
+Lamp number in hex (00 - 3b, 50 - 53 and 60)
+01 00 03 03 D3 05 01 D9
+01 00 03 03 D2 80 05 57
+01 00 0A 0A D1 80 42 41 54 54 4C 54 45 43 A4"
 
 pass=0
 total=0

@@ -8,7 +8,9 @@ BUILD   := build
 
 CC      := gcc
 CFLAGS  := -pipe -O2 -g -Wall -Wno-unused-parameter
-INC     := -I$(MUSASHI) -I$(BUILD)
+INC     := -Isrc -I$(MUSASHI) -I$(BUILD)
+# Musashi's documented hook for supplying your own configuration.
+CFLAGS  += -DMUSASHI_CNF='"battlepod_m68kconf.h"'
 
 # Windows toolchains inherit a TMP that may not be writable; keep scratch local.
 export TMPDIR := $(CURDIR)/$(BUILD)/tmp

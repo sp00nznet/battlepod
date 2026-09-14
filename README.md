@@ -12,13 +12,15 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **20/20** checkpoints.
+Conformance: **23/23** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
 prints the index — 467 resources in four type classes. The graphics processor
 has been identified and its command protocol decoded, and the firmware's own
-diagnostic monitor can be driven interactively over the modelled serial port. See
+diagnostic monitor can be driven interactively over the modelled serial port —
+far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
+emit real Remote I/O packets, checksums and all. See
 [DEVICES.md](DEVICES.md) for the map and [ROADMAP.md](ROADMAP.md) for what's
 next.
 
@@ -182,7 +184,9 @@ the game initialisation returns. Patch an `RTS` over that call to land in it
 directly, and type at it:
 
 ```
-./build/battlepod.exe "$GF/Full_Load_3_0"     --duart 11000 --set 2138A64=4E754E75 --duart-in 's3'
+./build/battlepod.exe "$GF/Full_Load_3_0"     --duart 11000 --set 2138A64=4E754E75 --duart-in 's
+3
+'
 ```
 
 ```
@@ -202,7 +206,15 @@ s   s  ok!
 ```
 
 The valid ranges in those prompts are the cockpit's device map, given up by the
-firmware itself.
+firmware itself. Answer them and the packet reaches the wire:
+
+```
+remote i/o: 8 bytes sent on duart channel A
+  0000  01 00 03 03 D3 05 01 D9
+```
+
+`01` start, node `00`, length `03`, header checksum `03`, then the payload
+`D3 05 01` — lamp 5 at brightness 1 — and its checksum `D9`.
 
 ## Usage
 
@@ -211,12 +223,16 @@ Run with no arguments for the full option list. The ones that matter:
 | flag | what it does |
 |---|---|
 | `--duart BASE` | model the MC68681 DUART at `BASE`; channel B is the console, captured and fed |
-| `--duart-in TEXT` | type `TEXT` at the console receiver (``, `
+| `--duart-in TEXT` | type `TEXT` at the console receiver (`
+`, `
 ` work) |
 | `--rstub ADDR` | stub the TMS340 renderer: comm block at `ADDR`, acknowledge every command, log the queue, serve allocations |
 | `--poke ADDR=HEX` | unmapped reads at `ADDR` return `HEX` |
 | `--set ADDR=HEX` | write a longword into RAM after loading, for answers a device would have left there |
 | `--tick ADDR` | unmapped long reads at `ADDR` return a rising counter — walks past a poll-until-it-changes handshake |
+| `--clock ADDR[:N]` | free-running counter at `ADDR`, one tick per `N` instructions — the firmware's timebase, which its boot monitor maintained |
+| `--vbr ADDR` | vector base register (default `02000000`, where the pod's monitor left it) |
+| `--irq-level N` | interrupt level the DUART asserts |
 | `--ram BASE:LEN` | declare a RAM region (hex); repeatable |
 | `--trace N` | disassemble the first `N` instructions, marking unmapped accesses inline |
 | `--dis ADDR[:N]` | disassemble `N` instructions at `ADDR` and exit |
@@ -246,7 +262,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 20/20). Skips with a clear message if no
+reporting a pass count (currently 23/23). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

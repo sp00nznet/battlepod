@@ -62,6 +62,8 @@ static uint32_t g_reads_total, g_writes_total;
 static int      g_note_flag;	/* set by note(), consumed by the trace loop */
 static uint32_t g_note_addr;
 static uint32_t g_vector_hit;	/* address of an unmapped vector-table fetch */
+static uint32_t g_vbr;		/* vector base; the pod's monitor puts it in RAM */
+static uint32_t g_vecfetch;	/* last vector-table read, mapped or not */
 
 /* MC68681 DUART, the cockpit's two serial ports. Register N sits at BASE+N*2,
  * channel A at registers 0-7 and channel B at 8-15, which is how the ROM's
@@ -90,29 +92,51 @@ static uint32_t g_rio_tx;
 static const char *g_in[2];		/* pending receive data, per channel */
 static size_t      g_inlen[2], g_inpos[2];
 
-static int duart_reg(uint32_t a, int *chan)
+/* Interrupt state. The firmware masks everything at reset, then enables
+ * IMR = 0x03 - channel A transmit and receive - and drives the Remote I/O
+ * board entirely from the interrupt handler. */
+static unsigned g_imr;			/* interrupt mask register */
+static unsigned g_ivr = 0x0F;		/* interrupt vector register, reset value */
+static int      g_txena[2];		/* transmitter enabled, per channel */
+
+static int rx_pending(int chan) { return g_inpos[chan] < g_inlen[chan]; }
+
+/* Register number 0-15, or -1 if the address is not ours. */
+static int duart_reg(uint32_t a)
 {
-	uint32_t off;
 	if (!g_duart || a < g_duart || a >= g_duart + 0x20 || (a & 1)) return -1;
-	off = (a - g_duart) >> 1;		/* register number */
-	*chan = off >= 8;
-	return (int)(off & 7);
+	return (int)((a - g_duart) >> 1);
 }
+
+/* MC68681 interrupt status: bit 0 TxRDYA, 1 RxRDYA, 4 TxRDYB, 5 RxRDYB.
+ * The transmitter is modelled as infinitely fast, so TxRDY simply tracks
+ * whether that channel's transmitter is enabled - which is what makes the
+ * firmware's "disable the transmitter when the queue drains" idiom work. */
+static unsigned duart_isr(void)
+{
+	return (g_txena[0]     ? 0x01u : 0)
+	     | (rx_pending(0)  ? 0x02u : 0)
+	     | (g_txena[1]     ? 0x10u : 0)
+	     | (rx_pending(1)  ? 0x20u : 0);
+}
+
+static int duart_irq(void) { return g_duart && (duart_isr() & g_imr) != 0; }
 
 static int duart_read(uint32_t a, unsigned *out)
 {
-	int chan, reg = duart_reg(a, &chan);
+	int reg = duart_reg(a), chan = reg >> 3;
 	if (reg < 0) return 0;
 
-	if (reg == 1) {				/* SRA / SRB */
-		unsigned sr = DUART_SR_TXRDY | DUART_SR_TXEMT;
-		if (g_inpos[chan] < g_inlen[chan]) sr |= DUART_SR_RXRDY;
-		*out = sr;
+	switch (reg & 7) {
+	case 1:					/* SRA / SRB */
+		*out = (g_txena[chan] ? DUART_SR_TXRDY | DUART_SR_TXEMT : 0)
+		     | (rx_pending(chan) ? DUART_SR_RXRDY : 0);
 		return 1;
-	}
-	if (reg == 3) {				/* RBA / RBB */
-		*out = (g_inpos[chan] < g_inlen[chan])
-		     ? (unsigned char)g_in[chan][g_inpos[chan]++] : 0;
+	case 3:					/* RBA / RBB */
+		*out = rx_pending(chan) ? (unsigned char)g_in[chan][g_inpos[chan]++] : 0;
+		return 1;
+	case 5:
+		*out = (reg == 5) ? duart_isr() : 0;	/* reg 5 ISR; reg 13 is the input port */
 		return 1;
 	}
 	*out = 0;
@@ -121,18 +145,39 @@ static int duart_read(uint32_t a, unsigned *out)
 
 static int duart_write(uint32_t a, unsigned v)
 {
-	int chan, reg = duart_reg(a, &chan);
+	int reg = duart_reg(a), chan = reg >> 3;
 	if (reg < 0) return 0;
 
-	if (reg == 3) {				/* TBA / TBB */
+	switch (reg & 7) {
+	case 2:					/* CRA / CRB - command register */
+		if (v & 0x04) g_txena[chan] = 1;	/* enable transmitter  */
+		if (v & 0x08) g_txena[chan] = 0;	/* disable transmitter */
+		break;
+	case 3:					/* TBA / TBB - transmit */
 		if (chan == 1) {
 			if (g_conlen < CONCAP - 1) g_conbuf[g_conlen++] = (char)(v & 0xFF);
 		} else {
 			if (g_rio_tx < RIOCAP) g_riobuf[g_rio_tx] = (uint8_t)v;
 			g_rio_tx++;
 		}
+		break;
+	case 4:
+		if (reg == 12) g_ivr = v & 0xFF;	/* reg 4 is ACR; reg 12 is the vector */
+		break;
+	case 5:
+		if (reg == 5) g_imr = v & 0xFF;		/* reg 5 IMR; reg 13 is OPCR */
+		break;
 	}
 	return 1;
+}
+
+/* Musashi asks what vector to use when it takes the interrupt. The 68681 is
+ * programmed for vectored interrupts, so answer with whatever the firmware
+ * wrote to the interrupt vector register. */
+int bp_int_ack(unsigned int level)
+{
+	(void)level;
+	return (int)g_ivr;
 }
 
 /* Turn the usual backslash escapes in a --duart-in argument into real bytes.
@@ -152,6 +197,24 @@ static char *unescape(const char *s)
 	}
 	*w = 0;
 	return out;
+}
+
+/* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
+ * places and writes it nowhere, so the pod's boot monitor maintained it as a
+ * millisecond timebase. Without one, every timeout in the game waits forever. */
+static uint32_t g_clock_addr, g_clock_div = 4096, g_clock_val;
+
+static void clock_tick(void)
+{
+	uint8_t *p;
+	uint32_t o;
+	if (!g_clock_addr) return;
+	p = g_page[g_clock_addr >> PAGE_BITS];
+	if (!p) return;
+	o = g_clock_addr & (PAGE_SIZE - 1);
+	g_clock_val++;
+	p[o] = (uint8_t)(g_clock_val >> 24); p[o+1] = (uint8_t)(g_clock_val >> 16);
+	p[o+2] = (uint8_t)(g_clock_val >> 8); p[o+3] = (uint8_t)g_clock_val;
 }
 
 /* --tick: return a counter that advances on every read. Enough to satisfy a
@@ -192,7 +255,8 @@ static void note(uint32_t addr, int size, int is_write, uint32_t val)
 	if (is_write) g_writes_total++; else g_reads_total++;
 	g_note_flag = 1;
 	g_note_addr = addr;
-	if (!is_write && addr < 0x400 && size == 4 && (addr & 3) == 0) g_vector_hit = addr;
+	if (!is_write && size == 4 && (addr & 3) == 0 &&
+	    addr >= g_vbr && addr < g_vbr + 0x400) g_vector_hit = addr;
 
 	for (;;) {
 		Hit *e = &g_hit[h];
@@ -352,6 +416,7 @@ unsigned int m68k_read_memory_32(unsigned int a)
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	uint32_t o = a & (PAGE_SIZE - 1);
 	unsigned t;
+	if ((a - g_vbr) < 0x400 && !(a & 3)) g_vecfetch = a;
 	if (p && o <= PAGE_SIZE - 4)
 		return ((unsigned)p[o] << 24) | ((unsigned)p[o+1] << 16) |
 		       ((unsigned)p[o+2] << 8) | p[o+3];
@@ -811,6 +876,10 @@ int main(int argc, char **argv)
 	int dis_n = 32;
 	const char *cpu_name = "68040";
 	uint32_t sp = 0x02FFFF00, ramspec = 0;
+	/* The firmware installs vector 71 at 0x0200011C, so its monitor left VBR
+	 * at the CPU board's RAM base. Nothing in the release sets it itself. */
+	uint32_t vbr = 0x02000000, sr = 0x2000;
+	int irq_level = 4;
 	uint64_t budget = 200000000, trace_n = 0, trace_from = 0;
 	int top = 40, i;
 	uint64_t step;
@@ -833,6 +902,15 @@ int main(int argc, char **argv)
 		}
 		else if (!strcmp(a, "--entry") && i + 1 < argc) { g_entry = (uint32_t)strtoul(argv[++i], NULL, 16); g_have_entry = 1; }
 		else if (!strcmp(a, "--sp") && i + 1 < argc)      sp = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--vbr") && i + 1 < argc)     vbr = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--clock") && i + 1 < argc) {
+			char *c;
+			g_clock_addr = (uint32_t)strtoul(argv[++i], &c, 16);
+			if (*c == ':') g_clock_div = (uint32_t)strtoul(c + 1, NULL, 0);
+			if (!g_clock_div) g_clock_div = 1;
+		}
+		else if (!strcmp(a, "--sr") && i + 1 < argc)      sr = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--irq-level") && i + 1 < argc) irq_level = atoi(argv[++i]);
 		else if (!strcmp(a, "--steps") && i + 1 < argc)   budget = strtoull(argv[++i], NULL, 0);
 		else if (!strcmp(a, "--openbus") && i + 1 < argc) g_openbus = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--trace") && i + 1 < argc)   trace_n = strtoull(argv[++i], NULL, 0);
@@ -916,7 +994,9 @@ int main(int argc, char **argv)
 	m68k_execute(1);		/* drains RESET_CYCLES; executes nothing */
 	m68k_set_reg(M68K_REG_PC, g_entry);
 	m68k_set_reg(M68K_REG_SP, sp);
-	m68k_set_reg(M68K_REG_SR, 0x2700);
+	m68k_set_reg(M68K_REG_SR, sr);
+	m68k_set_reg(M68K_REG_VBR, vbr);
+	g_vbr = vbr;
 
 	/* Reset's vector fetch is not the pod's doing; don't pollute the report. */
 	memset(g_hit, 0, sizeof g_hit);
@@ -932,6 +1012,9 @@ int main(int argc, char **argv)
 
 	for (step = 0; step < budget; step++) {
 		pc = m68k_get_reg(NULL, M68K_REG_PC);
+
+		m68k_set_irq(duart_irq() ? (unsigned)irq_level : 0);
+		if ((step % g_clock_div) == 0) clock_tick();
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }
@@ -981,8 +1064,15 @@ int main(int argc, char **argv)
 		fwrite(g_rslog, 1, g_rsloglen, stdout);
 	}
 
-	if (g_rio_tx)
+	if (g_rio_tx) {
+		uint32_t i, n = g_rio_tx < RIOCAP ? g_rio_tx : RIOCAP;
 		printf("\nremote i/o: %u bytes sent on duart channel A\n", g_rio_tx);
+		for (i = 0; i < n; i++) {
+			if (i % 16 == 0) printf("  %04X ", i);
+			printf(" %02X", g_riobuf[i]);
+			if (i % 16 == 15 || i + 1 == n) printf("\n");
+		}
+	}
 
 	if (g_inlen[1])
 		printf("\nconsole input: %u of %u bytes consumed\n",

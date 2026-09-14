@@ -19,16 +19,18 @@ modelled both channels including receive, which reaches the firmware's built-in
 diagnostic monitor and makes every subsystem drivable in isolation. Recovered
 the Remote I/O device map and packet framing from it.
 
+**Phase 3 — interrupts.** Found VBR (`0x02000000`, left there by the boot
+monitor), modelled the DUART's interrupt logic, and supplied the free-running
+timebase the monitor maintained. Lamps, bar graphs and alphanumeric displays now
+emit real Remote I/O packets with verifying checksums.
+
 ## Next
 
-**Interrupts.** Remote I/O transmission queues in RAM and is drained by an
-interrupt service routine, so no RIO packet reaches the wire yet and the
-real-time clock reads zero. Two things need settling first: the DUART is
-configured for vectored interrupts (IVR `0x47`), and `ROM3_0` contains no
-`MOVEC` to VBR, so the vector table is expected at address 0 — which nothing in
-the release writes. The pod's own boot monitor, absent from the dump,
-presumably installs it. Working that out unlocks the controls, the lamps, the
-bargraphs and the clock at once.
+**The uninstalled dispatch.** Boot ends at `0x0212C740`, a call through
+`[[0x0216FADE] + 0x18]` that is still null. Neither global is written with an
+immediate anywhere in `ROM3_0`, so a subsystem the stubs have not brought up
+installs them at runtime. Finding which one is the shortest path to getting
+past the audio download.
 
 **Resource archive.** Four type classes, 467 resources, index already printed
 by the firmware. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
