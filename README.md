@@ -246,6 +246,16 @@ Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
 how the device map in [DEVICES.md](DEVICES.md) was built.
 
+**Recover the network protocol from an operator console log:**
+
+```
+python tools/logproto.py "$GF/../Console Log"            # message vocabulary
+python tools/logproto.py "$GF/../Console Log" --sequence # one game start, in order
+```
+
+The console logged every message it exchanged with the pods by name. A
+surviving log is a protocol specification written by the software itself.
+
 **Find the code behind any console message:**
 
 ```

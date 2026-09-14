@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `tools/logproto.py`: recovers the cockpit network protocol from an operator
+  console log. The console logged every message it exchanged with the pods by
+  name, so a surviving log specifies the protocol directly.
 - `--packet` hands the booted firmware one received packet through the stubbed
   boot monitor. The firmware consumes it and releases the buffer, which is how
   delivery is confirmed.
@@ -71,6 +74,12 @@ All notable changes to this project are documented here. The format follows
 - Everything else goes to the inter-centre modem router - the code behind
   `Dial_List`, with `Master router ready`, `NETWORK OVERLOAD` and the AT command
   timeouts - not to the game layer.
+- The protocol's message vocabulary and the order of a game start, recovered
+  from the operator console log in the release: IDENTIFY_YOURSELF, SHADOW_ROM,
+  per-image Load, Set Go_Address, GO, COCKPIT_CONFIG_MSG, PLAYER_CONFIG,
+  MECH_CLASS with Drop Location, GAME_OVER.
+- `MECH_CLASS`'s type field is the vehicle id from `Vehicle_List`, which is also
+  the last column of `Game_Setup` - those plaintext files map onto the wire.
 
 ### Fixed
 

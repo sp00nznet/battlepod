@@ -287,8 +287,56 @@ where one pod per side acts as the router. It filters on a pair of bytes at
 `0x0218AEB6`/`B7` against `0x02179D32`/`33` — a node and game identity the
 packet must match at `body[2]` and `body[3]`.
 
-Whatever starts a game is therefore among the low opcodes, and that is the next
-thing to pin down.
+Whatever starts a game is therefore among the low opcodes.
+
+### The protocol, from the operator console's own log
+
+The release carries a `Console Log` from a working BattleTech Center, running
+from February to October 1995 — about 68,000 logged messages, each with the
+console's source file and line. The console logged every message it exchanged
+with the pods **by name**, which makes the log a protocol specification written
+by the software itself.
+
+`tools/logproto.py` recovers it from a log you supply. The message vocabulary:
+
+| message | fields |
+|---|---|
+| `IDENTIFY_YOURSELF` | node. The pod answers either `BOOT CODE version V (netN)` from its boot monitor, or `GAME RUNNING … GAME_NAME` once the game is up — which is the reply built by opcode `0x00` |
+| `SHADOW_ROM` | node |
+| `Load <path> to node N at <hex>` | one per image, the address matching the Load script |
+| `Set Go_Address on node N to <hex>` | |
+| `GO` | node, address |
+| `COCKPIT_CONFIG_MSG` | node, forward node, cockpit name — each answered with `Acknowledged - node N` |
+| `PLAYER_CONFIG` | node, cockpit name, pilot name |
+| `MECH_CLASS` | class, thing number, type, name |
+| `Drop Location` | x, y, z |
+| `NET_CONFIG_SEND_MSG`, `GAME_SETUP_SEND_MSG` | net, node — chunked, with running totals |
+| `GAME_OVER` | node |
+
+and a game start runs:
+
+```
+SHADOW_ROM / GO for every node
+Configuring Cockpits    COCKPIT_CONFIG_MSG per node, each acknowledged
+                        PLAYER_CONFIG per node
+Reset world
+Creating vehicles       MECH_CLASS + Drop Location per vehicle
+Downloading Map
+```
+
+The `COCKPIT_CONFIG_MSG` "forward" field chains the nodes — each cockpit points
+at the next, and the last points at 128, the console. That is the ring the
+`Net_Configuration` file describes.
+
+Two useful cross-checks fall out. The log is a System 2.5 site, loading `ROM2_5`
+at `0x8FFFE4` with `Go_Address` `0x900000` — exactly what `Full_Load_2_5` says,
+against `0x020FFFE4` / `0x02100000` for 3.0, so the loader model holds across
+pod generations. And `MECH_CLASS`'s type field is the vehicle id from
+`Vehicle_List`, the same number that appears in the last column of `Game_Setup`.
+Those plaintext files map directly onto the wire.
+
+What is still missing is the byte encoding of each message. The names and field
+order are known; the layout is not.
 
 ## Renderer command 6
 

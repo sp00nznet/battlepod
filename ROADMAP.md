@@ -31,14 +31,20 @@ packet.
 
 ## Next
 
-**Start a game over the network.** Packets can now be handed to the firmware and
-it consumes them, and the opcode dispatch is mapped. What is still unknown is
-which opcode starts a game and what its body looks like. The low opcodes are the
-place to look - `0x00` is a status reply and everything above the special cases
-goes to the inter-centre modem router, not the game layer. Everything OpsCon
-would send derives from plaintext already in the release (`Game_Setup`,
-`Team_List`, `Vehicle_List`, `Scenario_List`, `Net_Configuration`), and none of
-it needs a Macintosh.
+**Start a game over the network.** Packets can be handed to the firmware and it
+consumes them, the opcode dispatch is mapped, and the message vocabulary and
+game-start order are now known from the operator console log. What is missing is
+the byte encoding of each message.
+
+Two ways to get it, and they check each other:
+
+- Read the pod's handlers for the low opcodes, which is where the game messages
+  land.
+- Read the sender. `Console 1.5.12.a01` is a 68k Macintosh application in the
+  release - 20 `CODE` resources, about 228 KB, built with THINK C - and it is
+  the authority on what the console puts on the wire. The same disassembler
+  already works on 68k code; what is needed is extracting and relocating `CODE`
+  resources out of the resource fork.
 
 **The geometry is nearby.** The renderer code carries `Out of Solids...`,
 `Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and
