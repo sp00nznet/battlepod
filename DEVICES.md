@@ -175,6 +175,7 @@ trailing one is the sum of the payload alone (`D2` is cleared between them).
 | `0xD1` | display | id, then 8 ASCII characters |
 | `0xD2` | bar graph | id, then the number of bars to light |
 | `0xD3` | lamp | id, then brightness |
+| `0xD5` | — | none. Sent once during boot: `01 00 01 01 D5 D5` |
 
 ## Interrupts
 
@@ -337,6 +338,34 @@ Those plaintext files map directly onto the wire.
 
 What is still missing is the byte encoding of each message. The names and field
 order are known; the layout is not.
+
+### What one injected packet does
+
+With `--packet`, a packet whose address fields match is not acted on directly —
+it is copied into a 100-slot ring at `0x02183716`, 256 bytes per slot, and
+handed to `0x021228D6` with a tag of 3. The consumer only runs during a game, so
+a single packet into an idle cockpit is queued and nothing more.
+
+Sweeping all 256 opcodes with a minimal body confirms it: every one behaves
+identically — consumed, released, queued — with a single exception. **`0xC6`**
+reaches the modem router and makes it log `Function:%d Timeout %d, Size %d`.
+That is a SiteLink message, not a game one.
+
+So starting a game needs the whole ordered sequence with real field contents,
+not one packet. That is a protocol project, not a next step.
+
+### Reading the sender is blocked on THINK C relocations
+
+The obvious shortcut — read `Console 1.5.12.a01`, which builds these messages —
+does not work yet. `tools/macres.py` extracts its 20 `CODE` segments cleanly
+(228 KB) and every protocol string is in its `DATA` resource, the A5 globals
+image. But no `CODE` segment contains an A5-relative reference to any of them,
+at either plausible displacement and in either the 16- or 32-bit form.
+
+The application is THINK C's far model, and it carries `CREL` and `DREL`
+resources: code and data relocations applied at load time. The operands on disk
+are placeholders. Reading the sender means implementing those relocation tables
+first — a reverse-engineering job in its own right, on an undocumented format.
 
 ## Renderer command 6
 

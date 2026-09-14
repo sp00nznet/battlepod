@@ -40,11 +40,19 @@ Two ways to get it, and they check each other:
 
 - Read the pod's handlers for the low opcodes, which is where the game messages
   land.
-- Read the sender. `Console 1.5.12.a01` is a 68k Macintosh application in the
-  release - 20 `CODE` resources, about 228 KB, built with THINK C - and it is
-  the authority on what the console puts on the wire. The same disassembler
-  already works on 68k code; what is needed is extracting and relocating `CODE`
-  resources out of the resource fork.
+- Read the sender. `tools/macres.py` now extracts the console's 20 `CODE`
+  segments, but the application is THINK C's far model and its `CREL`/`DREL`
+  relocations are applied at load time, so references to the protocol strings
+  are placeholders on disk. This route is blocked until those tables are
+  understood.
+
+Neither is quick, and neither is needed for a picture on screen.
+
+**The resource archive, which is the shorter road to something visible.** 467
+resources in four type classes, the index already printed by the firmware, and
+the renderer's own diagnostics naming solids, cylinders and "ARES" as the
+primitive types. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
+offset 0x30. This needs no network and no Macintosh.
 
 **The geometry is nearby.** The renderer code carries `Out of Solids...`,
 `Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and

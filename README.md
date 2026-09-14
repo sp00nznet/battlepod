@@ -12,7 +12,7 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **26/26** checkpoints.
+Conformance: **27/27** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
@@ -246,6 +246,13 @@ Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
 how the device map in [DEVICES.md](DEVICES.md) was built.
 
+**Extract Macintosh resources** (the operator console's code lives in them):
+
+```
+python tools/macres.py "$GF/../Console 1.5.12.a01.rsrc" CODE
+python tools/macres.py "$GF/../Console 1.5.12.a01.rsrc" CODE 1 out/code1.bin
+```
+
 **Recover the network protocol from an operator console log:**
 
 ```
@@ -275,7 +282,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 26/26). Skips with a clear message if no
+reporting a pass count (currently 27/27). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

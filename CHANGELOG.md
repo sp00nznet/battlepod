@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `tools/macres.py`: lists and extracts Macintosh resources, from a raw fork or
+  the AppleDouble sidecar `unar` writes. Gets at the operator console's 20 CODE
+  segments.
 - `tools/logproto.py`: recovers the cockpit network protocol from an operator
   console log. The console logged every message it exchanged with the pods by
   name, so a surviving log specifies the protocol directly.
@@ -80,6 +83,14 @@ All notable changes to this project are documented here. The format follows
   MECH_CLASS with Drop Location, GAME_OVER.
 - `MECH_CLASS`'s type field is the vehicle id from `Vehicle_List`, which is also
   the last column of `Game_Setup` - those plaintext files map onto the wire.
+- Remote I/O opcode `0xD5`, no payload, sent once during boot.
+- A packet that passes the address checks is queued into a 100-slot ring at
+  `0x02183716` for a consumer that only runs during a game. Sweeping all 256
+  opcodes with a minimal body changes nothing except `0xC6`, which the modem
+  router logs - so a single packet cannot start a game.
+- The operator console is THINK C far model with `CREL`/`DREL` relocations, so
+  its string references are placeholders on disk. Reading the sender needs those
+  relocation tables implemented first.
 
 ### Fixed
 
