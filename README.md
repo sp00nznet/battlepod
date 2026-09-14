@@ -12,12 +12,13 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **16/16** boot checkpoints.
+Conformance: **20/20** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
 prints the index — 467 resources in four type classes. The graphics processor
-has been identified and its command protocol decoded. See
+has been identified and its command protocol decoded, and the firmware's own
+diagnostic monitor can be driven interactively over the modelled serial port. See
 [DEVICES.md](DEVICES.md) for the map and [ROADMAP.md](ROADMAP.md) for what's
 next.
 
@@ -176,13 +177,42 @@ Free, error 0
 That text is the cockpit's own firmware narrating itself over its serial
 console. Every line of it comes out of the pod, not out of this tool.
 
+**5. Talk to it.** `ROM3_0` carries a complete diagnostic monitor, reached once
+the game initialisation returns. Patch an `RTS` over that call to land in it
+directly, and type at it:
+
+```
+./build/battlepod.exe "$GF/Full_Load_3_0"     --duart 11000 --set 2138A64=4E754E75 --duart-in 's3'
+```
+
+```
+BattleTech 2 Test Program
+
+a - Zero Real Time Clock
+...
+s - Test remote I/O devices
+y - START TEST GAME (starts Secondary, TI and 68020 in tandem
+z - Quit
+
+s   s  ok!
+1 - Display command
+2 - Bar Graph command
+3 - Lamp command
+3Lamp number in hex (00 - 3b, 50 - 53 and 60)
+```
+
+The valid ranges in those prompts are the cockpit's device map, given up by the
+firmware itself.
+
 ## Usage
 
 Run with no arguments for the full option list. The ones that matter:
 
 | flag | what it does |
 |---|---|
-| `--tty ADDR` | treat byte writes to `ADDR` as serial console output |
+| `--duart BASE` | model the MC68681 DUART at `BASE`; channel B is the console, captured and fed |
+| `--duart-in TEXT` | type `TEXT` at the console receiver (``, `
+` work) |
 | `--rstub ADDR` | stub the TMS340 renderer: comm block at `ADDR`, acknowledge every command, log the queue, serve allocations |
 | `--poke ADDR=HEX` | unmapped reads at `ADDR` return `HEX` |
 | `--set ADDR=HEX` | write a longword into RAM after loading, for answers a device would have left there |
@@ -216,7 +246,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 16/16). Skips with a clear message if no
+reporting a pass count (currently 20/20). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

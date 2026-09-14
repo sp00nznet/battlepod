@@ -39,10 +39,22 @@ fi
 OUT=$(mktemp)
 trap 'rm -f "$OUT"' EXIT
 
+# Scenario 1: a normal cold boot, with the three unmodelled boards stubbed.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
-    --tty 11016 --rstub 3FF00000 \
+    --duart 11000 --rstub 3FF00000 \
     --poke 50001000=55000000 --set 40000100=1234567 \
     --top 0 > "$OUT" 2>&1 || true
+
+# Scenario 2: patch an RTS over the game init to reach the firmware's own
+# diagnostic monitor, then type at it - ask for the clock, then walk into the
+# Remote I/O submenu and request a lamp.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
+    --duart 11000 --set 2138A64=4E754E75 --duart-in 'c\r' \
+    --steps 5000000 --top 0 >> "$OUT" 2>&1 || true
+
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
+    --duart 11000 --set 2138A64=4E754E75 --duart-in 's\r3\r' \
+    --steps 8000000 --top 0 >> "$OUT" 2>&1 || true
 
 # One checkpoint per line: each is a string the firmware must still print.
 CHECKS="BTS2--Up
@@ -60,7 +72,11 @@ Load Resource Map, error 0
 Freeing resource map RAM
 Free, error 0
 main game loop (SecCom 674 bytes).
-renderer commands: 5 posted"
+renderer commands: 5 posted
+BattleTech 2 Test Program
+y - START TEST GAME
+Time 00:00:00:00 Raw Clock: 0
+Lamp number in hex (00 - 3b, 50 - 53 and 60)"
 
 pass=0
 total=0

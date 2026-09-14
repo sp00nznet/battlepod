@@ -8,7 +8,8 @@ Written by hand from bus traces, the ROM's own console output, and
 disassembly. It contains no VWE code or data.
 
 Current state: the cockpit boots to **`main game loop (SecCom 674 bytes).`**
-with the renderer, audio and Amiga boards stubbed.
+with the renderer, audio and Amiga boards stubbed, and its built-in diagnostic
+monitor can be driven interactively over the modelled serial port.
 
 ```
 make
@@ -54,18 +55,111 @@ without the header (`*_res`, `*.dld`, `R.BIN*`, `DEVELOPMENT`) are plain data.
 
 `DEVELOPMENT` lands at `0x02FFFF00` — an 11-byte marker string in DRAM.
 
-### Serial console
+### Serial ports: an MC68681 DUART at 0x00011000
 
-| address | direction | role |
-|---|---|---|
-| `0x00011012` | read | status; polled before each character |
-| `0x00011016` | write | transmit data |
-| `0x00011000`, `02`, `04`, `08`, `0A`, `10`, `14`, `18`, `1C` | write | init, written once at reset |
+Register N at `0x11000 + N*2`, channel A on registers 0-7 and channel B on 8-15.
+The init sequence the driver writes at `0x0215B4C0` is textbook 68681:
 
-Capturing writes to `0x00011016` is enough to read everything the ROM prints;
-open bus reads as all-ones and the ROM takes that as "ready". The receive path
-has not been identified yet — that is what stands between us and the
-diagnostic menu the ROM contains.
+| register | address | written | meaning |
+|---|---|---|---|
+| IMR | `0x1100A` | `0x00` | interrupts masked |
+| IVR | `0x11018` | `0x47` | interrupt vector 0x47 |
+| CRA | `0x11004` | `0x10`, `0x05` | reset MR pointer, then RxEN+TxEN |
+| MR1A/MR2A | `0x11000` | `0x93`, `0x07` | mode, written twice through the auto-incrementing pointer |
+| CSRA | `0x11002` | `0xBB` | clock select A — 9600 baud both ways |
+| CRB | `0x11014` | `0x10`, `0x05` | reset MR pointer, then RxEN+TxEN |
+| MR1B/MR2B | `0x11010` | `0x13`, `0x07` | 8 bits, no parity, 1 stop |
+| CSRB | `0x11012` | `0xCC` | clock select B — 19200 baud both ways |
+| ACR | `0x11008` | `0x00` | baud rate set 1 |
+| SET OP | `0x1101C` | `0x01` | assert an output pin |
+
+Per channel: status at `+2`, receive and transmit share `+6`.
+
+| channel | status | data | carries |
+|---|---|---|---|
+| A | `0x11002` | `0x11006` | the Remote I/O board, 9600 baud |
+| B | `0x11012` | `0x11016` | the console, 19200 baud |
+
+`getchar` for channel B, at `0x0215B55A`, is the whole receive path:
+
+```
+0215B55A  move.b  $11012.l, D0     ; SRB
+          andi.b  #$1, D0          ; RxRDY
+          beq     0215B55A         ; spin
+          move.b  $11016.l, D0     ; RBB
+          rts
+```
+
+Modelling status bit 0 (RxRDY) plus bit 2 (TxRDY) is enough to both read the
+firmware's output and type back at it.
+
+### The built-in diagnostic monitor
+
+`ROM3_0` contains a complete serial monitor. It is *after* the game
+initialisation in the boot function at `0x02123FC0`, so it appears only when
+that returns; patching an `RTS` over the init call reaches it directly:
+
+```
+--duart 11000 --set 2138A64=4E754E75
+```
+
+The firmware then prints its menu and waits:
+
+```
+BattleTech 2 Test Program
+
+a - Zero Real Time Clock              l - Test Alloc and free commands
+b - Set Hour/Minute/Second/Hundreds   m - Test binary loader from A00000
+c - Display Real Time Clock once      n - Start TI
+d - Display Real Time Clock cont.     o - Set RIO to 115200 baud
+e - Read from I/O board port A        p - Start Secondary
+f - Read from console, send to port A q - Turn on all remote I/O displays and lights
+g - Read/display RIO_A data           r - Display decoded remote I/O data
+h - Send a string out RIO_A           s - Test remote I/O devices
+i - RIO protocol loopback test        y - START TEST GAME (Secondary, TI and 68020)
+j - RIO protocol buffer exercizer     z - Quit
+k - Send reset to renderer
+```
+
+Commands that need subsystems the patched-out init would have set up will fall
+over; the clock, and the Remote I/O submenus, work as they are.
+
+### Remote I/O board
+
+`s` opens a submenu — Display, Bar Graph, Lamp — and each prompts with its own
+valid range. That is the cockpit's device map, given up by the firmware:
+
+| device | ids |
+|---|---|
+| lamps | `0x00`-`0x3B`, `0x50`-`0x53`, `0x60` (each takes a brightness) |
+| displays | `0x80`-`0x91` |
+| bar graphs | `0x80`-`0x91` except `0x8C`, `0x8D`, `0x8F` |
+
+A lamp command is a three-byte payload built at `0x02143820`:
+
+```
+D3  <lamp>  <brightness>
+```
+
+`0xD3` is the lamp opcode. `0x02143852` loops it over lamps `0x00`-`0x53`,
+which is menu item `q`.
+
+Payloads are framed by `rio_send` at `0x0215B924`:
+
+```
+01  <node & 0x3F>  <len>  <checksum>  <payload...>  <checksum>
+```
+
+with the node byte from `[0x021822F8]` and a raw-passthrough mode selected by
+`[0x0218230B]`.
+
+**Nothing reaches the wire yet.** `rio_send` only appends to a queue at
+`[0x021822FE]`; an interrupt service routine drains it into the DUART. With no
+interrupts modelled the queue simply fills. Making that work is the next step,
+and it needs two things settled: the DUART is configured for vectored
+interrupts (IVR `0x47`), and `ROM3_0` contains no `MOVEC` to VBR — so the
+vector table is expected at address 0, which nothing in the release writes.
+The pod's own boot monitor, which is not in the dump, presumably installs it.
 
 ### The renderer is a TMS340x0
 

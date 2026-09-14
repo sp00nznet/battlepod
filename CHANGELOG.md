@@ -6,6 +6,34 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `--duart` models the cockpit's MC68681 DUART, both channels, including the
+  receive path — so the firmware can be typed at, not just listened to.
+- `--duart-in` types at the console receiver.
+- Channel A transmits are captured and hex-dumped as the Remote I/O protocol.
+- Conformance now also drives the firmware's diagnostic monitor: 20 checkpoints.
+
+### Changed
+
+- `--tty` is gone, replaced by `--duart`. The part is identified now, so the
+  tool models it rather than guessing at a write-only address.
+- `--help` regrouped and corrected; several options were missing from it.
+
+### Findings
+
+- The serial ports are an MC68681 DUART at `0x00011000`, register N at
+  `N*2`. Channel A is the Remote I/O board at 9600, channel B the console at
+  19200.
+- `ROM3_0` contains a full diagnostic monitor, reachable by patching an `RTS`
+  over the game init call at `0x02138A64`.
+- Remote I/O device map, from the monitor's own prompts: lamps `0x00`-`0x3B`,
+  `0x50`-`0x53`, `0x60`; displays `0x80`-`0x91`; bar graphs `0x80`-`0x91`
+  except `0x8C`, `0x8D`, `0x8F`.
+- RIO packets are framed `01 <node> <len> <csum> <payload> <csum>`; a lamp
+  payload is `D3 <lamp> <brightness>`. Transmission is interrupt-driven and
+  queues in RAM, so nothing reaches the wire until interrupts are modelled.
+
 ### Fixed
 
 - CI lint no longer fails on Musashi's macro `#include`; cppcheck now lints

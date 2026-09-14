@@ -14,15 +14,21 @@ handshake and command protocol. Stubbed the renderer, audio signature and Amiga
 handshake far enough for the firmware to parse its resource archive and reach
 `main game loop (SecCom 674 bytes).`
 
+**Phase 2 — talking back.** Identified the serial ports as an MC68681 DUART and
+modelled both channels including receive, which reaches the firmware's built-in
+diagnostic monitor and makes every subsystem drivable in isolation. Recovered
+the Remote I/O device map and packet framing from it.
+
 ## Next
 
-**UART receive.** The only identified console register is transmit
-(`0x00011016`); the receive path is unknown. `ROM3_0` contains a full
-diagnostic monitor — "BattleTech 2 Test Program" — that can reset the renderer,
-start the Secondary, loop back the Remote I/O protocol, exercise lamps and
-bargraphs, and start a test game on command. Right now we can only listen to
-the pod. Being able to type to it turns every subsystem into something we can
-drive in isolation, which is worth more than any other single step.
+**Interrupts.** Remote I/O transmission queues in RAM and is drained by an
+interrupt service routine, so no RIO packet reaches the wire yet and the
+real-time clock reads zero. Two things need settling first: the DUART is
+configured for vectored interrupts (IVR `0x47`), and `ROM3_0` contains no
+`MOVEC` to VBR, so the vector table is expected at address 0 — which nothing in
+the release writes. The pod's own boot monitor, absent from the dump,
+presumably installs it. Working that out unlocks the controls, the lamps, the
+bargraphs and the clock at once.
 
 **Resource archive.** Four type classes, 467 resources, index already printed
 by the firmware. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from

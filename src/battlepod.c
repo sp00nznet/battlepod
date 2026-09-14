@@ -63,24 +63,95 @@ static int      g_note_flag;	/* set by note(), consumed by the trace loop */
 static uint32_t g_note_addr;
 static uint32_t g_vector_hit;	/* address of an unmapped vector-table fetch */
 
-/* Byte writes to a --tty address are treated as a serial console and captured.
- * ROM3_0 has a diagnostic monitor that narrates the boot over one of these. */
-#define MAXTTY 4
-#define TTYCAP 262144
-static uint32_t g_tty[MAXTTY];
-static int      g_ntty;
-static char     g_ttybuf[TTYCAP];
-static size_t   g_ttylen;
+/* MC68681 DUART, the cockpit's two serial ports. Register N sits at BASE+N*2,
+ * channel A at registers 0-7 and channel B at 8-15, which is how the ROM's
+ * driver addresses it:
+ *
+ *   channel A   status 0x11002  data 0x11006   (Remote I/O board, 9600)
+ *   channel B   status 0x11012  data 0x11016   (console, 19200)
+ *
+ * Only what the driver touches is modelled: the status bits it polls, and the
+ * receive and transmit holding registers. Channel B carries the firmware's own
+ * narration, and its receiver is what drives the built-in diagnostic monitor. */
 
-static int tty_take(uint32_t addr, unsigned v)
+#define DUART_SR_RXRDY 0x01
+#define DUART_SR_TXRDY 0x04
+#define DUART_SR_TXEMT 0x08
+
+#define CONCAP 262144
+
+static uint32_t g_duart;		/* base address, 0 = not modelled */
+static char     g_conbuf[CONCAP];	/* channel B output: the console */
+static size_t   g_conlen;
+#define RIOCAP 8192
+static uint8_t  g_riobuf[RIOCAP];	/* channel A output: the Remote I/O protocol */
+static uint32_t g_rio_tx;
+
+static const char *g_in[2];		/* pending receive data, per channel */
+static size_t      g_inlen[2], g_inpos[2];
+
+static int duart_reg(uint32_t a, int *chan)
 {
-	int i;
-	for (i = 0; i < g_ntty; i++) {
-		if (g_tty[i] != addr) continue;
-		if (g_ttylen < TTYCAP - 1) g_ttybuf[g_ttylen++] = (char)(v & 0xFF);
+	uint32_t off;
+	if (!g_duart || a < g_duart || a >= g_duart + 0x20 || (a & 1)) return -1;
+	off = (a - g_duart) >> 1;		/* register number */
+	*chan = off >= 8;
+	return (int)(off & 7);
+}
+
+static int duart_read(uint32_t a, unsigned *out)
+{
+	int chan, reg = duart_reg(a, &chan);
+	if (reg < 0) return 0;
+
+	if (reg == 1) {				/* SRA / SRB */
+		unsigned sr = DUART_SR_TXRDY | DUART_SR_TXEMT;
+		if (g_inpos[chan] < g_inlen[chan]) sr |= DUART_SR_RXRDY;
+		*out = sr;
 		return 1;
 	}
-	return 0;
+	if (reg == 3) {				/* RBA / RBB */
+		*out = (g_inpos[chan] < g_inlen[chan])
+		     ? (unsigned char)g_in[chan][g_inpos[chan]++] : 0;
+		return 1;
+	}
+	*out = 0;
+	return 1;
+}
+
+static int duart_write(uint32_t a, unsigned v)
+{
+	int chan, reg = duart_reg(a, &chan);
+	if (reg < 0) return 0;
+
+	if (reg == 3) {				/* TBA / TBB */
+		if (chan == 1) {
+			if (g_conlen < CONCAP - 1) g_conbuf[g_conlen++] = (char)(v & 0xFF);
+		} else {
+			if (g_rio_tx < RIOCAP) g_riobuf[g_rio_tx] = (uint8_t)v;
+			g_rio_tx++;
+		}
+	}
+	return 1;
+}
+
+/* Turn the usual backslash escapes in a --duart-in argument into real bytes.
+ * The monitor reads one character at a time and wants a carriage return. */
+static char *unescape(const char *s)
+{
+	char *out = malloc(strlen(s) + 1), *w = out;
+	for (; *s; s++) {
+		if (*s != '\\' || !s[1]) { *w++ = *s; continue; }
+		switch (*++s) {
+		case 'r': *w++ = '\r'; break;
+		case 'n': *w++ = '\n'; break;
+		case 't': *w++ = '\t'; break;
+		case '0': *w++ = '\0'; break;
+		default:  *w++ = *s;   break;
+		}
+	}
+	*w = 0;
+	return out;
 }
 
 /* --tick: return a counter that advances on every read. Enough to satisfy a
@@ -262,6 +333,7 @@ unsigned int m68k_read_memory_8(unsigned int a)
 	unsigned t;
 	if (p) return p[a & (PAGE_SIZE - 1)];
 	note(a, 1, 0, 0);
+	if (duart_read(a, &t)) return t;
 	return g_openbus & 0xFF;
 }
 
@@ -296,7 +368,7 @@ void m68k_write_memory_8(unsigned int a, unsigned int v)
 {
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	if (p) { p[a & (PAGE_SIZE - 1)] = (uint8_t)v; return; }
-	tty_take(a, v);
+	duart_write(a, v);
 	note(a, 1, 1, v & 0xFF);
 }
 
@@ -694,19 +766,36 @@ static void usage(void)
 	"usage: battlepod <Load_script> [options]\n"
 	"       battlepod --selftest\n"
 	"\n"
+	"memory\n"
 	"  --ram BASE:LEN   declare a RAM region (hex, repeatable)\n"
 	"                   default: 02000000:1000000 and 40000000:100000\n"
+	"  --openbus HEX    value returned by unmapped reads (default FFFFFFFF)\n"
+	"\n"
+	"devices\n"
+	"  --duart BASE     model the MC68681 DUART at BASE. Channel B is the\n"
+	"                   console: its output is captured and its receiver fed\n"
+	"  --duart-in TEXT  feed TEXT to the console receiver (\\r and \\n work)\n"
+	"  --rstub ADDR     stand in for the TMS340 renderer: comm block at ADDR,\n"
+	"                   acknowledge every command, log the queue, serve allocations\n"
+	"  --poke ADDR=HEX  unmapped reads at ADDR return HEX\n"
+	"  --set ADDR=HEX   write a longword into memory after loading, for answers\n"
+	"                   a device would have left there - or to patch the firmware\n"
+	"  --tick ADDR      unmapped long reads at ADDR return a rising counter,\n"
+	"                   which walks past a poll-until-it-changes handshake\n"
+	"\n"
+	"running\n"
 	"  --entry ADDR     override Go_Address\n"
 	"  --sp ADDR        initial supervisor stack pointer (default 02FFFF00)\n"
-	"  --steps N        instruction budget (default 20000000)\n"
-	"  --openbus HEX    value returned by unmapped reads (default FFFFFFFF)\n"
-	"  --trace N        disassemble the first N instructions\n"
-	"  --trace-from N   start tracing at instruction N\n"
-	"  --top N          addresses to list in the report (default 40)\n"
-	"  --csv FILE       write the full unmapped-access table\n"
-	"  --dis ADDR[:N]   disassemble N instructions at ADDR and exit\n"
+	"  --steps N        instruction budget (default 200000000)\n"
 	"  --cpu TYPE       68020 | 68030 | 68040 (default 68040, the only\n"
 	"                   Musashi profile with the FPU enabled)\n"
+	"\n"
+	"reading the firmware\n"
+	"  --trace N        disassemble the first N instructions\n"
+	"  --trace-from N   start tracing at instruction N\n"
+	"  --dis ADDR[:N]   disassemble N instructions at ADDR and exit\n"
+	"  --top N          addresses to list in the report (default 40)\n"
+	"  --csv FILE       write the full unmapped-access table\n"
 	"\n"
 	"Point it at a Load script from an extracted VWE release, e.g.\n"
 	"  battlepod \"...../Console Files/Game Files/Full_Load_3_0\"\n");
@@ -769,9 +858,12 @@ int main(int argc, char **argv)
 			if (g_ntick >= MAXTICK) { fprintf(stderr, "too many --tick" "\n"); return 1; }
 			g_tick_addr[g_ntick++] = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
-		else if (!strcmp(a, "--tty") && i + 1 < argc) {
-			if (g_ntty >= MAXTTY) { fprintf(stderr, "too many --tty\n"); return 1; }
-			g_tty[g_ntty++] = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--duart") && i + 1 < argc) {
+			g_duart = (uint32_t)strtoul(argv[++i], NULL, 16);
+		}
+		else if (!strcmp(a, "--duart-in") && i + 1 < argc) {
+			g_in[1] = unescape(argv[++i]);
+			g_inlen[1] = strlen(g_in[1]);
 		}
 		else if (!strcmp(a, "--dis") && i + 1 < argc) {
 			char *c;
@@ -889,10 +981,17 @@ int main(int argc, char **argv)
 		fwrite(g_rslog, 1, g_rsloglen, stdout);
 	}
 
-	if (g_ttylen) {
-		printf("\nconsole output (%u bytes)\n", (unsigned)g_ttylen);
+	if (g_rio_tx)
+		printf("\nremote i/o: %u bytes sent on duart channel A\n", g_rio_tx);
+
+	if (g_inlen[1])
+		printf("\nconsole input: %u of %u bytes consumed\n",
+		       (unsigned)g_inpos[1], (unsigned)g_inlen[1]);
+
+	if (g_conlen) {
+		printf("\nconsole output (%u bytes)\n", (unsigned)g_conlen);
 		printf("----------------------------------------------------------------\n");
-		fwrite(g_ttybuf, 1, g_ttylen, stdout);
+		fwrite(g_conbuf, 1, g_conlen, stdout);
 		printf("\n----------------------------------------------------------------\n");
 	}
 
