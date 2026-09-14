@@ -199,6 +199,41 @@ static char *unescape(const char *s)
 	return out;
 }
 
+/* ---------------------------------------------------- boot monitor stub */
+
+/* The pod's boot ROM is not in the release, but the firmware calls it. Six
+ * thunks at 0x0212C72C dispatch through [[0x0216FADE] + n], and that pointer
+ * is statically 0x02000400 - immediately after the vector table at VBR, with
+ * a globals block at 0x02000800 passed in A6. So the monitor exports a service
+ * table right above its vectors.
+ *
+ * This installs a table of stubs that return "nothing, no error", which is a
+ * safe answer for a poll, and counts which slots the firmware actually calls -
+ * that enumeration is the monitor's API surface. */
+
+#define MON_SLOTS 32
+#define MON_STUB_OFF 0x200
+
+static uint32_t g_mon, g_monstub;
+static uint32_t g_moncall[MON_SLOTS];
+
+static void mon_install(uint32_t base)
+{
+	/* moveq #0,D0 ; suba.l A0,A0 ; rts ; nop  - clears the result, sets Z */
+	static const uint8_t stub[8] = { 0x70,0x00, 0x91,0xC8, 0x4E,0x75, 0x4E,0x71 };
+	uint32_t i, j;
+
+	ram_add(base, 0x1000);
+	g_mon = base;
+	g_monstub = base + MON_STUB_OFF;
+
+	for (i = 0; i < MON_SLOTS; i++) {
+		uint32_t s = g_monstub + i * 8;
+		for (j = 0; j < sizeof stub; j++) m68k_write_memory_8(s + j, stub[j]);
+		m68k_write_memory_32(base + i * 4, s);
+	}
+}
+
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
  * places and writes it nowhere, so the pod's boot monitor maintained it as a
  * millisecond timebase. Without one, every timeout in the game waits forever. */
@@ -299,6 +334,12 @@ static void note(uint32_t addr, int size, int is_write, uint32_t val)
 #define RSTUB_HEAP_68K 0x30000000u
 #define RSTUB_HEAP_LEN 0x01000000u
 
+/* The renderer's own memory has to be real: R.BIN is uploaded into it, and the
+ * firmware reads a fixed error block out of the top of it. Left unmapped, that
+ * block reads as open bus and the firmware reports "TI ERROR!". */
+#define RSTUB_TI_BASE  0x3FC00000u
+#define RSTUB_TI_LEN   0x00400000u
+
 #define RS_OP_RESET 1
 #define RS_OP_ALLOC 2
 
@@ -374,11 +415,32 @@ static void rstub_post(void)
 	if (g_rscmd <= 400) rslog("\n");
 
 	rs_put(4, 0);			/* command complete */
+	m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);	/* renderer ready again */
 }
 
 static void rstub_write(uint32_t off, uint32_t v)
 {
 	if (off == 4 && v) rstub_post();
+}
+
+static void poke32(uint32_t a, uint32_t v)
+{
+	uint8_t *p = g_page[a >> PAGE_BITS];
+	uint32_t o = a & (PAGE_SIZE - 1);
+	if (!p) return;
+	p[o] = (uint8_t)(v >> 24); p[o+1] = (uint8_t)(v >> 16);
+	p[o+2] = (uint8_t)(v >> 8); p[o+3] = (uint8_t)v;
+}
+
+/* The firmware clears the ready word and waits for the renderer to write pi
+ * back; it also uploads R.BIN straight over this part of the renderer's memory,
+ * which on real hardware the TI then rewrites for itself once it is running.
+ * Restoring both words here models a renderer that is always instantly ready. */
+static void rstub_flag_write(uint32_t v)
+{
+	if (v == RSTUB_MAGIC) return;
+	poke32(RSTUB_FLAG, RSTUB_MAGIC);
+	poke32(RSTUB_PTR, g_rstub - TI_TO_68K);
 }
 
 static int rstub_read(uint32_t a, unsigned *out)
@@ -454,8 +516,12 @@ void m68k_write_memory_32(unsigned int a, unsigned int v)
 	if (p && o <= PAGE_SIZE - 4) {
 		p[o] = (uint8_t)(v >> 24); p[o+1] = (uint8_t)(v >> 16);
 		p[o+2] = (uint8_t)(v >> 8); p[o+3] = (uint8_t)v;
-		if (g_rstub && a >= g_rstub && a < g_rstub + RSTUB_WINDOW)
-			rstub_write(a - g_rstub, v);
+		if (g_rstub) {
+			if (a >= g_rstub && a < g_rstub + RSTUB_WINDOW)
+				rstub_write(a - g_rstub, v);
+			else if (a == RSTUB_FLAG)
+				rstub_flag_write(v);
+		}
 		return;
 	}
 	if (!p && o <= PAGE_SIZE - 4) { note(a, 4, 1, v); return; }
@@ -878,7 +944,7 @@ int main(int argc, char **argv)
 	uint32_t sp = 0x02FFFF00, ramspec = 0;
 	/* The firmware installs vector 71 at 0x0200011C, so its monitor left VBR
 	 * at the CPU board's RAM base. Nothing in the release sets it itself. */
-	uint32_t vbr = 0x02000000, sr = 0x2000;
+	uint32_t vbr = 0x02000000, sr = 0x2000, monitor_base = 0;
 	int irq_level = 4;
 	uint64_t budget = 200000000, trace_n = 0, trace_from = 0;
 	int top = 40, i;
@@ -903,6 +969,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--entry") && i + 1 < argc) { g_entry = (uint32_t)strtoul(argv[++i], NULL, 16); g_have_entry = 1; }
 		else if (!strcmp(a, "--sp") && i + 1 < argc)      sp = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--vbr") && i + 1 < argc)     vbr = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--monitor")) {
+			monitor_base = (i + 1 < argc && argv[i+1][0] != '-')
+			             ? (uint32_t)strtoul(argv[++i], NULL, 16) : 0x02000400u;
+		}
 		else if (!strcmp(a, "--clock") && i + 1 < argc) {
 			char *c;
 			g_clock_addr = (uint32_t)strtoul(argv[++i], &c, 16);
@@ -962,6 +1032,7 @@ int main(int argc, char **argv)
 	if (!script) { usage(); return 1; }
 
 	if (g_rstub) {
+		ram_add(RSTUB_TI_BASE, RSTUB_TI_LEN);
 		ram_add(g_rstub, RSTUB_WINDOW);
 		ram_add(RSTUB_HEAP_68K, RSTUB_HEAP_LEN);
 	}
@@ -997,6 +1068,11 @@ int main(int argc, char **argv)
 	m68k_set_reg(M68K_REG_SR, sr);
 	m68k_set_reg(M68K_REG_VBR, vbr);
 	g_vbr = vbr;
+	if (monitor_base) mon_install(monitor_base);
+	if (g_rstub) {
+		m68k_write_memory_32(RSTUB_PTR, g_rstub - TI_TO_68K);
+		m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);
+	}
 
 	/* Reset's vector fetch is not the pod's doing; don't pollute the report. */
 	memset(g_hit, 0, sizeof g_hit);
@@ -1006,8 +1082,10 @@ int main(int argc, char **argv)
 	       cpu == M68K_CPU_TYPE_68040
 	         ? "  (board is a 68020+68881; Musashi enables its FPU on the 040 profile only)"
 	         : "  (no FPU: Musashi enables FPU ops on the 040 profile only)");
-	printf("entry %08X, sp %08X, openbus %08X, budget %llu instructions\n",
-	       g_entry, sp, g_openbus, (unsigned long long)budget);
+	printf("entry %08X, sp %08X, vbr %08X, sr %04X, openbus %08X\n",
+	       g_entry, sp, vbr, sr, g_openbus);
+	printf("budget %llu instructions, duart irq level %d\n",
+	       (unsigned long long)budget, irq_level);
 	printf("running...\n\n");
 
 	for (step = 0; step < budget; step++) {
@@ -1015,6 +1093,8 @@ int main(int argc, char **argv)
 
 		m68k_set_irq(duart_irq() ? (unsigned)irq_level : 0);
 		if ((step % g_clock_div) == 0) clock_tick();
+		if (g_monstub && (pc - g_monstub) < MON_SLOTS * 8 && !((pc - g_monstub) & 7))
+			g_moncall[(pc - g_monstub) >> 3]++;
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }
@@ -1062,6 +1142,17 @@ int main(int argc, char **argv)
 	if (g_rscmd) {
 		printf("%srenderer commands: %d posted%s", "\n", g_rscmd, "\n");
 		fwrite(g_rslog, 1, g_rsloglen, stdout);
+	}
+
+	if (g_mon) {
+		int i, any = 0;
+		printf("\nboot monitor services called (table at %08X)\n", g_mon);
+		for (i = 0; i < MON_SLOTS; i++)
+			if (g_moncall[i]) {
+				printf("  +%02X  x%u\n", i * 4, g_moncall[i]);
+				any = 1;
+			}
+		if (!any) printf("  none\n");
 	}
 
 	if (g_rio_tx) {

@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `--monitor` installs a stub service table for the pod's boot monitor, which
+  is not in the release, and reports which slots the firmware calls. With it the
+  cockpit boots all the way to its main loop instead of dying on a null call.
+- The renderer stub now maps the renderer's memory as real RAM and keeps its
+  ready word and comm pointer restored, so the firmware stops reporting
+  `TI ERROR!` and posts its sixth command.
 - Interrupts. `src/battlepod_m68kconf.h` turns on Musashi's interrupt
   acknowledge hook so the DUART's programmed vector is honoured, and the DUART
   model tracks IMR, the command registers and the interrupt status register.
@@ -48,8 +54,14 @@ All notable changes to this project are documented here. The format follows
   vector 71 to `0x0200011C` and the DUART's vector register is `0x47`.
 - `0x02000808` is read in 336 places and written in none: the timebase came
   from the boot monitor, which is not in the dump.
-- The boot now ends at a dispatch through an uninstalled object at
-  `0x0212C740`, `[[0x0216FADE] + 0x18]`.
+- The boot monitor exports a service table at `0x02000400` with globals at
+  `0x02000800`, both immediately above the vector table at VBR. The slots the
+  firmware uses have the shape of a packet interface - two 32000-byte buffers
+  registered at `+0x10` and `+0x14`, a `(node, length, buffer)` send at `+0x24`,
+  and a poll at `+0x18` returning a pointer or NULL.
+- The boot now ends with the cockpit idling in its main loop, polling for a
+  packet that never arrives - which is what a pod does while it waits for the
+  operator console.
 
 ### Fixed
 

@@ -39,11 +39,14 @@ fi
 OUT=$(mktemp)
 trap 'rm -f "$OUT"' EXIT
 
-# Scenario 1: a normal cold boot, with the three unmodelled boards stubbed.
+# Scenario 1: a cold boot with everything the pod's absent boot monitor would
+# have supplied - vectors, a timebase and its service table - plus stubs for the
+# three boards that are not modelled. Runs until the firmware settles into its
+# main loop polling for a packet.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
-    --duart 11000 --rstub 3FF00000 \
+    --duart 11000 --rstub 3FF00000 --monitor --clock 2000808 \
     --poke 50001000=55000000 --set 40000100=1234567 \
-    --top 0 > "$OUT" 2>&1 || true
+    --steps 60000000 --top 0 > "$OUT" 2>&1 || true
 
 # Scenario 2: patch an RTS over the game init to reach the firmware's own
 # diagnostic monitor, then type at it - ask for the clock, then walk into the
@@ -80,7 +83,9 @@ Load Resource Map, error 0
 Freeing resource map RAM
 Free, error 0
 main game loop (SecCom 674 bytes).
-renderer commands: 5 posted
+renderer commands: 6 posted
+cmd 6    op=00000006
+boot monitor services called
 BattleTech 2 Test Program
 y - START TEST GAME
 Time 00:00:00:00 Raw Clock: 0

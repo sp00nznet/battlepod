@@ -24,13 +24,20 @@ monitor), modelled the DUART's interrupt logic, and supplied the free-running
 timebase the monitor maintained. Lamps, bar graphs and alphanumeric displays now
 emit real Remote I/O packets with verifying checksums.
 
+**Phase 4 — a complete boot.** Found the boot monitor's service table at
+`0x02000400`, stubbed it, and mapped the renderer's memory properly. The
+cockpit now boots end to end and settles into its main loop polling for a
+packet.
+
 ## Next
 
-**The uninstalled dispatch.** Boot ends at `0x0212C740`, a call through
-`[[0x0216FADE] + 0x18]` that is still null. Neither global is written with an
-immediate anywhere in `ROM3_0`, so a subsystem the stubs have not brought up
-installs them at runtime. Finding which one is the shortest path to getting
-past the audio download.
+**Speak to it over the network.** The pod is idling on the monitor's `+0x18`
+poll, waiting for the operator console. Everything OpsCon sends is derived from
+plaintext files already in the release (`Game_Setup`, `Team_List`,
+`Vehicle_List`, `Scenario_List`, `Net_Configuration`), so the next step is to
+work out the packet format the firmware expects and hand it a game to start.
+That is what turns a booting cockpit into a running one - and it arrives far
+earlier than the original plan assumed, because none of it needs a Macintosh.
 
 **Resource archive.** Four type classes, 467 resources, index already printed
 by the firmware. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from

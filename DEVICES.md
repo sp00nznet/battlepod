@@ -210,22 +210,53 @@ enabled" reproduces that exactly.
 maintained, and it is the firmware's universal timebase. Without one, every
 timeout in the game waits forever, so the harness supplies it.
 
-## Where the boot ends now
+## The boot monitor's service table
 
-After the audio download the firmware reaches a dispatch through an object that
-was never installed:
+The pod's boot ROM is not in the release, but the firmware calls into it. Six
+thunks at `0x0212C72C` all dispatch the same way:
 
 ```
-0212C72C  movem.l D1/A0-A1/A6, -(A7)
-0212C730  movea.l $216fae2.l, A6
-0212C736  movea.l $216fade.l, A0
-0212C73C  movea.l ($18,A0), A1      ; method at +0x18
-0212C740  jsr     (A1)              ; null
+movea.l $216fae2.l, A6        ; monitor globals, statically 0x02000800
+movea.l $216fade.l, A0        ; monitor service table, statically 0x02000400
+movea.l ($18,A0), A1          ; pick a slot
+jsr     (A1)
 ```
 
-Neither `0x0216FADE` nor `0x0216FAE2` is written with an immediate anywhere in
-`ROM3_0`, so both are installed at runtime by a subsystem the stubs have not
-brought up. That is the next thread.
+Both pointers are initialised data in the image, and they land immediately
+above the vector table at VBR — `0x02000000` vectors, `0x02000400` services,
+`0x02000800` globals with the timebase at `+8`. That is the monitor's API.
+
+| slot | called from | arguments | returns |
+|---|---|---|---|
+| `+0x10` | `0x0210E1AC` | pointer, long — `(0x0219E0AC, 0x7D00)` | — |
+| `+0x14` | `0x0210E19C` | pointer, long — `(0x021963AC, 0x7D00)` | — |
+| `+0x18` | `0x02122E96` | none | pointer, or NULL |
+| `+0x1C` | 4 sites | none | — |
+| `+0x20` | unused | word | word |
+| `+0x24` | `0x02146A76`, `0x02146D38` | word, word, pointer | word status |
+
+`+0x10` and `+0x14` are called back to back with two contiguous 32000-byte
+buffers, `+0x24` takes what reads as (node, length, buffer) and returns a
+status, and `+0x18` polls for a pointer that may be NULL. That is the shape of
+a packet interface, and ARCNET is the only network the cockpit has.
+
+Installing a table of stubs that answer "nothing, no error" is enough: the
+firmware boots through it and settles into its main loop polling `+0x18`,
+which is exactly what a cockpit does while it waits for the operator console to
+send it a game. Reaching that point is where the boot currently ends — not on a
+fault, but on an empty network.
+
+## Renderer command 6
+
+With the renderer's memory mapped as real RAM (the firmware reads a fixed error
+block out of the top of it, and reports `TI ERROR!` if that reads as open bus),
+the main loop posts one more command:
+
+```
+cmd 6  op=6  addr 0x100007D0  0  7  5
+```
+
+using the 9000-byte allocation from command 2. Its meaning is not yet known.
 
 ### The renderer is a TMS340x0
 

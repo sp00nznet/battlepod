@@ -12,7 +12,7 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **23/23** checkpoints.
+Conformance: **25/25** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
@@ -104,7 +104,8 @@ recipe:
    agree on a 674-byte shared communication block.
 6. Push all 989 KB of `btAudio.dld` through a 32-entry ring FIFO to the audio
    board.
-7. Enter the main game loop.
+7. Enter the main game loop, and poll the boot monitor for an incoming packet
+   until the operator console sends one.
 
 `battlepod` replaces step 0 — the ARCNET download — by placing the same files at
 the same addresses, runs the 68020 with [Musashi](https://github.com/kstenerud/Musashi),
@@ -233,6 +234,7 @@ Run with no arguments for the full option list. The ones that matter:
 | `--clock ADDR[:N]` | free-running counter at `ADDR`, one tick per `N` instructions — the firmware's timebase, which its boot monitor maintained |
 | `--vbr ADDR` | vector base register (default `02000000`, where the pod's monitor left it) |
 | `--irq-level N` | interrupt level the DUART asserts |
+| `--monitor [ADDR]` | install a stub boot-monitor service table (default `02000400`) and report which slots get called |
 | `--ram BASE:LEN` | declare a RAM region (hex); repeatable |
 | `--trace N` | disassemble the first `N` instructions, marking unmapped accesses inline |
 | `--dis ADDR[:N]` | disassemble `N` instructions at `ADDR` and exit |
@@ -262,7 +264,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 23/23). Skips with a clear message if no
+reporting a pass count (currently 25/25). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile
