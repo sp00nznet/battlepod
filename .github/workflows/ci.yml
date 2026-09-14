@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch Musashi
+        run: make deps
+
+      - name: Build
+        run: make
+
+      - name: Self-check
+        run: make test
+
+      # The corpus is the VWE release, which is not redistributable, so this
+      # skips with a message rather than failing. See tools/conformance.sh.
+      - name: Conformance
+        run: make conformance
+
+      - name: Lint
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq cppcheck shellcheck
+          cppcheck --error-exitcode=1 --quiet --enable=warning \
+                   --suppress=missingIncludeSystem -Ithird_party/musashi -Ibuild src/
+          shellcheck tools/conformance.sh
+          python3 -m py_compile tools/xref.py

@@ -1,0 +1,11 @@
+# Extracted VWE release. Never committed - the tool ships, the data does not.
+_dump/
+*.sit
+
+# Anything derived from the dump
+out/
+*.csv
+*.trace
+
+build/
+third_party/

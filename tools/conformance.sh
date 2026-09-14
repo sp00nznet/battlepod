@@ -1,0 +1,91 @@
+#!/bin/sh
+# Replay the cockpit boot and check it still reaches every milestone it reached
+# before. The firmware narrates itself over its serial console, so its own
+# output is the ground truth - no golden file of ours, and nothing of VWE's in
+# the repo.
+#
+# The corpus is the VWE release, which cannot be redistributed. Point
+# VWE_GAME_FILES at the extracted "Console Files/Game Files" directory; without
+# it this skips rather than fails.
+
+set -eu
+
+BIN=${BIN:-./build/battlepod.exe}
+[ -x "$BIN" ] || BIN=./build/battlepod
+
+if [ ! -x "$BIN" ]; then
+    echo "conformance: $BIN not built; run make first" >&2
+    exit 1
+fi
+
+echo "== self-check =="
+"$BIN" --selftest
+
+if [ -z "${VWE_GAME_FILES:-}" ] || [ ! -f "${VWE_GAME_FILES}/Full_Load_3_0" ]; then
+    cat >&2 <<EOF
+
+conformance: SKIPPED - no release present.
+
+  The corpus is VWE Release 13.1.8, which this repo does not and will not
+  redistribute. Get it from https://archive.org/details/vwe-release-13.1.8,
+  extract it with unar, and set:
+
+    VWE_GAME_FILES="<extracted>/.../BattleTech 13.1.8/Console Files/Game Files"
+
+EOF
+    exit 0
+fi
+
+OUT=$(mktemp)
+trap 'rm -f "$OUT"' EXIT
+
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" \
+    --tty 11016 --rstub 3FF00000 \
+    --poke 50001000=55000000 --set 40000100=1234567 \
+    --top 0 > "$OUT" 2>&1 || true
+
+# One checkpoint per line: each is a string the firmware must still print.
+CHECKS="BTS2--Up
+TI Reset Sent
+TI Reset Complete
+Allocating 2000 RAM for resource map
+Allocate handle 1, addr 10000000, error 0
+Building resource map
+Res Type 1 header found
+Res Type 4 header found
+Res Type 2 header found
+Res Type 7 header found
+Giving load resource map command, size 1268
+Load Resource Map, error 0
+Freeing resource map RAM
+Free, error 0
+main game loop (SecCom 674 bytes).
+renderer commands: 5 posted"
+
+pass=0
+total=0
+echo
+echo "== boot checkpoints =="
+# Read with IFS cleared so leading and trailing spaces in a checkpoint survive.
+while IFS= read -r check; do
+    [ -n "$check" ] || continue
+    total=$((total + 1))
+    if grep -qF "$check" "$OUT"; then
+        pass=$((pass + 1))
+        printf '  ok    %s\n' "$check"
+    else
+        printf '  FAIL  %s\n' "$check"
+    fi
+done <<EOF
+$CHECKS
+EOF
+
+echo
+echo "conformance: $pass/$total checkpoints passed"
+
+if [ "$pass" -ne "$total" ]; then
+    echo
+    echo "--- run output ---" >&2
+    cat "$OUT" >&2
+    exit 1
+fi
