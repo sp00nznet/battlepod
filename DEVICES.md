@@ -42,7 +42,7 @@ without the header (`*_res`, `*.dld`, `R.BIN*`, `DEVELOPMENT`) are plain data.
 
 | range | width | what it is |
 |---|---|---|
-| `0x00010007–0x00010015` | byte, odd, stride 4 | two interleaved 8-bit parts, probed at init; unidentified |
+| `0x00010007–0x00010015` | byte, odd, stride 4 | two interleaved 8-bit parts, probed once at init; unidentified. Candidates on this board: the second serial port, a timer, or the COM90C66 ARCNET controller |
 | `0x00011000–0x0001101C` | byte, even, stride 2 | serial console UART |
 | `0x02000000–0x02FFFFFF` | — | CPU board DRAM: game image, resources, heap, stack |
 | `0x20000000–0x3FFFFFFF` | long | TMS340 renderer memory window |
@@ -179,6 +179,13 @@ with the Amiga.
 
 ### Audio board
 
+An Analog Devices DSP board. The System 3.0 manual: "Contained inside the sound
+board are several Analog Devices ADSP's used for processing sounds stored. The
+sample memory of the sound board is stored in DRAM mounted on the board."
+WarlockD's dossier names the part as **ADSP-21020**, which also explains the
+`.dld` extension — that is the Analog Devices downloadable-executable format.
+Not independently verified here.
+
 Base `0x50001000`, cached by the ROM at `[0x0217A0AC]`.
 
 | offset | role |
@@ -204,5 +211,6 @@ With only the signature answered the ROM gets further and reports
 - Resource type semantics (1, 2, 4, 7).
 - 34010 or 34020.
 - ARCNET has still not been touched; the boot reaches the main loop without it.
+  The controller is reported to be an **SMC COM90C66**, on the CPU board.
 - After the audio download the ROM jumps through a null pointer. Expected while
   three boards are stubs, but worth revisiting once any of them is real.

@@ -238,6 +238,27 @@ make clean
 No dependencies beyond a C compiler and Musashi, which is MIT-licensed and
 fetched rather than vendored.
 
+## Prior art
+
+[WarlockD/Battletech-VME-3.0-Decompile](https://github.com/WarlockD/Battletech-VME-3.0-Decompile)
+(June 2024) is the only other public work on this hardware. Despite the name it
+contains no decompilation — it is a research dossier: the release itself,
+board photographs, and the datasheets for the parts its author identified,
+with notes inviting someone to take a serious crack at it.
+
+Those notes are worth reading before this one. They independently reach the
+same load map and the same uncertainty about the renderer ("TMS34010, maybe an
+020, not sure yet"), and they name two parts this project had not yet
+identified: the sound board's **Analog Devices ADSP-21020** DSP — which is why
+`btAudio.dld` is a `.dld`, the Analog Devices downloadable-executable extension
+— and the **SMC COM90C66** ARCNET controller. The System 3.0 manual confirms
+the sound board carries "several Analog Devices ADSP's" with sample memory in
+DRAM.
+
+Nothing is copied from that repository into this one. It is GPL-3.0 and it
+distributes the VWE material directly; this project is MIT and distributes
+none. Part numbers are facts, and are credited above.
+
 ## Provenance
 
 The software this tool reads was published by the Battletech Pod Preservation

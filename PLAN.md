@@ -125,9 +125,21 @@ ARCNET.
 
 **"Is it already on GitHub? Stars? Any C&D?"**
 
-No. GitHub search across `battletech pod`, `battlepod`, `arose arcnet`, `virtual world
-entertainment`, and `tms34010 recompiler` returns **zero** relevant repos. No prior art,
-no precedent in either direction. You would be first.
+**Correction.** The original answer here was "zero relevant repos" — that was wrong.
+The searches used (`battletech pod`, `battlepod`, `arose arcnet`, `virtual world
+entertainment`, `tms34010 recompiler`) do not match the one repository that exists:
+[WarlockD/Battletech-VME-3.0-Decompile](https://github.com/WarlockD/Battletech-VME-3.0-Decompile),
+June 2024, 3 stars, one day of commits, no activity since.
+
+It contains no decompilation. It is a dossier: the release, board photographs, and
+datasheets for the parts its author identified, plus notes. It reaches the same load
+map and the same renderer uncertainty as this project, and it names the ADSP-21020
+sound DSP and the SMC COM90C66 ARCNET controller. Its author invites others to
+continue.
+
+So: no emulator precedent, no C&D precedent, and one friendly predecessor whose
+research is worth using. It is GPL-3.0 and it redistributes the VWE material, so
+nothing is copied from it here.
 
 ## 4. Licensing — the honest position
 
