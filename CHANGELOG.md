@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- CI lint no longer fails on Musashi's macro `#include`; cppcheck now lints
+  only this project's source.
+
 ## [0.1.0] - 2026-09-14
 
 First working harness. The cockpit boots from its own image set to its main
