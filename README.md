@@ -264,7 +264,8 @@ python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE00
 python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000     --count 20000 --validate
 ```
 
-Partial - 48% of all words, 68% ignoring zero fill, 92% over a real routine -
+Partial - 49% of all words, 70% ignoring zero fill, 100% over the renderer's
+hardware init -
 but every absolute call and jump target it produces lands inside the image,
 which is the check that it is in sync rather than confidently wrong.
 

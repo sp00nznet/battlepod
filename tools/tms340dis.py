@@ -70,17 +70,26 @@ JUMP_REL = {
 JUMP_ABS = {b | 0x80: n.replace("JR", "JA") for b, n in JUMP_REL.items()}
 
 
-# Absolute-addressing moves: one or two 32-bit bit-addresses follow.
-# 0x0780 is confirmed against this firmware independently - the renderer's
-# entry stores to 0xFFFFFDE0, the handshake word the 68020 polls.
-# Only forms that produce sane addresses in this firmware are listed. 0x0700
-# and 0x0740 were tried and decoded to implausible targets, so they stay
-# unknown rather than printing a confident lie.
+# Absolute-addressing moves, where a 32-bit bit-address follows the opcode.
+#
+# The scanned manual's table for this group is the least legible part of it and
+# its load/store split contradicts what the firmware actually does, so the
+# entries kept here are the ones confirmed against observed behaviour instead:
+#
+#   0x0780  every one of the seven writes to 0xFFFFFDE0 uses it, and that word
+#           is the renderer state the 68020 polls - so it is a store
+#   0x07A0  same family, used on 0xFFFFFDA0
+#   0x0580  writes 0xC0000080 and 0xC0000110, the TMS34010's own I/O registers
+#
+# 0x0700 and 0x0740 were tried as loads, decoded to implausible addresses, and
+# are left unrecognised. The rest of the 0x0400-0x07FF group stays unknown
+# rather than being filled in from an OCR reading that does not hold up.
 ABS_ONE = {
-    0x0580: ("MOVB", "store"), 0x05A0: ("MOVB", "load"),
+    0x0580: ("MOVB", "store"), 0x05A0: ("MOVB", "store"),
     0x0780: ("MOVE", "store"), 0x07A0: ("MOVE", "store"),
+    0x07E0: ("MOVB", "load"),
 }
-ABS_TWO = {0x05C0: "MOVB", 0x07C0: "MOVE", 0x07E0: "MOVE"}
+ABS_TWO = {0x0340: "MOVB"}          # absolute to absolute, two addresses
 
 # Register-indirect moves. The User's Guide gives these as `oooo ooFS SSSR DDDD`
 # for MOVE - six opcode bits then a field-select bit - and `oooo oooS SSSR DDDD`
@@ -105,6 +114,22 @@ IND = [
     (0xBC00, 0xFE00, "MOVB", "*Rs(o)", "*Rd(o)", 2),
 ]
 DSJ = {0x0D80: "DSJ", 0x0DA0: "DSJEQ", 0x0DC0: "DSJNE"}
+
+# The graphics group. PIXT moves single pixels, in linear or XY addressing;
+# PIXBLT and FILL take their operands from the B-file registers rather than the
+# instruction, so they encode as bare opcodes.
+PIXT = {
+    0xF000: ("PIXT", "Rs", "*Rd.XY"), 0xF200: ("PIXT", "*Rs.XY", "Rd"),
+    0xF400: ("PIXT", "*Rs.XY", "*Rd.XY"),
+    0xF800: ("PIXT", "Rs", "*Rd"), 0xFA00: ("PIXT", "*Rs", "Rd"),
+    0xFC00: ("PIXT", "*Rs", "*Rd"),
+}
+BARE = {
+    0x0F00: "PIXBLT  L, L", 0x0F20: "PIXBLT  L, XY", 0x0F40: "PIXBLT  XY, L",
+    0x0F60: "PIXBLT  XY, XY", 0x0F80: "PIXBLT  B, L", 0x0FA0: "PIXBLT  B, XY",
+    0x0FC0: "FILL    L", 0x0FE0: "FILL    XY",
+    0xDF1A: "LINE    0", 0xDF5A: "LINE    1",
+}
 
 
 class Stream:
@@ -135,6 +160,12 @@ def decode(s):
 
     if op in NOARG:
         return done(NOARG[op])
+    if op in BARE:
+        return done(BARE[op])
+    if op & 0xFE00 in PIXT:
+        m, sf, df = PIXT[op & 0xFE00]
+        return done("%-7s %s, %s" % (m, sf.replace("Rs", regname(f, rs)),
+                                     df.replace("Rd", regname(f, rd))))
     if op & 0xFFE0 in ONEREG:
         return done("%-7s %s" % (ONEREG[op & 0xFFE0], regname(f, rd)))
     if op & 0xFE00 in TWOREG:
@@ -214,9 +245,9 @@ def decode(s):
         if fld is not None:
             text += ", %d" % fld
         return done(text)
-    if op & 0xFFE0 in ABS_TWO:
+    if op in ABS_TWO:
         src, dst = s.long(), s.long()
-        return done("%-7s @$%08X, @$%08X" % (ABS_TWO[op & 0xFFE0], src, dst))
+        return done("%-7s @$%08X, @$%08X" % (ABS_TWO[op], src, dst))
     return done(".word   $%04X" % op)
 
 

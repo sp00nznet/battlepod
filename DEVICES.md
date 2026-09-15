@@ -354,18 +354,31 @@ FE0002C0  MOVI    #$0003, A0
 FE000310  CALLA   $FE0016D0
 ```
 
-Coverage, measured three ways because one number would mislead: **48% of all
-words**, **68% ignoring zero fill** — the image holds data as well as code — and
-**92% over a real routine**. What makes any of it trustworthy is the
+Coverage, measured three ways because one number would mislead: **49% of all
+words**, **70% ignoring zero fill** — the image holds data as well as code — and
+**100% over the renderer's hardware init**. What makes any of it trustworthy is the
 cross-check: **164 of 164 absolute call and jump targets land inside the image,
 on all three renderer binaries.** A decoder that had lost sync would scatter
 targets across a 512 MB address space and essentially none would fall inside a
 28 KB window.
 
-Remaining gaps are the graphics group — `PIXT`, `PIXBLT`, `FILL`, `LINE` — and a
-few absolute `MOVE` forms. They are left out rather than guessed: `0x0700` and
-`0x0740` were tried as absolute moves, decoded to implausible addresses, and
-were removed.
+The graphics group is in — `PIXT` in all six addressing forms, the six
+`PIXBLT` variants, `FILL L`/`FILL XY` and `LINE`.
+
+The remaining gap is the absolute-move group at `0x0400`–`0x07FF`, and it is
+worth saying why it stays a gap. The scanned manual's table for it is the least
+legible part of the document, and the load/store split it appears to give
+contradicts what the firmware demonstrably does. So that group is settled
+empirically instead:
+
+- **all seven** writes to `0xFFFFFDE0` use `0x0780`, and that word is the
+  renderer state the 68020 polls — so `0x0780` is a store, whatever the OCR says
+- `0x0580` writes `0xC0000080` and `0xC0000110`, the TMS34010's own I/O
+  registers — also a store
+
+Those forms are implemented; the rest of the group is left unrecognised rather
+than filled in from a reading that does not hold up. `0x0700` and `0x0740` were
+tried as loads, decoded to implausible addresses, and were removed.
 
 ### The renderer's hardware init
 

@@ -12,8 +12,8 @@ All notable changes to this project are documented here. The format follows
   the TMS34010 User's Guide. 36% of `R.BIN` is recognised - the
   register-indirect MOVE family and the graphics group are the gaps - but 164 of
   164 absolute call and jump targets land inside the image on all three renderer
-  binaries, which is what shows it is in sync. Now 48% of all words, 68%
-  ignoring zero fill, 92% over a real routine.
+  binaries, which is what shows it is in sync. Now 49% of all words, 70%
+  ignoring zero fill, and 100% over the renderer's hardware init.
 - `--watch BASE:LEN` logs accesses inside a mapped region, which the unmapped
   log cannot see. Pointed at a loaded resource it shows exactly which offsets
   the firmware reads and from where.
@@ -68,6 +68,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The manual's absolute-move table is the least legible part of the scan and its
+  load/store split contradicts the firmware. Settled from the data instead: all
+  seven writes to the renderer state word use 0x0780, and 0x0580 writes the
+  TMS34010's own I/O registers, so both are stores. The rest of that opcode
+  group is left unrecognised rather than guessed.
 - The renderer's hardware init reads cleanly: it writes three registers in the
   TMS34010's documented I/O block at 0xC0000000, enables interrupts, then clears
   0x40000 bits of frame buffer at bit address 0xA0000000. That the addresses land
