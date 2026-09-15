@@ -102,7 +102,10 @@ Lamp number in hex (00 - 3b, 50 - 53 and 60)
 01 00 03 03 D2 80 05 57
 01 00 0A 0A D1 80 42 41 54 54 4C 54 45 43 A4
   +1C  x1
-01 00 01 01 D5 D5"
+01 00 01 01 D5 D5
+  lamp 05 brightness 01
+  bargraph 80 bars 5
+  display 80 \"BATTLTEC\""
 
 pass=0
 total=0

@@ -199,6 +199,86 @@ static char *unescape(const char *s)
 	return out;
 }
 
+
+/* ------------------------------------------------- remote i/o decoder */
+
+/* Turn the captured channel A byte stream back into cockpit panel state.
+ * Frames are 01 <node> <len> <node+len> <payload> <sum(payload)>, and the
+ * payload opcodes are the ones the firmware's own diagnostic menu exposes.
+ * This is what a panel renderer would consume: which lamp is lit and how
+ * brightly, where each bar graph stands, what each soft-label display reads. */
+
+#define RIO_LAMP_MAX  0x80
+#define RIO_DEV_LO    0x80		/* displays and bar graphs share these ids */
+#define RIO_DEV_HI    0x92
+
+static uint8_t g_lamp[RIO_LAMP_MAX];
+static int     g_lamp_set[RIO_LAMP_MAX];
+static uint8_t g_bar[RIO_DEV_HI];
+static int     g_bar_set[RIO_DEV_HI];
+static char    g_text[RIO_DEV_HI][9];
+static int     g_text_set[RIO_DEV_HI];
+
+static void rio_apply(const uint8_t *p, uint32_t n)
+{
+	uint32_t i;
+	if (n < 1) return;
+	switch (p[0]) {
+	case 0xD1:				/* display: id, 8 characters */
+		if (n >= 2 && p[1] >= RIO_DEV_LO && p[1] < RIO_DEV_HI) {
+			for (i = 0; i + 2 < n && i < 8; i++) g_text[p[1]][i] = (char)p[2 + i];
+			g_text_set[p[1]] = 1;
+		}
+		break;
+	case 0xD2:				/* bar graph: id, bars lit */
+		if (n >= 3 && p[1] >= RIO_DEV_LO && p[1] < RIO_DEV_HI) {
+			g_bar[p[1]] = p[2];
+			g_bar_set[p[1]] = 1;
+		}
+		break;
+	case 0xD3:				/* lamp: id, brightness */
+		if (n >= 3 && p[1] < RIO_LAMP_MAX) {
+			g_lamp[p[1]] = p[2];
+			g_lamp_set[p[1]] = 1;
+		}
+		break;
+	default:
+		break;			/* D5 and anything else: no panel state */
+	}
+}
+
+static void rio_report(void)
+{
+	uint32_t at = 0, frames = 0, bad = 0, n = g_rio_tx < RIOCAP ? g_rio_tx : RIOCAP;
+	int i, any;
+
+	while (at + 4 <= n) {
+		uint32_t len, j;
+		uint8_t sum = 0;
+		if (g_riobuf[at] != 0x01) { at++; bad++; continue; }
+		len = g_riobuf[at + 2];
+		if (at + 5 + len > n) break;
+		if ((uint8_t)(g_riobuf[at + 1] + g_riobuf[at + 2]) != g_riobuf[at + 3]) bad++;
+		for (j = 0; j < len; j++) sum = (uint8_t)(sum + g_riobuf[at + 4 + j]);
+		if (sum != g_riobuf[at + 4 + len]) bad++;
+		rio_apply(&g_riobuf[at + 4], len);
+		frames++;
+		at += 5 + len;
+	}
+
+	printf("%sremote i/o: %u frames decoded%s%s", "\n", frames,
+	       bad ? " (checksum or framing errors)" : "", "\n");
+
+	any = 0;
+	for (i = 0; i < RIO_LAMP_MAX; i++)
+		if (g_lamp_set[i]) { printf("  lamp %02X brightness %02X%s", i, g_lamp[i], "\n"); any = 1; }
+	for (i = RIO_DEV_LO; i < RIO_DEV_HI; i++)
+		if (g_bar_set[i]) { printf("  bargraph %02X bars %u%s", i, g_bar[i], "\n"); any = 1; }
+	for (i = RIO_DEV_LO; i < RIO_DEV_HI; i++)
+		if (g_text_set[i]) { printf("  display %02X \"%.8s\"%s", i, g_text[i], "\n"); any = 1; }
+	if (!any) printf("  no panel state changed%s", "\n");
+}
+
 /* ---------------------------------------------------- boot monitor stub */
 
 /* The pod's boot ROM is not in the release, but the firmware calls it. Six
@@ -1218,6 +1298,7 @@ int main(int argc, char **argv)
 			printf(" %02X", g_riobuf[i]);
 			if (i % 16 == 15 || i + 1 == n) printf("\n");
 		}
+		rio_report();
 	}
 
 	if (g_inlen[1])

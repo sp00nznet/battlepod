@@ -12,7 +12,7 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **27/27** checkpoints.
+Conformance: **30/30** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
@@ -21,8 +21,9 @@ has been identified and its command protocol decoded, and the firmware's own
 diagnostic monitor can be driven interactively over the modelled serial port —
 far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
 emit real Remote I/O packets, checksums and all. See
-[DEVICES.md](DEVICES.md) for the map and [ROADMAP.md](ROADMAP.md) for what's
-next.
+[DEVICES.md](DEVICES.md) for the map, [RENDERING.md](RENDERING.md) for what it
+would take to reproduce all four of a cockpit's surfaces, and
+[ROADMAP.md](ROADMAP.md) for what's next.
 
 It does not contain, and will never contain, any VWE code or data. You supply
 your own copy.
@@ -215,7 +216,15 @@ remote i/o: 8 bytes sent on duart channel A
 ```
 
 `01` start, node `00`, length `03`, header checksum `03`, then the payload
-`D3 05 01` — lamp 5 at brightness 1 — and its checksum `D9`.
+`D3 05 01` — lamp 5 at brightness 1 — and its checksum `D9`. The frames are
+decoded back into cockpit panel state:
+
+```
+remote i/o: 1 frames decoded
+  lamp 05 brightness 01
+```
+
+which is what a panel renderer consumes. See [RENDERING.md](RENDERING.md).
 
 ## Usage
 
@@ -282,7 +291,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 27/27). Skips with a clear message if no
+reporting a pass count (currently 30/30). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

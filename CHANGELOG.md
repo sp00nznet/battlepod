@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `RENDERING.md`: what it would take to reproduce all four of a cockpit's
+  surfaces - the 3D view, the secondary screen, the panel and the controls -
+  and which are blocked on what.
+- The captured Remote I/O stream is decoded back into cockpit panel state:
+  which lamp is lit and how brightly, where each bar graph stands, what each
+  soft-label display reads. That is what a panel renderer consumes.
 - `tools/macres.py`: lists and extracts Macintosh resources, from a raw fork or
   the AppleDouble sidecar `unar` writes. Gets at the operator console's 20 CODE
   segments.

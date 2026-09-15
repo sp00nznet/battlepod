@@ -48,6 +48,12 @@ Two ways to get it, and they check each other:
 
 Neither is quick, and neither is needed for a picture on screen.
 
+**The panel, which is the nearest thing to finished.** The Remote I/O protocol
+is decoded end to end and the captured stream already turns back into panel
+state. What is left is drawing it, and labelling which id is which instrument -
+a question for the operations manuals and the cockpit patent figures, not for
+the firmware. See [RENDERING.md](RENDERING.md).
+
 **The resource archive, which is the shorter road to something visible.** 467
 resources in four type classes, the index already printed by the firmware, and
 the renderer's own diagnostics naming solids, cylinders and "ARES" as the
