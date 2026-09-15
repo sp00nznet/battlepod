@@ -45,16 +45,19 @@ class Desync(Exception):
 
 # $320 and $360 branch on a predicate, and the predicate is a *second* threaded
 # interpreter: 0xFE018910 reads its own opcodes from the same stream and
-# dispatches through a 24-entry table at 0xFE018A00 - push forms at $020-$0A0,
-# then NOT, OR, AND, XOR, NEG, ADD, SUB and five comparisons as zero-operand
-# operators, terminated by $000. A postfix expression, in other words.
+# dispatches through a 24-entry table at 0xFE018A00. It is a postfix expression
+# on a small stack, terminated by $000.
 #
-# How long one of those programs is has not been measured: several of the push
-# handlers begin with a CALLR that consumes operands of its own, so counting
-# `MOVE *A7+` in the handler undercounts them. Until that is read, $320 and
-# $360 stop the walk. Guessing the length would desynchronise everything after
-# the branch and quietly corrupt the geometry rather than fail on it.
-PREDICATE_GAP = (0x320, 0x360)
+# Every push form takes exactly one operand and ends by jumping back to the
+# dispatch loop at 0xFE0189C0; everything from $0C0 up is an operator that takes
+# none - NOT, OR, AND, XOR, NEG, ADD, SUB, five comparisons, and two short-
+# circuit forms. $000 pops the result and returns to the branch.
+#
+# So `$320 $080 $000 $040 $00C8 $260 $000 $1440` reads as: is value(0) >= 200,
+# and if so jump 0x1440 bits on. That is a distance test picking a level of
+# detail, which is what most models put their geometry behind.
+PRED = {0x000: 0, 0x020: 1, 0x040: 1, 0x060: 1, 0x080: 1, 0x0A0: 1}
+PREDICATE_GAP = ()
 
 
 class Model:
@@ -112,6 +115,21 @@ class Model:
         self.mat[i] = tuple(self.w[at + 1 + k] for k in range(4))
         return at + 5
 
+    def predicate(self, at):
+        """Skip one predicate program. Returns where it ends, past the $000."""
+        for _ in range(64):
+            op = self.w[at]
+            at += 1
+            if op == 0x000:
+                return at
+            if op in PRED:
+                at += PRED[op]
+            elif 0x0C0 <= op <= 0x2E0 and op % 0x20 == 0:
+                pass                            # an operator, no operands
+            else:
+                raise Desync("predicate opcode $%03X" % op)
+        raise Desync("predicate did not terminate")
+
     def target(self, operand):
         """A jump or call target: bits, measured from the start of the data.
 
@@ -154,6 +172,18 @@ class Model:
                         self.jumps.append((op, self.w[at]))
                         work.append(self.target(self.w[at]))
                         at += 1
+                    elif op in (0x320, 0x360):              # jump on a predicate
+                        end = self.predicate(at)
+                        self.jumps.append((op, self.w[end]))
+                        work.append(self.target(self.w[end]))
+                        at = end + 1
+                    elif op == 0x420:
+                        # evaluates a predicate and stores the answer in a
+                        # slot, so it is one predicate program plus an index
+                        at = self.predicate(at) + 1
+                    elif op == 0x2C0:                       # jump, always
+                        self.jumps.append((op, self.w[at]))
+                        at = self.target(self.w[at])
                     elif op in (0x300, 0x340):              # jump on face facing
                         self.jumps.append((op, self.w[at + 1]))
                         work.append(self.target(self.w[at + 1]))
@@ -240,12 +270,13 @@ FIXED = {
 
 # Opcodes with a length this interpreter computes rather than looks up.
 HANDLED = (0x000, 0x020, 0x0A0, 0x0C0, 0x160, 0x1A0, 0x240, 0x260,
-           0x480, 0x4A0, 0x4C0, 0x4E0, 0x560, 0x580)
+           0x2C0, 0x300, 0x320, 0x340, 0x360, 0x420, 0x480, 0x4A0, 0x4C0,
+           0x4E0, 0x560, 0x580)
 
 # Every opcode the renderer's table has an entry for. The walk can only follow
 # the ones it can measure, but all 45 are real, and the check that the stream
 # starts on one should be judged against all of them.
-KNOWN = frozenset(list(FIXED) + list(HANDLED) + list(PREDICATE_GAP))
+KNOWN = frozenset(list(FIXED) + list(HANDLED))
 
 
 def walk(blob):
