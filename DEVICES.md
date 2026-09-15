@@ -497,9 +497,10 @@ spun forever writing to `$C0000000`. With the segments placed properly it
 programs eight distinct video registers, as intended.
 
 And the disassembler was treating all five segments as code at one base. Reading
-only the code segment changes the picture: **72% of it is recognised**, not the
-49% previously reported across the whole file, and only 177 words are zero fill
-rather than 3285. 919 of 934 call and branch targets land inside the image.
+only the code segment changes the picture: **72% of it was recognised** against
+49% across the whole file, and only 177 words are zero fill rather than 3285.
+Rebuilding the opcode tables from the TMS34020 manual took that to **95%**, with
+963 of 971 call and branch targets landing inside the image.
 
 ### An address-frame correction
 

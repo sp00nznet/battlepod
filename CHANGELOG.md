@@ -25,8 +25,10 @@ All notable changes to this project are documented here. The format follows
   them, for measuring how much further a run would get. A diagnostic, never a
   claim that the run was faithful.
 - The XY instruction group (ADDXY, SUBXY, CMPXY, MOVX, MOVY, CVXYL, CVSXYL,
-  ADDXYI), the coprocessor group, RPIX, the SETC*P family, the field-1 SEXT and
-  ZEXT forms, and absolute memory-to-memory MOVE.
+  ADDXYI), the coprocessor group including CEXEC's two-word short form at
+  `0xD800`, RPIX, the SETC*P family, the field-1 SEXT and ZEXT forms, and
+  absolute memory-to-memory MOVE. Recognition of the code segment goes from
+  72% to **95%**, and branch targets landing inside the image from 98% to 99%.
 - The full branch condition table. Only 7 of the 16 conditions were evaluated;
   the arithmetic never set carry or overflow at all, so LT/GE/LE/GT/HI/LS could
   not have worked.

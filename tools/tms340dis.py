@@ -118,10 +118,19 @@ ABS_ONE = {
 }
 
 # The coprocessor group: a 32-bit command word follows each, so three words.
+# What the low five bits mean differs per form - "R" is a register, "T" a
+# transfer count, and CMOVCS has neither - so they are not all printed alike.
+#   base -> (mnemonic, what the low bits hold)
 COPROC = {
-    0x0600: "CEXEC", 0x0620: "CMOVGC", 0x0640: "CMOVGC", 0x0660: "CMOVCG",
-    0x0680: "CMOVMC", 0x06A0: "CMOVCM", 0x06C0: "CMOVCS", 0x06E0: "CMOVMC",
-    0x0820: "CMOVMC",
+    0x0600: ("CEXEC", None),                # 0000 0110 0000 0000
+    0x0620: ("CMOVGC", "R"),                # 0000 0110 001R SSSS
+    0x0640: ("CMOVGC", "R"),                # 0000 0110 010R SSSS
+    0x0660: ("CMOVCG", "R"),                # 0000 0110 011R DDDD
+    0x0680: ("CMOVMC", "T"),                # 0000 0110 100T TTTT
+    0x06A0: ("CMOVCM", "R"),                # 0000 0110 101R DDDD
+    0x06C0: ("CMOVCS", None),               # 0000 0110 110. ....
+    0x06E0: ("CMOVMC", "R"),                # 0000 0110 111R SSSS
+    0x0820: ("CMOVMC", "T"),                # 0000 1000 001T TTTT
 }
 
 ABS_TWO = {0x0340: "MOVB", 0x05C0: "MOVE", 0x07C0: "MOVE"}
@@ -259,7 +268,15 @@ def decode(s):
             return done("%-7s %s, @$%08X%s" % (m, regname(f, rd), a, tail))
         return done("%-7s @$%08X, %s%s" % (m, a, regname(f, rd), tail))
     if op & 0xFFE0 in COPROC:
-        return done("%-7s %s, $%08X" % (COPROC[op & 0xFFE0], regname(f, rd), s.long()))
+        m, kind = COPROC[op & 0xFFE0]
+        cmd = s.long()
+        if kind == "R":
+            return done("%-7s %s, $%08X" % (m, regname(f, rd), cmd))
+        if kind == "T":
+            return done("%-7s %d transfers, $%08X" % (m, op & 0x1F, cmd))
+        return done("%-7s $%08X" % (m, cmd))
+    if op & 0xFC00 == 0xD800:                   # CEXEC, short form: two words
+        return done("%-7s #$%03X, $%04X" % ("CEXEC", op & 0x3FF, s.word()))
     if (op & 0xFDC0) == 0x0540:                 # SETF FS, FE, F
         return done("%-7s %d, %d, %d"
                     % ("SETF", (op & 0x1F) or 32, (op >> 5) & 1, (op >> 9) & 1))

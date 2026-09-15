@@ -600,8 +600,16 @@ def run(m, steps, trace, brk=None):
         # lives - so CMOVCG reads back results we do not compute yet.
         # ponytail: registers recorded, arithmetic not modelled; the FPU goes
         # in when the geometry path is the thing being chased.
+        if op & 0xFC00 == 0xD800:               # CEXEC, short form: two words
+            m.fetch()
+            m.copn += 1
+            continue
         if op & 0xFFE0 in COPROC:
             cmd = m.fetchl()
+            # Only the register forms are modelled at all. The *Rs+ forms
+            # carry their transfer count in the low five bits and their pointer
+            # in the command word, and moving memory into an FPU that does not
+            # exist here would be theatre.
             if op & 0xFFE0 in (0x0620, 0x0640):                 # to the FPU
                 m.cop[cmd & 0xFFFF] = m.reg(f, rd)
             elif op & 0xFFE0 == 0x0660:                         # back from it

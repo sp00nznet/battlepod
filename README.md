@@ -269,9 +269,9 @@ python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE00
 python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000     --count 20000 --validate
 ```
 
-Partial - 72% of the code segment is recognised, and 919 of 934 call and branch
-targets land inside the image, which is the check that it is in sync rather
-than confidently wrong. `--segments` shows the scatter-load layout; `--code`
+95% of the code segment is recognised, and 963 of 971 call and branch targets
+land inside the image, which is the check that it is in sync rather than
+confidently wrong. `--segments` shows the scatter-load layout; `--code`
 disassembles only the segment that holds code.
 
 **Walk the resource archive:**
