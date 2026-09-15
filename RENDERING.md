@@ -159,99 +159,31 @@ The checks `model.py --stats` reports over the whole archive:
 
 ```
   header +0x58 is a known opcode : 130 / 130
-  stream walks to a return       :  98 / 130
-  vertex count matches the header:  84 / 130
-  vertices reproduce the box     :  41 / 130
-  material count matches         :  55 / 130
-  face and material indices sane : 129 / 130
+  stream walks to a return       : 130 / 130
+  vertex count matches the header: 120 / 130
+  vertices reproduce the box     :  84 / 130
+  material count matches         :  56 / 130
+  face and material indices sane : 128 / 130
 ```
 
-Where a walk completes, it is *right*: model 24 decodes 246 vertices against a
-header that says 246, 29 materials against 29, and reproduces its own stated
-bounding box. That box is the thing that makes this checkable at all — the
-model carries it, so a wrong vertex decode cannot fake it.
+**Every model in the archive walks to a return.** All 45 opcodes are measured.
+Most came off the handlers: count every `MOVE *A7+` as one longword and every
+`ADDI #n, A7` as `n/32` more, with the handler's bounds taken from the next
+entry in the table. Four of them — `$200`, `$220`, `$280`, `$2A0` — save the
+stream pointer in `A8` on entry and end `MOVE A8, A7 / ADDI #n, A7`, and that
+`n` is the true advance whatever the body does in between.
 
-**What the box actually spans**, since this took two goes to get right. It
-includes the **origin**: several models state a bound of exactly `0.0` on an
-axis no vertex reaches, which is what happens when a part has to keep its own
-pivot inside its box. And it spans **every value ever written to a vertex
-slot**, not only those left at the end — a model rewrites the same slots in
-each level of detail, so the set surviving a full walk belongs to no single
-one. Vertices alone match 41 of 84; plus the origin, 55; every write plus the
-origin, **63**.
+Two would not yield to reading, `$040` and `$520`, because both open with calls
+that consume operands of their own. Those were settled by **sweeping the pair
+against the archive's own checks**, and the answer is sharp: 6 and 5 take every
+model to a clean return where 5 or 7 for `$040` drop twenty of them. `$520 = 5`
+also matches an independent reading of its handler as *(destination, near, far,
+source A, source B)*. Worth being plain that those two are measured by
+consequence rather than read off the code.
 
-## Drawing it
-
-`tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,
-one directional light, a graded sky and a hazed ground, at the pod's own
-480x360. It writes a PNG, using nothing but the standard library.
-
-One thing it has to do that the checks do not: pick **one** level of detail.
-Walking every branch stacks the near and far versions of a model in the same
-frame, which renders as a solid lump. Which side of a branch carries the
-detailed geometry differs per model, so the renderer walks it both ways and
-keeps whichever drew more.
-
-The first geometry out of the archive is a **terrain mesa** — model 30, 81
-vertices and 132 polygons, and it is recognisably one of the buttes standing
-behind the mechs in the reference footage. That is the check that matters more
-than any count: the thing that comes out looks like the thing the pod drew.
-
-Rendering the two dozen fullest models together says what the archive holds.
-Flat-topped **mesas** and tall narrow **towers** — the Nazca arena is described
-in the data supplement as "mysterious towers and a light scattering of rocky
-terrain", and there they are. Low **buildings** with banded fronts, for the
-Urbana and Badlands city maps. Several red-brown **vehicles**, some dark
-elongated craft, a white and red **rocket**. So type 1 is the scenery and the
-props, which fits: a mech is articulated, so it cannot be one rigid model, and
-it has to be assembled part by part through the display list.
-
-### Where the mechs are
-
-Rendering all 81 models that produce polygons puts them in three groups: the
-scenery above, a set of dark elongated craft, and — in the high ids, 463 to 514
-— three dozen chunky **red-brown parts**. Those are the mechs, taken apart.
-
-The ids cluster, and the bounding boxes say what the clusters mean:
-
-```
-  491 == 494     -0.95..0.00  -2.11..0.59  -2.52..0.58
-  492 == 495     -0.80..0.80  -2.25..0.79  -1.32..2.62
-  493 == 496     -1.80..1.80  -0.70..0.03  -2.18..2.13
-  501..504  ==  511..514
-  516 / 517       0.00..2.76 and -2.76..0.00, same y and z
-```
-
-Identical boxes in pairs, and `516`/`517` occupying mirrored half-spaces: these
-are **left and right limbs**, modelled once each and used twice.
-
-**The parts carry no joints.** Every one of them declares a single transform
-node and executes no transform opcode at all — only `516` and `517` compose
-anything, and they have three nodes between them. So a part is rigid, authored
-about its own pivot, which is exactly why its bounding box has to include the
-origin.
-
-Drawing a whole part set in one frame confirms it from the other side: they pile
-up at the origin rather than assembling, because nothing in the archive places
-them.
-
-**What places them is the display list.** Each object record carries its own
-3x3 and translation, so the 68020 emits one record per part per frame with the
-joint angles already baked into each matrix. That is the whole architecture:
-the TI holds rigid parts and draws what it is told, the 68020 holds the skeleton
-and does the articulation.
-
-Which says where to look next for a standing mech — not in this archive at all,
-but in `battletech_68020_res`, the 68020's own per-object data, whose ids
-already match these models one for one.
-
-**What is still open.** The box check lags the count check, 63 against 84, and
-that gap is not explained. It is not the transforms: none of those 84 models
-executes a transform opcode, and the origin and union rules above account for
-most of what was missing.
-
-Four model opcodes remain unmeasured — `$200`, `$220`, `$440`, `$460` — and
-they stop eight models between them.
+What remains is the gap between counts: 120 models decode the right number of
+vertices but only 84 reproduce their box, and two still have an index out of
+range. Those are the next thing to chase.
 
 One correction worth making here: solids, cylinders and ARES turned out **not**
 to be the drawing primitives. They live in the *68020's* own archive, keyed by

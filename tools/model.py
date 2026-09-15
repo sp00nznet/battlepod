@@ -293,16 +293,29 @@ class Model:
 # missing from here are the ones nobody has measured yet; meeting one stops the
 # walk by design.
 FIXED = {
-    0x040: 3, 0x060: 1, 0x080: 0,
-    0x0E0: 3, 0x100: 3,
+    # $040 and $520 were not settled by reading their handlers - both begin
+    # with calls that consume operands of their own, so counting stream reads
+    # undercounts them. They were settled by sweeping the two against the
+    # archive's own checks instead, and the answer is sharp: 6 and 5 take every
+    # model in the archive to a clean return, where 5 or 7 for $040 drop 20 of
+    # them. $520 = 5 also matches an independent reading of its handler as
+    # (destination, near, far, source A, source B).
+    0x040: 6, 0x060: 1, 0x080: 0,
+    0x0E0: 4, 0x100: 4,                 # one index then three inline floats
     0x120: 4, 0x180: 3,
     0x1C0: 1, 0x1E0: 1,
+    # These save the stream pointer in A8 on entry and end with
+    # `MOVE A8, A7 / ADDI #n, A7`, so n is the advance whatever the body does
+    # in between - a better measure than counting reads inside the handler.
+    0x200: 3, 0x220: 4, 0x280: 3, 0x2A0: 3,
+    0x2E0: 2,
     0x300: 2, 0x340: 2,
-    0x380: 0, 0x3A0: 0, 0x400: 0,
+    0x380: 0, 0x3A0: 0, 0x3C0: 1, 0x3E0: 2, 0x400: 0,
+    0x440: 1, 0x460: 3,
     0x500: 0,
-    # $540 is two instructions that fall into $520's handler with one flag
-    # changed, so the two consume the same single longword.
-    0x520: 1, 0x540: 1,
+    # $540 is two instructions falling into $520's handler with one flag
+    # changed, so the two consume the same five longwords.
+    0x520: 5, 0x540: 5,
 }
 
 
@@ -403,9 +416,12 @@ def selftest():
     assert m.box_matches(), "the box check must pass on a model we built"
     assert m.indices_sane()
 
-    bad = Model(struct.pack(">%dI" % (len(h) + 2), *(h + [0x220, 0])))
+    # Every one of the renderer's 45 opcodes is measured now, so an opcode
+    # that is not in the table cannot be a real one - and meeting it has to
+    # stop the walk and name it rather than guess a length and carry on.
+    bad = Model(struct.pack(">%dI" % (len(h) + 2), *(h + [0x5A0, 0])))
     bad.run()
-    assert bad.stopped and "$220" in bad.stopped, bad.stopped
+    assert bad.stopped and "$5A0" in bad.stopped, bad.stopped
     print("selftest: ok")
 
 

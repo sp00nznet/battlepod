@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Every model in the archive now walks to a return — 130 of 130.** All 45
+  opcodes are measured. Most came off the handlers, counting `MOVE *A7+` as one
+  longword and `ADDI #n, A7` as `n/32` more, with each handler's bounds taken
+  from the next entry in the table rather than guessed; `$200`, `$220`, `$280`
+  and `$2A0` save the stream pointer in A8 and end `MOVE A8, A7 / ADDI #n, A7`,
+  which gives the true advance directly.
+- `$040` and `$520` would not yield to reading - both open with calls that
+  consume operands of their own - so they were settled by **sweeping the pair
+  against the archive's own checks**. The peak is sharp: 6 and 5 take every
+  model to a clean return where 5 or 7 for `$040` drop twenty. `$520 = 5` also
+  matches an independent reading of its handler. Recorded as measured by
+  consequence rather than read off the code.
+- Clean walks 104 -> **130**, vertex counts matching the header 84 -> **120**,
+  boxes reproduced 63 -> **84**. Conformance floors raised to match.
+
 - **The model tools are in the conformance harness**, which now runs
   **38/38** rather than 30/30. Five of the new checkpoints are the model
   archive's own numbers - the header opcode, clean walks, vertex and material

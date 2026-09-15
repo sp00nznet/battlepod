@@ -145,10 +145,10 @@ if [ -f "$TI_RES" ]; then
         fi
     }
     check_at_least "header +0x58 is a known opcode" 130
-    check_at_least "stream walks to a return"        98
-    check_at_least "vertex count matches the header" 84
-    check_at_least "vertices reproduce the box"      63
-    check_at_least "material count matches"          55
+    check_at_least "stream walks to a return"        130
+    check_at_least "vertex count matches the header" 120
+    check_at_least "vertices reproduce the box"      84
+    check_at_least "material count matches"          56
 fi
 
 echo
