@@ -36,19 +36,64 @@ operations.
 **The frame buffer.** `PSIZE` reads 16, so the pod runs **480x360 at 16 bits
 per pixel**. Nobody spends 16 bits a pixel on lines.
 
-**VWE's own words.** The 1994 press kit, describing what was coming next:
+**The footage.** Two period videos carry real screen capture, and they settle
+what the manuals cannot:
 
-> In addition, we look forward to introducing a new cockpit, which utilizes
-> **texture mapped graphics** (for greater realism) in the first half of 1995.
+- *Virtual World Entertainment BattleTech 3.0 Dooley Trainer* — YouTube
+  `MHSmuBxqlG4`. Game footage at roughly 164 s, 188 s, 199 s and 281 s.
+- *The Next Step: "Virtual Worlds and Battletech"* — YouTube `qu0KkyH1jVw`,
+  a Discovery Channel piece. Game footage around 126 s, 150 s, 240–258 s, and
+  the post-game debrief at 303 s.
 
-That new cockpit is the Tesla pod — System 3.0, this release. So the target is
-texture-mapped solid 3D, and the asset patent agrees: US 5,710,878 names
-polygon meshes with vertex normals and materials with "Gouraud and Phong
-shading, texture, bump and environment mapping".
+What they show, consistently:
+
+- **Flat-shaded solid polygons.** The facets are plainly distinct — you can
+  count the quads down a mech's leg, each a single flat tone. Not Gouraud, and
+  certainly not wireframe.
+- **No texture at all** on mechs or terrain.
+- **Cast shadows**, drawn as dark polygons on the ground beneath each mech.
+- A sky that is a vertical gradient, and **distance haze** washing the horizon
+  out to a pale band.
+- A tight palette — sand, tan, and a purple-brown for faces turned away.
+- Projectiles as small bright polygons; explosions and burning wrecks as
+  clusters of flame-coloured polygons with scattered debris points.
+- The 150 s frame is *Red Planet* on the same hardware: same flat-shaded style,
+  grey tunnel palette, and a text HUD along the bottom edge.
+
+One frame at 258 s is shot over a pilot's shoulder inside a pod and shows all
+four surfaces at once: the main monitor with a shadowed mech on the plain, the
+secondary display below it running a green radar grid, a column of lit
+pushbuttons to the left and a strip of lamps to the right. That is the machine
+this repo has been taking apart, in one photograph.
+
+The debrief screen at 303 s *is* drawn in outline — mech silhouettes per pilot,
+green where intact and red where damaged, with callsign and score. So wireframe
+does appear in this product, in the post-game UI, and nowhere in the world view.
+
+**A correction.** An earlier reading of this said the target was texture-mapped,
+on the strength of VWE's 1994 press kit:
+
+> we look forward to introducing a new cockpit, which utilizes **texture mapped
+> graphics** (for greater realism) in the first half of 1995.
+
+That was a *plan* for a next cockpit, not a description of this one, and the
+footage shows no texturing. The archive agrees, and this is the part that
+should have been checked first: `battletech_ti_res` holds **six type 2 bitmaps,
+22,632 bytes between them**, against 130 models and 131 type 7 payloads. Six
+small bitmaps is a font and some HUD furniture. It is not a texture library.
+
+The asset patent (US 5,710,878) does name texture, bump and environment mapping
+among the material kinds its tool could author — but it describes the authoring
+pipeline across VWE's products, not what this release's renderer does with it.
 
 The mech line art in the operations manuals and data supplements is print
 illustration, not screen capture; it is good reference for *shape* — MadCat,
 Vulture, Loki, Thor and the rest — and no guide at all to how they were drawn.
+
+**So the target is flat-shaded, untextured, shadowed solid polygons at 480x360
+in 16-bit colour.** That is simpler than texture mapping in the way that
+matters: one colour per face, no per-pixel interpolation, which is a span
+rasteriser a first implementation can actually reach.
 
 ---
 

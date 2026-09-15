@@ -8,6 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Reference footage, and a correction.** Two period videos carry real screen
+  capture - the BattleTech 3.0 Dooley Trainer and a Discovery Channel piece -
+  and they show **flat-shaded, untextured solid polygons with cast shadows**,
+  a gradient sky and distance haze. An earlier note here called the target
+  texture-mapped on the strength of VWE's 1994 press kit; that press kit was
+  describing a *plan* for a next cockpit, not this one. The archive says the
+  same thing and should have been checked first: six type 2 bitmaps totalling
+  22,632 bytes against 130 models is a font and some HUD furniture, not a
+  texture library. One frame shows a pod interior with all four surfaces at
+  once. Wireframe does appear in this product - in the post-game debrief
+  screen, and nowhere in the world view. See RENDERING.md.
 - **What the pod actually looked like, settled.** Not wireframe: the renderer's
   code segment contains **zero `LINE` instructions**, and only ten of the
   TMS34020's own block primitives against 517 coprocessor operations - so the
