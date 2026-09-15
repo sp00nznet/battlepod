@@ -32,6 +32,11 @@ def regname(f, r):
     return (REGB if f else REG)[r]
 
 
+# Relative branch and call targets are PC-relative in words; they only become
+# real addresses once the image's load base is added. main() sets this.
+LOAD_BASE = 0
+
+
 # base opcode -> (mnemonic, class). Classes describe how the operands are
 # packed into the low bits and what extension words follow.
 NOARG = {
@@ -191,7 +196,8 @@ def decode(s):
         return done("%-7s $%08X" % ("CALLA", s.long()))
     if op == 0x0D3F:
         d = s.word()
-        return done("%-7s $%08X" % ("CALLR", (start + 2 + (d - 0x10000 if d & 0x8000 else d)) * 16))
+        off = d - 0x10000 if d & 0x8000 else d
+        return done("%-7s $%08X" % ("CALLR", LOAD_BASE + (start + 2 + off) * 16))
     if op & 0xFFE0 == 0x0920:
         return done("%-7s %s" % ("CALL", regname(f, rd)))
     if op & 0xFFE0 == 0x0960:
@@ -213,7 +219,7 @@ def decode(s):
             return done("%-7s $%08X" % (m, s.long()))
         else:
             off = d - 0x100 if d & 0x80 else d
-        return done("%-7s $%08X" % (m, (start + (s.at - start) + off) * 16))
+        return done("%-7s $%08X" % (m, LOAD_BASE + (s.at + off) * 16))
     if op & 0xFFE0 in ABS_ONE:
         m, dirn = ABS_ONE[op & 0xFFE0]
         a = s.long()
@@ -266,6 +272,8 @@ def main(argv):
     count = opt("--count", 48)
     at = opt("--at", None)
 
+    global LOAD_BASE
+    LOAD_BASE = base
     start_word = skip // 2 if at is None else (at - base) // 16
     quiet = "--validate" in argv
     limit = base + len(blob) * 8            # one past the image, as a bit address
@@ -284,7 +292,7 @@ def main(argv):
                 zeros += 1          # padding and tables, not instructions
         else:
             decoded += 1
-        if text.startswith(("CALLA", "JA")):
+        if text.startswith(("CALLA", "CALLR", "JA", "JR", "DSJ")) and "$" in text:
             targets += 1
             if base <= int(text.rsplit("$", 1)[1], 16) < limit:
                 inrange += 1
@@ -296,7 +304,7 @@ def main(argv):
           % (100.0 * decoded / max(1, decoded + unknown),
              100.0 * decoded / max(1, decoded + unknown - zeros)))
     if targets:
-        print("%d of %d absolute call and jump targets land inside the image (%.0f%%)"
+        print("%d of %d call and branch targets land inside the image (%.0f%%)"
               % (inrange, targets, 100.0 * inrange / targets))
 
 

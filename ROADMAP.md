@@ -54,11 +54,13 @@ state. What is left is drawing it, and labelling which id is which instrument -
 a question for the operations manuals and the cockpit patent figures, not for
 the firmware. See [RENDERING.md](RENDERING.md).
 
-**Follow the renderer's command handlers to the model parser.** The main loop
-and its dispatch table are decoded, and opcode 5 - load resource map - lands at
-`$FE0073F0`. Each handler decodes at 100%. Following opcode 5 and the data
-table at `$FE0323C0` that one of the handlers indexes is the remaining path to
-the type 1 model layout. Background on why this is the route: watching the whole
+**Work out the renderer's calling convention, then follow opcode 5.** The main
+loop and dispatch table are decoded and every handler reads at 100%, but the
+handlers do not all take their arguments from the command queue - opcode 5's
+dereferences `A1`, so a register carries state in from the caller. Until that is
+pinned down the handler bodies can be read but not interpreted. After it, opcode
+5 and the data table at `$FE0323C0` are the path to the type 1 model layout.
+Background on why this is the route: watching the whole
 archive across a complete boot shows the 68020 reading only the 16-byte headers
 and never a byte of a model body. The parser is in `R.BIN` - 28 KB of TMS340
 code - so the geometry format cannot be reached from the 68k side at all.

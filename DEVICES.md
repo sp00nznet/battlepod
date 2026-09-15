@@ -431,6 +431,21 @@ entry, and holds handlers for opcodes 3 through 12:
 Entries for opcodes 1 and 2 are null, so reset and allocate are handled before
 the table is reached. Every handler decodes at 100%.
 
+The table base and its indexing are confirmed independently: scanning the image
+for words that *hold* handler addresses finds them at `0xFE0284A0`,
+`0xFE0284C0` and `0xFE0284E0` — exactly `0xFE028460 + (opcode - 1) * 32` for
+opcodes 3, 4 and 5, and nowhere else.
+
+Two handlers are already legible. Opcode 4's is `JRUC $FE0072D0`, a branch to
+itself — an unused slot that parks the processor. And `0xFE0072E0` is
+`JRUC $FE000080`, a jump back into the entry sequence, which is the reset path.
+
+What the rest of them *mean* needs the renderer's calling convention worked out
+first: the handler for opcode 5 dereferences `A1` rather than reading its
+argument from the queue, so a register is carrying state in from the caller.
+That is the next thing to pin down, and it is what stands between here and the
+model format.
+
 ### The renderer's hardware init
 
 The first thing the entry calls is the renderer bringing up its own silicon, and

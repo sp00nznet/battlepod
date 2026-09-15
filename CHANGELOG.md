@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Relative branch and call targets were missing the image's load base, so every
+  `JR`, `CALLR` and `DSJ` target the disassembler printed was wrong. Validation
+  now covers relative branches as well as absolute ones, which takes the check
+  from 164 targets to 982: 938 of them land inside the image.
+
 ### Added
 
 - `tools/tms340dis.py`: a TMS34010 disassembler, written from the encodings in
@@ -68,6 +75,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The renderer's dispatch table base and indexing are confirmed independently:
+  the only places in the image holding handler addresses are exactly
+  0xFE028460 + (opcode - 1) * 32 for opcodes 3, 4 and 5. Opcode 4's handler
+  branches to itself - an unused slot - and 0xFE0072E0 jumps back into the entry
+  sequence, which is the reset path.
 - The renderer's main command loop at 0xFE006D80 decodes with no unknown words,
   and is the same protocol already read off the 68020: status word four bytes
   into the comm block, queue eight bytes in, 0xFFFFFFFF terminator, pi as the
