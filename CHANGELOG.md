@@ -10,9 +10,10 @@ All notable changes to this project are documented here. The format follows
 
 - `tools/tms340dis.py`: a TMS34010 disassembler, written from the encodings in
   the TMS34010 User's Guide. 36% of `R.BIN` is recognised - the
-  register-indirect MOVE family is not implemented - but 164 of 164 absolute
-  call and jump targets land inside the image on all three renderer binaries,
-  which is what shows it is in sync.
+  register-indirect MOVE family and the graphics group are the gaps - but 164 of
+  164 absolute call and jump targets land inside the image on all three renderer
+  binaries, which is what shows it is in sync. Now 48% of all words, 68%
+  ignoring zero fill, 92% over a real routine.
 - `--watch BASE:LEN` logs accesses inside a mapped region, which the unmapped
   log cannot see. Pointed at a loaded resource it shows exactly which offsets
   the firmware reads and from where.
@@ -67,6 +68,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The renderer's hardware init reads cleanly: it writes three registers in the
+  TMS34010's documented I/O block at 0xC0000000, enables interrupts, then clears
+  0x40000 bits of frame buffer at bit address 0xA0000000. That the addresses land
+  on the processor's own register block is a semantic check on the disassembler.
 - The renderer kernel is engine code, not game content: `R.BIN3_0` and
   `R.BIN2_5` are byte-identical between BattleTech and Red Planet.
 - The 68020 never reads inside a model. Watching the whole archive across a

@@ -264,9 +264,9 @@ python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE00
 python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000     --count 20000 --validate
 ```
 
-Partial - 36% of the image is recognised - but every absolute call and jump
-target it produces lands inside the image, which is the check that it is in
-sync rather than confidently wrong.
+Partial - 48% of all words, 68% ignoring zero fill, 92% over a real routine -
+but every absolute call and jump target it produces lands inside the image,
+which is the check that it is in sync rather than confidently wrong.
 
 **Walk the resource archive:**
 

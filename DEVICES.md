@@ -354,16 +354,44 @@ FE0002C0  MOVI    #$0003, A0
 FE000310  CALLA   $FE0016D0
 ```
 
-**36% of the image decodes.** That is honest rather than good: the
-register-indirect `MOVE` family is not implemented, and it is the bulk of real
-code. What makes the 36% trustworthy is the cross-check — **164 of 164 absolute
-call and jump targets land inside the image, on all three renderer binaries.**
-A decoder that had lost sync would produce targets scattered across a 512 MB
-address space, and essentially none would fall inside a 28 KB window.
+Coverage, measured three ways because one number would mislead: **48% of all
+words**, **68% ignoring zero fill** — the image holds data as well as code — and
+**92% over a real routine**. What makes any of it trustworthy is the
+cross-check: **164 of 164 absolute call and jump targets land inside the image,
+on all three renderer binaries.** A decoder that had lost sync would scatter
+targets across a 512 MB address space and essentially none would fall inside a
+28 KB window.
 
-Two opcodes, `0x0700` and `0x0740`, were tried as absolute moves and decoded to
-implausible addresses, so they are left unrecognised rather than printing a
-confident lie.
+Remaining gaps are the graphics group — `PIXT`, `PIXBLT`, `FILL`, `LINE` — and a
+few absolute `MOVE` forms. They are left out rather than guessed: `0x0700` and
+`0x0740` were tried as absolute moves, decoded to implausible addresses, and
+were removed.
+
+### The renderer's hardware init
+
+The first thing the entry calls is the renderer bringing up its own silicon, and
+it reads unambiguously:
+
+```
+FE0007C0  MOVI    #$5007, A0
+FE0007E0  MOVB    A0, @$C0000080      ; TMS34010 I/O register block
+FE000820  MOVB    A0, @$C0000120
+FE000850  MOVB    A0, @$C0000110
+FE000880  EINT
+FE000890  CALLA   $FE001C50
+FE0008C0  MOVI    #$A0000000, A0      ; frame buffer
+FE0008F0  MOVI    #$00040000, A1      ; 0x40000 bits to clear
+FE000920  CLR     A2
+FE000930  MOVE    A2, *A0+, 1         ; clear it
+```
+
+`0xC0000000` is the TMS34010's documented on-chip I/O register block, and the
+firmware writes three registers in it before enabling interrupts. That is a
+semantic check on the disassembler, not just a structural one: the addresses it
+produces land where the processor's own registers live.
+
+The frame buffer is at bit address `0xA0000000` and the clear covers `0x40000`
+bits — 32 KB, which at the pod's resolution is one screen.
 
 One caveat: this boot never starts a game, so nothing is ever drawn. Whether the
 68020 reads model bodies while rendering cannot be settled from a boot alone.

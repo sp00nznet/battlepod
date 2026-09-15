@@ -10,8 +10,13 @@ processor is little-endian in 16-bit words and its addresses are *bit*
 addresses, so a byte at file offset n sits at bit address n*8.
 
 Not every instruction is implemented; anything unrecognised prints as `.word`,
-which is honest and keeps the stream in sync because every unknown opcode is
-still exactly one word long.
+which keeps the stream in sync because an unknown opcode is still one word long.
+The graphics group - PIXT, PIXBLT, FILL, LINE - and a few absolute MOVE forms
+are the remaining gaps. They are left out rather than guessed: two opcodes were
+tried as absolute moves, decoded to implausible addresses, and were removed.
+
+The image holds data as well as code, so a linear disassembly can never reach
+100%; the reported figures separate zero fill from genuine unknowns.
 
 usage:
   tms340dis.py <file> [--base BITADDR] [--at BITADDR] [--count N] [--skip N]
@@ -76,6 +81,30 @@ ABS_ONE = {
     0x0780: ("MOVE", "store"), 0x07A0: ("MOVE", "store"),
 }
 ABS_TWO = {0x05C0: "MOVB", 0x07C0: "MOVE", 0x07E0: "MOVE"}
+
+# Register-indirect moves. The User's Guide gives these as `oooo ooFS SSSR DDDD`
+# for MOVE - six opcode bits then a field-select bit - and `oooo oooS SSSR DDDD`
+# for MOVB, which has no field select. Both put the source in bits 8-5, the
+# register file in bit 4 and the destination in bits 3-0.
+#   key: (base, mask) -> (mnemonic, source form, dest form, extension words)
+IND = [
+    (0x8000, 0xFC00, "MOVE", "Rs", "*Rd", 0),
+    (0x8400, 0xFC00, "MOVE", "*Rs", "Rd", 0),
+    (0x8C00, 0xFE00, "MOVB", "Rs", "*Rd", 0),
+    (0x8E00, 0xFE00, "MOVB", "*Rs", "Rd", 0),
+    (0x9000, 0xFC00, "MOVE", "Rs", "*Rd+", 0),
+    (0x9400, 0xFC00, "MOVE", "*Rs+", "Rd", 0),
+    (0x9C00, 0xFE00, "MOVB", "*Rs", "*Rd", 0),
+    (0xA000, 0xFC00, "MOVE", "Rs", "-*Rd", 0),
+    (0xA400, 0xFC00, "MOVE", "-*Rs", "Rd", 0),
+    (0xAC00, 0xFE00, "MOVB", "Rs", "*Rd(o)", 1),
+    (0xAE00, 0xFE00, "MOVB", "*Rs(o)", "Rd", 1),
+    (0xB000, 0xFC00, "MOVE", "Rs", "*Rd(o)", 1),
+    (0xB400, 0xFC00, "MOVE", "*Rs(o)", "Rd", 1),
+    (0xB800, 0xFC00, "MOVE", "*Rs(o)", "*Rd(o)", 2),
+    (0xBC00, 0xFE00, "MOVB", "*Rs(o)", "*Rd(o)", 2),
+]
+DSJ = {0x0D80: "DSJ", 0x0DA0: "DSJEQ", 0x0DC0: "DSJNE"}
 
 
 class Stream:
@@ -158,6 +187,33 @@ def decode(s):
         if dirn == "store":
             return done("%-7s %s, @$%08X" % (m, regname(f, rd), a))
         return done("%-7s @$%08X, %s" % (m, a, regname(f, rd)))
+    if op & 0xFFE0 in DSJ:
+        d = s.word()
+        off = d - 0x10000 if d & 0x8000 else d
+        return done("%-7s %s, $%08X"
+                    % (DSJ[op & 0xFFE0], regname(f, rd), (start + 2 + off) * 16))
+    if op & 0xFC00 == 0x3800:
+        k = (op >> 5) & 0x1F
+        back = (op >> 10) & 1
+        return done("%-7s %s, $%08X"
+                    % ("DSJS", regname(f, rd), (start + (-k if back else k)) * 16))
+    for base, mask, m, sf, df, ext in IND:
+        if op & mask != base:
+            continue
+        offs = [s.word() for _ in range(ext)]
+        fld = (op >> 9) & 1 if mask == 0xFC00 else None
+        sn, dn = regname(f, rs), regname(f, rd)
+
+        def fmt(form, reg, o):
+            return (form.replace("Rs", reg).replace("Rd", reg)
+                    .replace("(o)", "(%d)" % o if o is not None else ""))
+
+        so = offs[0] if ext and sf.endswith("(o)") else None
+        do = offs[-1] if ext and df.endswith("(o)") else None
+        text = "%-7s %s, %s" % (m, fmt(sf, sn, so), fmt(df, dn, do))
+        if fld is not None:
+            text += ", %d" % fld
+        return done(text)
     if op & 0xFFE0 in ABS_TWO:
         src, dst = s.long(), s.long()
         return done("%-7s @$%08X, @$%08X" % (ABS_TWO[op & 0xFFE0], src, dst))
@@ -182,7 +238,7 @@ def main(argv):
     limit = base + len(blob) * 8            # one past the image, as a bit address
 
     s = Stream(blob, start_word)
-    decoded = unknown = targets = inrange = 0
+    decoded = unknown = zeros = targets = inrange = 0
     for _ in range(count):
         here = base + (s.at * 16)
         try:
@@ -191,6 +247,8 @@ def main(argv):
             break
         if text.startswith(".word"):
             unknown += 1
+            if text.endswith("$0000"):
+                zeros += 1          # padding and tables, not instructions
         else:
             decoded += 1
         if text.startswith(("CALLA", "JA")):
@@ -200,8 +258,10 @@ def main(argv):
         if not quiet:
             print("  %08X  %s" % (here, text))
 
-    print("\n%d decoded, %d unknown (%.0f%% recognised)"
-          % (decoded, unknown, 100.0 * decoded / max(1, decoded + unknown)))
+    print("\n%d decoded, %d unknown of which %d are zero words" % (decoded, unknown, zeros))
+    print("%.0f%% of all words recognised, %.0f%% ignoring zero fill"
+          % (100.0 * decoded / max(1, decoded + unknown),
+             100.0 * decoded / max(1, decoded + unknown - zeros)))
     if targets:
         print("%d of %d absolute call and jump targets land inside the image (%.0f%%)"
               % (inrange, targets, 100.0 * inrange / targets))
