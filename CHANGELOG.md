@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Found the mechs.** Rendering all 81 models that produce polygons puts three
+  dozen chunky red-brown parts in the high ids, 463 to 514, and their bounding
+  boxes give the game away: `491 == 494`, `492 == 495`, `493 == 496` exactly,
+  and `516`/`517` occupy mirrored half-spaces. Left and right limbs, modelled
+  once and used twice.
+- **The parts carry no joints** - one transform node each and no transform
+  opcode executed - so a part is rigid and authored about its own pivot, which
+  is why its box has to include the origin. Drawing a set together piles them at
+  the origin instead of assembling. What places them is the display list: each
+  object record carries its own 3x3 and translation, so the 68020 emits one
+  record per part per frame with the joint angles baked in. The TI holds rigid
+  parts, the 68020 holds the skeleton.
+
 - **`tools/render.py` — the first geometry drawn out of the archive.**
   Z-buffered flat-shaded triangles, one directional light, a graded sky and a
   hazed ground, at the pod's own 480x360, written as a PNG with nothing but the

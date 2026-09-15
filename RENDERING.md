@@ -206,8 +206,44 @@ elongated craft, a white and red **rocket**. So type 1 is the scenery and the
 props, which fits: a mech is articulated, so it cannot be one rigid model, and
 it has to be assembled part by part through the display list.
 
-That is the next thing to find — which resources are the mech parts, and what
-assembles them.
+### Where the mechs are
+
+Rendering all 81 models that produce polygons puts them in three groups: the
+scenery above, a set of dark elongated craft, and — in the high ids, 463 to 514
+— three dozen chunky **red-brown parts**. Those are the mechs, taken apart.
+
+The ids cluster, and the bounding boxes say what the clusters mean:
+
+```
+  491 == 494     -0.95..0.00  -2.11..0.59  -2.52..0.58
+  492 == 495     -0.80..0.80  -2.25..0.79  -1.32..2.62
+  493 == 496     -1.80..1.80  -0.70..0.03  -2.18..2.13
+  501..504  ==  511..514
+  516 / 517       0.00..2.76 and -2.76..0.00, same y and z
+```
+
+Identical boxes in pairs, and `516`/`517` occupying mirrored half-spaces: these
+are **left and right limbs**, modelled once each and used twice.
+
+**The parts carry no joints.** Every one of them declares a single transform
+node and executes no transform opcode at all — only `516` and `517` compose
+anything, and they have three nodes between them. So a part is rigid, authored
+about its own pivot, which is exactly why its bounding box has to include the
+origin.
+
+Drawing a whole part set in one frame confirms it from the other side: they pile
+up at the origin rather than assembling, because nothing in the archive places
+them.
+
+**What places them is the display list.** Each object record carries its own
+3x3 and translation, so the 68020 emits one record per part per frame with the
+joint angles already baked into each matrix. That is the whole architecture:
+the TI holds rigid parts and draws what it is told, the 68020 holds the skeleton
+and does the articulation.
+
+Which says where to look next for a standing mech — not in this archive at all,
+but in `battletech_68020_res`, the 68020's own per-object data, whose ids
+already match these models one for one.
 
 **What is still open.** The box check lags the count check, 63 against 84, and
 that gap is not explained. It is not the transforms: none of those 84 models
