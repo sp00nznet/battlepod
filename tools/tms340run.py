@@ -17,7 +17,8 @@ import sys
 
 WORD = 16                       # bits per word
 FB_BASE = 0xA0000000            # frame buffer, per the renderer's own init
-IO_BASE = 0xC0000000            # TMS34010 on-chip I/O registers
+IO_BASE = 0xC0000000            # TMS34020 on-chip I/O registers
+PSIZE_REG = IO_BASE + 0x0150    # pixel size in bits
 
 
 class Machine:
@@ -45,7 +46,7 @@ class Machine:
         self.cop = {}           # TMS34082 coprocessor registers, by command
         self.copn = 0
         self.conv = {}          # what SETCSP/SETCDP/SETCMP last latched
-        self.psize = 8          # PSIZE; the I/O init table sets the real one
+        self._psize = 8         # until the firmware writes PSIZE
         self.irq_every = 0
         self.irq_vector = 0
         self.irqs = 0
@@ -96,6 +97,11 @@ class Machine:
         span = (span & ~mask) | ((value << shift) & mask)
         for i in range(words):
             self.ww(base + i * WORD, (span >> (i * WORD)) & 0xFFFF)
+
+    @property
+    def psize(self):
+        """Pixel size in bits, from the on-chip register once it is set."""
+        return self.mem.get(PSIZE_REG, 0) or self._psize
 
     def xy_linear(self, v):
         """XY address to bit address: OFFSET + Y*DPTCH + X*PSIZE.
@@ -703,6 +709,8 @@ def main(argv):
         print("\non-chip I/O registers, busiest first:")
         for a in sorted(m.ioacc, key=lambda k: -m.ioacc[k])[:8]:
             print("   $%08X  %d accesses" % (a, m.ioacc[a]))
+    if "--fb" in argv:
+        dump_fb(m, argv[argv.index("--fb") + 1])
     print("\nmemory regions touched (by top byte of the bit address):")
     for r in sorted(m.touched):
         note = ""
@@ -711,6 +719,28 @@ def main(argv):
         elif r == IO_BASE >> 24:
             note = "  <- on-chip I/O registers"
         print("   $%02X......  %d accesses%s" % (r, m.touched[r], note))
+
+
+def dump_fb(m, path):
+    """Write what is in the frame buffer as a PGM, so a frame can be looked at.
+
+    The geometry is the renderer's own: DPTCH (B3) bits per row and PSIZE bits
+    per pixel, over the span between the two buffers the main loop sets up at
+    $A0000000 and $A0400000 - which at 8192 bits a row and 8 bits a pixel is
+    1024 by 512.
+    """
+    pitch, psize = m.b[3] or 0x2000, m.psize
+    width, height = max(1, pitch // psize), max(1, 0x400000 // pitch)
+    shift = max(0, psize - 8)                   # scale deeper pixels to 8 bits
+    rows = [bytes((m.field_read(FB_BASE + y * pitch + x * psize, psize) >> shift)
+                  & 0xFF for x in range(width)) for y in range(height)]
+    with open(path, "wb") as fh:
+        fh.write(("P5\n%d %d\n255\n" % (width, height)).encode())
+        for r in rows:
+            fh.write(r)
+    print("frame buffer: %dx%d at %d bpp -> %s, %d non-zero pixels"
+          % (width, height, psize, path,
+             sum(1 for r in rows for v in r if v)))
 
 
 def selftest():

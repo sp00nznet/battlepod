@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
 - `tools/tms340run.py --selftest`: assertions pinning the three decodings that
   had been wrong - absolute load versus store, the MMTM/MMFM mask order, and
   SUBXY's flags.
+- `tools/tms340run.py --fb FILE`: write the renderer's frame buffer out as a
+  PGM. Its geometry comes from the renderer itself - DPTCH bits a row, PSIZE
+  bits a pixel - and reads 512x512 at 16 bits per pixel. Nothing is drawn into
+  it yet; the point is that "did it render" is now a question with an answer.
 - `tools/tms340run.py --skip-unknown`: step over unrecognised opcodes and count
   them, for measuring how much further a run would get. A diagnostic, never a
   claim that the run was faithful.
@@ -57,6 +61,9 @@ All notable changes to this project are documented here. The format follows
   Execution reaches 570,000 instructions before the first unknown opcode, up
   from 20,000.
 - `SUBI IW` is `0x0BE0`, not `0x0CE0`.
+- `DSJ` and `DSJS` printed targets with no load base, and `DSJS` measured its
+  displacement from its own address rather than the next instruction. Branch
+  targets landing inside the image went from 94% to 99%.
 - `MOVE Rs, Rd` across register files (`0x4E00`) wrote the destination in the
   source's file.
 - Every TI instruction address the disassembler printed was 0x40 bits too high:

@@ -267,12 +267,17 @@ def decode(s):
         d = s.word()
         off = d - 0x10000 if d & 0x8000 else d
         return done("%-7s %s, $%08X"
-                    % (DSJ[op & 0xFFE0], regname(f, rd), (start + 2 + off) * 16))
+                    % (DSJ[op & 0xFFE0], regname(f, rd),
+                       LOAD_BASE + (start + 2 + off) * 16))
     if op & 0xF800 == 0x3800:
+        # The displacement counts words from the instruction *after* this one,
+        # with bit 10 giving the direction - and, like every other target here,
+        # it only becomes an address once the load base is added.
         k = (op >> 5) & 0x1F
         back = (op >> 10) & 1
         return done("%-7s %s, $%08X"
-                    % ("DSJS", regname(f, rd), (start + (-k if back else k)) * 16))
+                    % ("DSJS", regname(f, rd),
+                       LOAD_BASE + (start + 1 + (-k if back else k)) * 16))
     for base, mask, m, sf, df, ext in IND:
         if op & mask != base:
             continue
