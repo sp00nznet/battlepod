@@ -607,9 +607,11 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			      (int)dl_word(ti_byte_addr, at + 8), (int)dl_word(ti_byte_addr, at + 9));
 		} else if (type == 1) {
 			int r, c;
-			rslog("    object    %u items, %u longwords, viewport %u, screen %dx%d\n",
+			rslog("    object    %u groups, %u longwords, viewport %u, "
+			      "items from record %u, screen %dx%d\n",
 			      dl_word(ti_byte_addr, at + 34), len,
 			      dl_word(ti_byte_addr, at + 16),
+			      dl_word(ti_byte_addr, at + 22),
 			      (int)dl_word(ti_byte_addr, at + 19) + 1,
 			      (int)dl_word(ti_byte_addr, at + 20) + 1);
 			/* Twelve floats as four rows of three: a 3x3 rotation
@@ -621,7 +623,21 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 					rslog("%9.4f ", as_float(dl_word(ti_byte_addr, at + 2 + r * 3 + c)));
 				rslog("\n");
 			}
-			if (len > 35) dl_items(ti_byte_addr, at + 35, len - 35);
+			/* What follows the header is not the item stream. The
+			 * renderer takes +0x88 as a count and hands what comes
+			 * after it to 0xFE019D50, which transforms it through
+			 * the coprocessor - and the emitter's own length,
+			 * 7n + 33, says each of those n groups is 7 longwords.
+			 * The item stream lives in a type 7 record instead,
+			 * named by +0x58. */
+			if (len > 35)
+				rslog("        %u longwords of geometry, %u per group\n",
+				      len - 35,
+				      dl_word(ti_byte_addr, at + 34)
+				      ? (len - 35) / dl_word(ti_byte_addr, at + 34) : 0);
+		} else if (type == 7) {
+			rslog("    items     %u longwords\n", len - 2);
+			dl_items(ti_byte_addr, at + 2, len - 2);
 		} else {
 			rslog("    type %u, %u longwords\n", type, len);
 		}
@@ -1117,9 +1133,9 @@ static void disasm_at(uint32_t pc, int count)
  * release exercises the decoder yet - a cockpit that has not started a game
  * never sends a render command - so this is what keeps it honest. */
 static const uint32_t g_dl_test[] = {
-	12 + 47,				/* longwords that follow        */
+	12 + 49 + 14,				/* longwords that follow        */
 	8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0,
-	1, 45,					/* length is what follows these */
+	1, 47,					/* length is what follows these */
 	0x3F800000, 0, 0,			/* +0x08: the matrix, identity  */
 	0, 0x3F800000, 0,
 	0, 0, 0x3F800000,
@@ -1128,8 +1144,13 @@ static const uint32_t g_dl_test[] = {
 	2,					/* +0x40: the viewport to use   */
 	0, 0,
 	479, 359,				/* +0x4C, +0x50: screen extent  */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	7,					/* +0x88: item count            */
+	0,
+	3,					/* +0x58: which type 7 record   */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	2,					/* +0x88: how many groups       */
+	0, 0, 0, 0, 0, 0, 0,			/* two groups of seven          */
+	0, 0, 0, 0, 0, 0, 0,
+	7, 12,					/* a type 7 record: the items   */
 	0x040, 0, 0, 0, 0, 0, 0, 0,		/* an eight-longword item       */
 	0x1E0, 0x4C4C4548, 0x0000004F,		/* "HELLO", bytes reversed      */
 	0x000					/* end of the item stream       */
@@ -1152,7 +1173,9 @@ static int selftest_dlist(void)
 		return 1;
 	}
 	if (!strstr(g_rslog + mark,
-		    "object    7 items, 47 longwords, viewport 2, screen 480x360")) {
+		    "object    2 groups, 49 longwords, viewport 2, "
+		    "items from record 3, screen 480x360") ||
+	    !strstr(g_rslog + mark, "14 longwords of geometry, 7 per group")) {
 		printf("FAIL: object record not decoded\n%s", g_rslog + mark);
 		return 1;
 	}

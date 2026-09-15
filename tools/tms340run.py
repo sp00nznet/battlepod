@@ -57,6 +57,7 @@ class Machine:
         self.fpu = [0] * 32     # the TMS34082's register file
         self.fpu_ran = {}       # coprocessor routines this run executed
         self.fpu_missing = {}   # and the ones it could not
+        self.copshort = {}      # short-form CEXECs, left undecoded
         self.copcmds = {}       # which commands the run actually issued
         self.copn = 0
         self.conv = {}          # what SETCSP/SETCDP/SETCMP last latched
@@ -535,9 +536,14 @@ def run(m, steps, trace, brk=None):
                 if base == 0xA400:
                     a -= size
                     m.setreg(f, rs, a)
-                m.setreg(f, rd, m.flags(m.field_read(a + o, size, ext)))
+                # The postincrement must not clobber the value loaded, and
+                # the renderer's item dispatch is exactly that case:
+                # MOVE *A0+, A0 fetches a handler address through the same
+                # register it advances. Incrementing after the load sent it
+                # into the middle of its own jump table.
                 if base == 0x9400:
                     m.setreg(f, rs, a + size)
+                m.setreg(f, rd, m.flags(m.field_read(a + o, size, ext)))
             continue
 
         # MOVB: always eight bits, sign-extended into a register
@@ -791,9 +797,15 @@ def run(m, steps, trace, brk=None):
         # lives - so CMOVCG reads back results we do not compute yet.
         # ponytail: registers recorded, arithmetic not modelled; the FPU goes
         # in when the geometry path is the thing being chased.
-        if op & 0xFC00 == 0xD800:               # CEXEC, short form: two words
-            cmd = (op & 0x3FF) << 16 | m.fetch()
-            m.fpu_exec(cmd)
+        if op & 0xFC00 == 0xD800:
+            # CEXEC's short form is two words and splits the coprocessor
+            # command between them. How it splits is not settled - the scanned
+            # handbook's bit diagrams are the least legible part of it - so the
+            # pair is recorded and not executed, rather than executed wrongly.
+            pair = (op, m.fetch())
+            m.copshort[pair] = m.copshort.get(pair, 0) + 1
+            m.copn += 1
+            continue
             m.copn += 1
             m.copcmds[(0x0600, cmd)] = m.copcmds.get((0x0600, cmd), 0) + 1
             continue
@@ -941,7 +953,7 @@ def main(argv):
         if m.hist is not None:
             m.hist = {}
         m.copcmds, m.blits, m.pixels = {}, 0, 0
-        m.fpu_ran, m.fpu_missing = {}, {}
+        m.fpu_ran, m.fpu_missing, m.copshort = {}, {}, {}
         m.halted = None
         m.a[15] = opt("--sp", 0xFE034DC0)
         m.a[15] -= 32
@@ -961,6 +973,9 @@ def main(argv):
             print("coprocessor routines run: %s"
                   % " ".join("%s x%d" % (FPU_ROM[k][0], v)
                              for k, v in sorted(m.fpu_ran.items())))
+        if m.copshort:
+            print("short-form CEXECs, command packing not settled: %d"
+                  % sum(m.copshort.values()))
         if m.fpu_missing:
             print("coprocessor routines still missing: %s"
                   % " ".join("mode %d fpuop $%02X x%d" % (k[0], k[1], v)
@@ -996,30 +1011,37 @@ WALKER = 0xFE009D80             # the display-list walker, from opcode 6's handl
 
 
 def demo_list():
-    """A display list in the format DEVICES.md describes: one viewport, one
-    object with the identity transform and a string item. Built here rather
-    than captured, because a cockpit that has not started a game never sends
-    one - so this is the first list the renderer has ever been handed."""
+    """A display list in the format DEVICES.md describes.
+
+    One viewport, one type 7 record holding an item stream, one object that
+    names both, and a type 2 draw order. The object asks for no geometry
+    groups, so the transform path has nothing to do and the renderer goes
+    straight to the items - which is the shortest route to a pixel.
+    """
     text = b"BATTLETECH"
-    # Two header longwords: the walker skips 0x40 bits before its first record,
-    # and the 68020's copy loop takes its length from the first of them.
-    words = [0, 0]
-    words += [8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0]
-    obj = [1, 0]                                # type, length - filled in
-    obj += [0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0]
-    obj += [0, 0x3F800000, 1, 0, 0, 479, 359] + [0] * 13 + [1]
+    words = [0, 0]                              # the two-longword header
+
+    view = [8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0]
+
     items = [0x1E0]
     pad = text + b"\0" * (4 - len(text) % 4)
     for i in range(0, len(pad), 4):             # bytes reversed per longword
         items.append(int.from_bytes(pad[i:i + 4][::-1], "big"))
-    items.append(0)
-    obj += items
+    items.append(0)                             # end of the item stream
+    seven = [7, len(items)] + items
+
+    obj = [1, 0]
+    obj += [0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0]
+    obj += [0, 0x3F800000]                      # +0x38, +0x3C
+    obj += [1]                                  # +0x40: the viewport
+    obj += [0, 0, 479, 359, 0]                  # +0x44 .. +0x54
+    obj += [1]                                  # +0x58: which type 7 record
+    obj += [0] * 11
+    obj += [0]                                  # +0x88: no geometry groups
     obj[1] = len(obj) - 2
-    words += obj
-    # A type 2 record is the draw order: 1-based indices into the objects the
-    # type 1 records collected, ending at a negative one. Without it the
-    # renderer collects the list and draws none of it.
-    words += [2, 2, 1, 0xFFFFFFFF]
+
+    words += view + seven + obj
+    words += [2, 2, 1, 0xFFFFFFFF]              # the draw order
     words += [0xFFFFFFFF]
     words[0] = len(words)
     return words
@@ -1111,6 +1133,12 @@ def selftest():
     m.field_write(0x2000, 4, 0b1101)            # bit 0 first: 1, 0, 1, 1
     run(m, 1, 0)
     assert [m.field_read(0x3000 + i * 16, 16) for i in range(4)] ==         [0x7777, 0x1111, 0x7777, 0x7777], "binary PIXBLT did not expand"
+
+    # MOVE *A0+, A0 keeps what it loaded, not the incremented address.
+    m = machine([0x9400 | (0 << 5) | 0], a0=0x800)
+    m.wl(0x800, 0xFEEDFACE)
+    run(m, 1, 0)
+    assert m.a[0] == 0xFEEDFACE, "postincrement clobbered the loaded value"
 
     # Field access is bit-addressed and must not disturb its neighbours.
     m = machine([])

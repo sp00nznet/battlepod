@@ -1001,9 +1001,30 @@ is which viewport the object draws into.
 
 ### The item stream
 
-After an object record's 35-longword header comes a stream of items, and their
-opcodes are **multiples of `0x20` because the renderer uses the opcode directly
-as a bit offset**:
+The items are **not** inside the object record, which is what it looked like
+from the 68020 side. The renderer reads the object's `+0x58` as a **1-based
+index into the list the type 7 records built**, and hands *that* record's
+payload to the item interpreter:
+
+```
+FE00B230  MOVE  *A0(640), A0, 1     ; the object's +0x58
+FE00B250  JREQ  $FE00B2F0           ; zero -> no items
+FE00B260  DEC   A0
+FE00B270  SLL   #5, A0
+FE00B280  ADDI  #$FE0329C0, A0      ; the type 7 list
+FE00B2B0  MOVE  *A0, A7, 1
+FE00B2C0  CALLA $FE022800           ; run its items
+```
+
+What follows the object's own header is geometry: the renderer takes `+0x88`
+as a count and passes what comes after to `0xFE019D50`, which transforms it
+through the coprocessor. The emitter's length formula settles the shape —
+`7n + 33` for `n` at `+0x88` means **n groups of seven longwords**. That
+routine runs a *second* item interpreter of the same design, with its own
+24-entry table at `0xFE018A00`, which is why there are two.
+
+Items and their opcodes are **multiples of `0x20` because the renderer uses the
+opcode directly as a bit offset**:
 
 ```
 FE022930  MOVE  *A7+, A0, 1
@@ -1050,7 +1071,7 @@ walks or it does not.
 
 It walks. The renderer takes it, dispatches record 8 to the viewport collector
 and record 1 to the object collector, reaches the terminator, and runs its
-second pass. Two things the format needed, both found this way:
+second pass. Three things the format needed, all found this way:
 
 - **The list header is two longwords, not one.** The walker does
   `ADDI #$0040, A0` before its first record, and the 68020's copy loop takes
@@ -1058,6 +1079,14 @@ second pass. Two things the format needed, both found this way:
 - **Without a type 2 record nothing draws at all.** The renderer collects
   every object and then iterates the draw order; with no draw order it spins
   on an empty one. Record type 2 is not optional.
+- **The item stream belongs in a type 7 record**, not in the object. Put it in
+  the object and the interpreter never runs.
+
+It also found a bug in the interpreter rather than in the format. The item
+dispatch is `MOVE *A0+, A0` — it fetches a handler address through the same
+register it advances — and the postincrement was being applied after the load,
+so the renderer jumped into the middle of its own jump table. On the hardware
+the loaded value wins.
 
 With both right the renderer runs the whole object path — 236 instructions,
 no unimplemented opcode — and draws nothing, for a reason that is now measured
@@ -1119,6 +1148,11 @@ does them. `tools/tms340run.py` implements it, and a render walk now reports:
 coprocessor routines run: SCALE x1
 coprocessor routines still missing: mode 3 fpuop $20 x1
 ```
+
+With the item stream in the right place the interpreter runs end to end and the
+renderer returns to its idle command loop, having processed the list. It still
+draws nothing: the text item wants state the earlier items in a real stream
+would have set.
 
 **One routine left unidentified.** Table 7-1 reads `$020` as an integer `MOVE`,
 which does not fit what the calling code does — it loads six values into

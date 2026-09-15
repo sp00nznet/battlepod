@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`MOVE *Rs+, Rd` clobbered the value it loaded when the two registers were
+  the same.** The renderer's item dispatch is exactly that instruction -
+  `MOVE *A0+, A0`, fetching a handler address through the register it advances
+  - so the interpreter was jumping into the middle of its own jump table. On
+  the hardware the loaded value wins. Self-tested.
+- **The item stream is not inside the object record.** The renderer reads the
+  object's `+0x58` as a 1-based index into the list built from **type 7**
+  records and hands that record's payload to the interpreter. What follows the
+  object's own header is geometry - `+0x88` groups of seven longwords, which is
+  what the emitter's `7n + 33` was saying - run through a *second* item
+  interpreter with its own table at `0xFE018A00`. `--rstub` and `--render` both
+  corrected.
+
 ### Added
 
 - **The TMS34082's command word, and the first coprocessor routine running.**
@@ -15,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   its TMS34020 instruction implies. **Mode 3 selects a routine from the '82's
   internal ROM**, about 160 of them documented, which is what changes the size
   of this job: the arithmetic is documented silicon, not microcode to reverse.
+- Short-form `CEXEC` is recorded and **not executed**: it splits its command
+  between two words and the scanned handbook's diagram of that split is not
+  legible enough to settle, so a run reports how many it met rather than
+  running them wrongly.
 - `CEXEC $D800` decodes as `SCALE` - the perspective divide and viewport
   transform - and now runs. A render walk reports one routine executed and
   **one still unidentified**, named rather than guessed.
