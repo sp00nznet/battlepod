@@ -860,6 +860,116 @@ cmd 5  op=2  size 0x2328   (9000)
 A bump allocator handing back addresses in mapped TI memory is enough to get
 the resource loader running.
 
+That table was incomplete in two ways. A request record is **12 bytes**, not 8
+— `[+0]` opcode, `[+4]` argument, `[+8]` unused — except opcode 2, whose record
+is 20. And there are ten opcodes, not four. Each has its own wrapper function in
+the ROM, all built the same way and all naming themselves in their error
+message:
+
+| opcode | command | wrapper |
+|---|---|---|
+| 1 | reset | `0x0214C9A0` |
+| 2 | allocate (20-byte record; returns handle and address) | `0x0214CD20` |
+| 3 | free | `0x0214CDDC` |
+| 4 | compact | `0x0214CE58` |
+| 5 | load resource map | `0x0214CED8` |
+| 6 | **render** | `0x0214CF62` (never called) |
+| 7 | follows every render, argument 5 | — |
+| 10 | load palette | `0x0214CFF0` |
+
+Rendering does not go through the opcode 6 wrapper — that one is dead code.
+It goes through **`Async_Render` at `0x0214D302`**, which posts two records in
+one request: opcode 6 with the display list's address, then opcode 7 with the
+constant 5, then the terminator.
+
+### The display list
+
+`0x021444E8` is the only caller of `Async_Render`, and it is where the list
+crosses from the 68020 into the renderer:
+
+```
+if (cursor > limit) { "68020 render list is bigger than memory buffer in TI"; return; }
+count = *list                       ; leading longword: how many longwords follow
+copy count longwords, 68k RAM -> TI memory
+Async_Render(ti_address, flags)
+```
+
+So the list is **a flat array of big-endian longwords with a leading count**,
+copied verbatim. Its records are built by two emitters, and reading them gives
+the format without having to run anything.
+
+**Record type 8 — viewport** (`0x0214465C`, 12 longwords, cursor += 0x30):
+
+| offset | contents |
+|---|---|
+| `+0x00` | `8` |
+| `+0x04` | `10` |
+| `+0x08`…`+0x14` | x0, y0, x1, y1 |
+| `+0x18` | x1 − x0 + 1 — width |
+| `+0x1C` | y1 − y0 + 1 — height |
+| `+0x20` | (x0 + x1) >> 1 — centre x |
+| `+0x24` | (y0 + y1) >> 1 — centre y |
+| `+0x28`, `+0x2C` | two more arguments |
+
+The width, height and centre are *derived* from the corners by the emitter,
+which is what identifies the record: nothing else computes those four values
+from those four.
+
+**Record type 1 — draw object** (`0x02144724`, cursor += 0x8C):
+
+| offset | contents |
+|---|---|
+| `+0x00` | `1` |
+| `+0x04` | record length in longwords: `7n + 33`, for `n` items |
+| `+0x08`…`+0x34` | twelve IEEE single-precision floats, written as `1,0,0 / 0,1,0 / 0,0,1 / 0,0,0` |
+| `+0x38` | argument |
+| `+0x3C` | `1.0f` |
+| `+0x40` | argument |
+| `+0x4C` | `479` |
+| `+0x50` | `359` |
+| `+0x54`…`+0x5C` | three arguments |
+| `+0x60`…`+0x84` | ten arguments |
+| `+0x88` | `n`, the item count |
+
+Those twelve floats only read as the identity at one shape: **four rows of
+three**, a 3x3 rotation and a translation row. As four rows of four they are
+three copies of `(1,0,0,0)`, which is nothing. The shape is the evidence.
+
+**`479` and `359` are the screen extent**, and they are the first hard number
+for the pod's resolution: **480 x 360**. They check out against the renderer
+from the other side — running R.BIN in `tools/tms340run.py` leaves WEND (B6)
+holding `$016701DF`, which is Y = 359, X = 479. Two independent sides of the
+machine, same number.
+
+So the 68020 hands the renderer a **transform matrix**, not transformed
+vertices. The TMS34082 does the transform, which is why the coprocessor is on
+that board at all.
+
+`battlepod --rstub` decodes both records the moment a render command arrives.
+Nothing in the release sends one yet - a cockpit that has not started a game
+never renders - so `--selftest` walks a synthetic list instead, which is what
+keeps the decoder honest until a real one turns up.
+
+### Reaching the diagnostic monitor without disabling the game
+
+The monitor is reached by making the game initialisation at `0x02138A64`
+return. Patching an `RTS` over the function itself works, but menu item
+`y - START TEST GAME` calls that same function, so the test game becomes a
+no-op that prints `ok!`. Patch the **call site** instead and both work:
+
+```
+--set 2123FEC=60044E71          # bra.s over the jsr, leaving the function intact
+```
+
+Menu item `n - Start TI` resolves an old open question: it prints "Starting TI,
+screen should clear" and writes a word to `0x38000022`. **That is the
+renderer's reset line.**
+
+One trap for anyone reading tables straight out of `ROM3_0`: the file carries a
+28-byte `0x601A` header, so a load address maps to **file offset + 28**. The
+monitor's jump table at `0x02124858` reads as sixteen entries of nonsense
+without it.
+
 ### Resource archive
 
 With the allocator answering, the ROM parses the resource files and prints its
@@ -909,7 +1019,7 @@ With only the signature answered the ROM gets further and reports
 
 ## Open questions
 
-- Which parts sit at `0x00010007..0x00010015`, and what is `0x38000022`?
+- Which parts sit at `0x00010007..0x00010015`?
 - The UART receive register — needed to drive the ROM's built-in diagnostic
   menu, which can start the renderer, the Secondary and a test game on demand.
 - Resource type semantics (1, 2, 4, 7).

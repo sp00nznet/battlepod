@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The display list format**, read off the two emitters in ROM3_0 that build
+  it rather than off the wire. It is a flat array of big-endian longwords with
+  a leading count, copied verbatim into the renderer's memory. Record type 8 is
+  a viewport - its width, height and centre are derived from its corners by the
+  emitter, which is what identifies it. Record type 1 draws an object and
+  carries twelve IEEE single-precision floats that read as the identity only
+  as four rows of three: a 3x3 rotation and a translation row. So the 68020
+  sends a *matrix*, and the coprocessor does the transform.
+- **The pod's screen resolution: 480 x 360.** The object record carries `479`
+  and `359` as the screen extent, and running R.BIN leaves the renderer's own
+  WEND register holding `$016701DF` - 359 by 479. Two sides of the machine,
+  same number.
+- The renderer's full command set. There are ten opcodes, not four: 4 is
+  compact, 6 is render, 7 follows every render with the constant 5, and 10
+  loads a palette. A request record is 12 bytes, not 8 - 20 for allocate.
+  Rendering goes through `Async_Render` at `0x0214D302`, not through the
+  opcode 6 wrapper, which is dead code.
+- `battlepod --rstub` now decodes a display list when a render command posts
+  one, and `--selftest` walks a synthetic one - nothing in the release sends a
+  render command until a game starts, so that is what keeps the decoder honest.
+
 - The renderer's processor is identified: a **TMS34020**, not the TMS34010 it
   had been read as, driving a **TMS34082 floating-point coprocessor**. R.BIN
   executes `SETCDP`, `SETCSP`, `SETCMP`, `RPIX`, `VLCOL`, `VFILL` and `CLIP`,
@@ -62,6 +83,12 @@ All notable changes to this project are documented here. The format follows
   spins down to 5,078 - and gets through double-buffer setup to boot stage 5.
   Execution reaches 570,000 instructions before the first unknown opcode, up
   from 20,000.
+- `0x38000022` is the renderer's reset line, not an open question: the
+  monitor's `n - Start TI` prints "Starting TI, screen should clear" and writes
+  a word to it.
+- Reaching the diagnostic monitor by patching an `RTS` over the game
+  initialisation also disabled menu item `y - START TEST GAME`, which calls
+  that same function. Patching the call site instead leaves both working.
 - `SUBI IW` is `0x0BE0`, not `0x0CE0`.
 - `DSJ` and `DSJS` printed targets with no load base, and `DSJS` measured its
   displacement from its own address rather than the next instruction. Branch

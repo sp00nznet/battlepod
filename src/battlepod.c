@@ -463,8 +463,9 @@ static void note(uint32_t addr, int size, int is_write, uint32_t val)
 #define RSTUB_TI_BASE  0x3FC00000u
 #define RSTUB_TI_LEN   0x00400000u
 
-#define RS_OP_RESET 1
-#define RS_OP_ALLOC 2
+#define RS_OP_RESET  1
+#define RS_OP_ALLOC  2
+#define RS_OP_RENDER 6
 
 static uint32_t g_rstub;		/* 68k address of the comm block, 0 = off */
 static uint32_t g_rsheap = RSTUB_HEAP_68K - TI_TO_68K;	/* next free, TI byte address */
@@ -498,6 +499,78 @@ static void rs_put(uint32_t off, uint32_t v)
 	uint32_t o = (g_rstub + off) & (PAGE_SIZE - 1);
 	p[o] = (uint8_t)(v >> 24); p[o+1] = (uint8_t)(v >> 16);
 	p[o+2] = (uint8_t)(v >> 8); p[o+3] = (uint8_t)v;
+}
+
+/* A display list is a flat array of big-endian longwords with a leading count,
+ * copied verbatim into the renderer's memory, and opcode 6 hands over where it
+ * landed. The record shapes come from the two emitters in the ROM that build
+ * them - 0x0214465C and 0x02144724 - not from watching the wire, because a
+ * cockpit that has not started a game never sends one.
+ *
+ * Record 8 is a viewport; its width, height and centre are derived from its
+ * corners by the emitter, which is what identifies it. Record 1 draws an
+ * object and carries a 4x4 matrix of IEEE singles, so the geometry is
+ * transformed by the renderer's coprocessor, not by the 68020. */
+static float as_float(uint32_t v)
+{
+	float f;
+	memcpy(&f, &v, sizeof f);
+	return f;
+}
+
+static uint32_t (*g_dl_read)(uint32_t) = m68k_read_memory_32;
+
+static uint32_t dl_word(uint32_t ti_byte_addr, uint32_t i)
+{
+	return g_dl_read(ti_byte_addr + TI_TO_68K + i * 4);
+}
+
+static void rstub_dlist(uint32_t ti_byte_addr)
+{
+	uint32_t count = dl_word(ti_byte_addr, 0), at = 1;
+	int records = 0;
+
+	rslog("  display list at TI %08X: %u longwords\n", ti_byte_addr, count);
+	if (count == 0 || count > 0x40000) {
+		rslog("    implausible length, not walked\n");
+		return;
+	}
+	while (at < count + 1 && records < 64) {
+		uint32_t type = dl_word(ti_byte_addr, at), len;
+		records++;
+		if (type == 8) {
+			len = 12;
+			rslog("    viewport  (%d,%d)-(%d,%d)  %dx%d  centre (%d,%d)\n",
+			      (int)dl_word(ti_byte_addr, at + 2), (int)dl_word(ti_byte_addr, at + 3),
+			      (int)dl_word(ti_byte_addr, at + 4), (int)dl_word(ti_byte_addr, at + 5),
+			      (int)dl_word(ti_byte_addr, at + 6), (int)dl_word(ti_byte_addr, at + 7),
+			      (int)dl_word(ti_byte_addr, at + 8), (int)dl_word(ti_byte_addr, at + 9));
+		} else if (type == 1) {
+			int r, c;
+			len = dl_word(ti_byte_addr, at + 1);
+			rslog("    object    %u items, %u longwords, screen %dx%d\n",
+			      dl_word(ti_byte_addr, at + 34), len,
+			      (int)dl_word(ti_byte_addr, at + 19) + 1,
+			      (int)dl_word(ti_byte_addr, at + 20) + 1);
+			/* Twelve floats as four rows of three: a 3x3 rotation
+			 * and a translation row. Written as the identity, which
+			 * only reads as one at this shape. */
+			for (r = 0; r < 4; r++) {
+				rslog("      ");
+				for (c = 0; c < 3; c++)
+					rslog("%9.4f ", as_float(dl_word(ti_byte_addr, at + 2 + r * 3 + c)));
+				rslog("\n");
+			}
+		} else {
+			len = dl_word(ti_byte_addr, at + 1);
+			rslog("    type %u, %u longwords\n", type, len);
+		}
+		if (len == 0 || len > count + 1 - at) {
+			rslog("    record length %u does not fit; stopping\n", len);
+			return;
+		}
+		at += len;
+	}
 }
 
 /* The request is staged in 68k RAM, memcpy'd into the queue at block+8, and the
@@ -536,6 +609,7 @@ static void rstub_post(void)
 		}
 	}
 	if (g_rscmd <= 400) rslog("\n");
+	if (w[0] == RS_OP_RENDER && n >= 2 && g_rscmd <= 400) rstub_dlist(w[1]);
 
 	rs_put(4, 0);			/* command complete */
 	m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);	/* renderer ready again */
@@ -978,8 +1052,60 @@ static void disasm_at(uint32_t pc, int count)
 
 /* Smallest thing that fails if the harness breaks: a hand-assembled program
  * that pokes a known unmapped address, then halts on an unmapped PC. */
+/* A synthetic display list, in the shape the ROM's emitters build: a leading
+ * longword count, then a viewport record and an object record. Nothing in the
+ * release exercises the decoder yet - a cockpit that has not started a game
+ * never sends a render command - so this is what keeps it honest. */
+static const uint32_t g_dl_test[] = {
+	12 + 35,				/* longwords that follow        */
+	8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0,
+	1, 35,
+	0x3F800000, 0, 0,			/* +0x08: the matrix, identity  */
+	0, 0x3F800000, 0,
+	0, 0, 0x3F800000,
+	0, 0, 0,				/* its translation row          */
+	0, 0x3F800000, 0, 0, 0,			/* +0x38 .. +0x48               */
+	479, 359,				/* +0x4C, +0x50: screen extent  */
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	7,					/* +0x88: item count            */
+};
+
+static uint32_t dl_test_read(uint32_t a)
+{
+	uint32_t i = (a - TI_TO_68K) / 4;
+	return i < sizeof g_dl_test / sizeof g_dl_test[0] ? g_dl_test[i] : 0;
+}
+
+static int selftest_dlist(void)
+{
+	size_t mark = g_rsloglen;
+	g_dl_read = dl_test_read;
+	rstub_dlist(0);
+	g_dl_read = m68k_read_memory_32;
+	if (!strstr(g_rslog + mark, "viewport  (0,0)-(479,359)  480x360  centre (239,179)")) {
+		printf("FAIL: viewport record not decoded\n%s", g_rslog + mark);
+		return 1;
+	}
+	if (!strstr(g_rslog + mark, "object    7 items, 35 longwords, screen 480x360")) {
+		printf("FAIL: object record not decoded\n%s", g_rslog + mark);
+		return 1;
+	}
+	if (!strstr(g_rslog + mark, "   1.0000    0.0000    0.0000 \n"
+				    "         0.0000    1.0000    0.0000 \n"
+				    "         0.0000    0.0000    1.0000 \n"
+				    "         0.0000    0.0000    0.0000 \n")) {
+		printf("FAIL: object matrix not decoded\n%s", g_rslog + mark);
+		return 1;
+	}
+	g_rsloglen = mark;
+	g_rslog[mark] = 0;
+	return 0;
+}
+
 static int selftest(void)
 {
+	if (selftest_dlist()) return 1;
+
 	static const uint8_t prog[] = {
 		0x23, 0xFC, 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0xFF, 0x00, 0x00,
 							/* move.l #$DEADBEEF,$00FF0000 */
