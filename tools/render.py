@@ -25,6 +25,7 @@ SCREEN = (480, 360)             # what the pod ran, from the display list
 SKY_TOP = (0x2E, 0x5C, 0xA8)
 SKY_LOW = (0xBF, 0xCF, 0xE2)
 GROUND = (0xC9, 0xA9, 0x6E)
+SHADOW = (0x6B, 0x55, 0x36)    # the footage draws a hard dark shadow, not a soft one
 LIGHT = (-0.35, 0.80, -0.49)    # over the viewer's shoulder, roughly
 
 
@@ -125,7 +126,7 @@ def view(verts, turn, pitch, dist, centre):
     return out
 
 
-def project(p, w, h, fov=1.6):
+def project(p, w, h, fov=0.95):
     """Perspective. Y is up in the model and down on the screen."""
     if p[2] <= 0.01:
         return None
@@ -133,15 +134,47 @@ def project(p, w, h, fov=1.6):
     return (w / 2 + p[0] * f / p[2], h / 2 - p[1] * f / p[2], p[2])
 
 
-def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png"):
+def extent(m):
+    """Frame on the vertices actually decoded, not the stated bounding sphere.
+
+    The sphere is padded - it has to contain the origin as well - so framing on
+    it leaves the model small in the middle of the picture.
+    """
+    vs = list(m.vert.values())
+    if not vs:
+        bb = m.box
+        return ((bb[0] + bb[1]) / 2, (bb[2] + bb[3]) / 2, (bb[4] + bb[5]) / 2), max(bb[6], 1e-3)
+    lo = [min(v[a] for v in vs) for a in range(3)]
+    hi = [max(v[a] for v in vs) for a in range(3)]
+    centre = tuple((lo[a] + hi[a]) / 2 for a in range(3))
+    radius = max(max(hi[a] - lo[a] for a in range(3)) / 2, 1e-3)
+    return centre, radius, lo[1]
+
+
+def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png", shadow=True):
     w, h = size
-    bb = m.box
-    centre = ((bb[0] + bb[1]) / 2, (bb[2] + bb[3]) / 2, (bb[4] + bb[5]) / 2)
-    radius = max(bb[6], 1e-3)
+    centre, radius, floor = extent(m)
     frame = Frame(w, h)
     frame.background(int(h * 0.52))
 
-    cam = view(m.vert, turn, pitch, radius * 2.6, centre)
+    dist = radius * 2.4
+    cam = view(m.vert, turn, pitch, dist, centre)
+
+    # The footage puts a hard dark shadow under every mech: flatten the model
+    # onto the ground plane and draw that first, so the model paints over it.
+    if shadow:
+        floored = {i: (v[0], floor, v[2]) for i, v in m.vert.items()}
+        sm = view(floored, turn, pitch, dist, centre)
+        for face, verts, mat in m.poly:
+            pts = [sm[v] for v in verts if v in sm]
+            if len(pts) < 3:
+                continue
+            pr = [project(p, w, h) for p in pts]
+            if any(p is None for p in pr):
+                continue
+            for k in range(1, len(pr) - 1):
+                frame.triangle(pr[0], pr[k], pr[k + 1], SHADOW)
+
     drawn = culled = 0
     for face, verts, mat in m.poly:
         pts = [cam[v] for v in verts if v in cam]

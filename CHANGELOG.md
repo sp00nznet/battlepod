@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`render.py` draws the cast shadow**, by flattening a model onto the ground
+  plane and drawing that before the model itself. The footage has a hard-edged
+  dark shadow under every mech and it is most of what sits a model on the
+  ground rather than floating it.
+- It also frames on the vertices actually decoded rather than the stated
+  bounding sphere - that sphere has to contain the origin too, so framing on it
+  left every model small in the middle of the picture - and narrows the field
+  of view from 90 degrees to 55. Model 463 now reads plainly as a mech's head
+  and canopy, with the dark viewport slot cut into the red armour.
+- The section of RENDERING.md describing the renderer was lost to one of the
+  multi-edit scripts that aborted part-written; it is restored.
+
 - **The complement fix reconciles two halves of the project.** The renderer's
   resource loader tests its flag word with what read at face value as
   `BTST #27`; the archive format, decoded from the 68020 side long before and

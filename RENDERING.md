@@ -196,6 +196,31 @@ little *larger* than what we decode, `-7.80..10.50` against a header of
 opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
 `$2A0` are measured but never interpreted, and they are the obvious suspects.
 
+## Drawing it
+
+`tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,
+one directional light, a graded sky and a hazed ground, at the pod's own
+480x360. It writes a PNG using nothing but the standard library.
+
+Three things it does that the checks do not care about:
+
+- **Pick one level of detail.** Walking every branch stacks the near and far
+  versions of a model in the same frame, which renders as a lump. Which side of
+  a branch carries the detail differs per model, so it walks both ways and
+  keeps whichever drew more.
+- **Frame on the vertices actually decoded**, not on the stated bounding
+  sphere. That sphere has to contain the origin as well, so framing on it
+  leaves the model small in the middle of the picture.
+- **Draw the cast shadow**, by flattening the model onto the ground plane and
+  drawing that before the model itself. The footage has a hard-edged dark
+  shadow under every mech and it is most of what sits a model on the ground.
+
+At a 55-degree field of view rather than the 90 it started with, the result
+reads the way the footage does: hard facets, one flat tone each, a hard shadow,
+haze taking the ground out to the horizon. Model 30 is one of the terrain
+mesas; 463 is a mech's head and canopy, the dark viewport slot clearly cut into
+the red armour; 133 is one of the flared towers.
+
 One correction worth making here: solids, cylinders and ARES turned out **not**
 to be the drawing primitives. They live in the *68020's* own archive, keyed by
 the same ids as the visual models but far coarser — a handful of elements per
