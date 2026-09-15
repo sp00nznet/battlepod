@@ -16,7 +16,8 @@ Conformance: **30/30** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
-prints the index — 467 resources in four type classes. The graphics processor
+prints the index — 418 resources whose format is now decoded, including 130 3D
+models with verified bounding volumes. The graphics processor
 has been identified and its command protocol decoded, and the firmware's own
 diagnostic monitor can be driven interactively over the modelled serial port —
 far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
@@ -254,6 +255,13 @@ Run with no arguments for the full option list. The ones that matter:
 Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
 how the device map in [DEVICES.md](DEVICES.md) was built.
+
+**Walk the resource archive:**
+
+```
+python tools/resmap.py "$GF/Cockpit Software/battletech_ti_res"
+python tools/resmap.py "$GF/Cockpit Software/battletech_ti_res" --dump 11
+```
 
 **Extract Macintosh resources** (the operator console's code lives in them):
 

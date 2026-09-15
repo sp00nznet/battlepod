@@ -252,6 +252,64 @@ which is exactly what a cockpit does while it waits for the operator console to
 send it a game. Reaching that point is where the boot currently ends — not on a
 fault, but on an empty network.
 
+## The resource archive
+
+`tools/resmap.py` walks it. The layout is taken from the firmware's own parser
+at `0x0214D0AC`, not guessed: a flat sequence of 16-byte headers, each
+optionally followed by its data, terminated by a header whose id is `-1`.
+
+| offset | size | meaning |
+|---|---|---|
+| +0x00 | u32 | resource id — the numbers the firmware prints |
+| +0x04 | u32 | type class |
+| +0x08 | u32 | flags; bit 4 of the low byte marks an **alias** |
+| +0x0C | u32 | count, **or** the id this resource is an alias for |
+
+When bit 4 is clear, `count * 4` bytes of data follow the header. When it is
+set the resource has no data of its own and `+0x0C` names another resource
+instead — which is why the parser stores that field either way but only
+advances past data in the first case.
+
+The walk accounts for every byte of `battletech_ti_res` (1,568,960 against a
+1,568,948-byte file, the difference being the truncated terminator) and yields
+ids that match the firmware's own printed listing **exactly, all 418, across all
+four types**.
+
+| type | count | bytes | what it is |
+|---|---|---|---|
+| 1 | 130 | 841,264 | **3D models** |
+| 2 | 6 | 22,632 | bitmaps, stored compressed |
+| 4 | 151 | 90,696 | **aliases** — named handles onto other resources |
+| 7 | 131 | 607,664 | the bulk payloads the aliases point at |
+
+**Type 1 is geometry**, and the header proves it. The seven floats at `+0x24`
+are an axis-aligned bounding box followed by a bounding sphere radius:
+`min <= max` holds on all three axes in **130 of 130** resources, and the
+seventh float is less than or equal to the box-corner distance in **127 of
+130** — equal exactly when a corner vertex exists, smaller when the geometry is
+tighter than its box. That is a bounding sphere, not a coincidence.
+
+**Type 4 is an alias table.** 136 of the 151 carry no data at all; every one of
+those 136 resolves to a real resource, and 131 of them point at a type 7. The
+ids give the game away — type 4 occupies 201–260 and 321–380, type 7 occupies
+261–320 and 381–440, and alias id *X* points at id *X+60*.
+
+**Type 7 is the payload.** High entropy (6.8 bits per byte against 3.8 for
+geometry and 2.9 for type 2), large — one is 113 KB — and reached only through
+its alias. Compressed or packed data; not floats, not opcodes.
+
+**Type 2 is six bitmaps.** A constant tag `0x7F20`, a depth field of 8 or 24, a
+width of 48, 64, 384 or 480, a small paired field, and a declared size that
+works out to `width * 96 + 80` — a 96-row image. The stored data is far smaller
+than that declared size, so it is compressed.
+
+Cross-checking against `red_planet_ti_res` — a different game on the same engine
+— confirms the format: 441 resources, the same four types, **128 type-4
+resources all of them zero-length aliases, all 128 resolving to a type 7**, a
+clean one-to-one table. Its type 2 set is the same six ids at the same sizes,
+and ids 90 and 94 are byte-for-byte identical across both games, so those two
+are engine data rather than game content.
+
 ## The network packet interface
 
 The firmware's main loop polls monitor slot `+0x18` and, when it gets a pointer,
@@ -464,16 +522,7 @@ the resource loader running.
 With the allocator answering, the ROM parses the resource files and prints its
 own index — four type classes and several hundred numbered resources:
 
-| type | count | ids |
-|---|---|---|
-| 1 | 130 | 11–19, 22, 24, 27, 30–51, 57–69, 80–85, 100–119, 131–159, 451–517 |
-| 4 | 191 | 70–96, 121–130, 201–260, 321–380 |
-| 2 | 6 | 90, 94, 134–137 |
-| 7 | 140 | 180–200, 261–320, 381–440 |
-
-Then: `Giving load resource map command, size 1268` / `Load Resource Map,
-error 0`. Decoding what each type holds is the next real prize — `battletech_ti_res`
-is 1.5 MB with big-endian IEEE floats from offset 0x30, so geometry is in there.
+and the archive format is decoded — see **The resource archive** below.
 
 ### Secondary (Amiga 500) handshake
 

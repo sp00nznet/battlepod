@@ -26,10 +26,14 @@ types: `Out of Solids...`, `Weird solid direction %f... shape %d`,
 display list is built from **solids, cylinders and "ARES"** primitives, not raw
 triangles.
 
-**What is missing.** The display list's binary format, and the geometry it
-references. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
-offset `0x30`, and the firmware prints the archive's index — 467 resources in
-four type classes.
+**What we have of the geometry.** The resource archive is decoded — see
+DEVICES.md. Type 1 is 3D models, 130 of them, each with a verified axis-aligned
+bounding box and bounding sphere; type 4 is an alias table; type 7 holds the
+bulk payloads; type 2 is six compressed bitmaps.
+
+**What is missing.** The interior layout of a type 1 model — where the vertices,
+faces and material references sit after the bounding volume — and the display
+list's binary format.
 
 **The strategy is not to emulate the TMS340.** It is to intercept the display
 list the 68020 already builds and draw it with a modern renderer. Emulating the

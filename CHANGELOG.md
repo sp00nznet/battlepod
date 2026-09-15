@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `tools/resmap.py`: walks a cockpit resource archive. The format comes from the
+  firmware's own parser, and the walk accounts for every byte of the file and
+  reproduces the firmware's printed index exactly.
 - `RENDERING.md`: what it would take to reproduce all four of a cockpit's
   surfaces - the 3D view, the secondary screen, the panel and the controls -
   and which are blocked on what.
@@ -52,6 +55,16 @@ All notable changes to this project are documented here. The format follows
 - `--help` regrouped and corrected; several options were missing from it.
 
 ### Findings
+
+- The resource archive format: 16-byte headers, `-1` terminated, with an alias
+  bit that makes `+0x0C` name another resource instead of counting data.
+- Type 1 is 3D models - bounding box valid in 130 of 130, bounding sphere in
+  127 of 130. Type 4 is an alias table, all 136 aliases resolving. Type 7 holds
+  the payloads they point at. Type 2 is six compressed bitmaps, two of them
+  identical across BattleTech and Red Planet.
+- Corrects an earlier miscount: the archive holds 418 resources (130/6/151/131),
+  not 467. The earlier figures were eyeballed from the console listing; the
+  parser now agrees with the firmware id for id.
 
 - The serial ports are an MC68681 DUART at `0x00011000`, register N at
   `N*2`. Channel A is the Remote I/O board at 9600, channel B the console at
