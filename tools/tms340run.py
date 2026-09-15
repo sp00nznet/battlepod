@@ -10,7 +10,15 @@ Memory is bit-addressed. Everything here works in bit addresses and the backing
 store is a sparse dict of 16-bit words, so a word at bit address a lives at
 a >> 4 when a is word-aligned, which in this code it always is.
 
-usage: tms340run.py <R.BIN> [--base BITADDR] [--skip N] [--steps N] [--trace N]
+--render hands the renderer a display list and watches it walk it, which is the
+only way to see it draw: the 68020 only ever builds one once a game has started,
+and starting a game needs a network. The list is built here from the format in
+DEVICES.md, so it is also a test of that format being right.
+
+usage:
+  tms340run.py <R.BIN> [--steps N] [--irq VEC:PERIOD] [--trace N] [--pchist]
+  tms340run.py <R.BIN> --boot N --render [LIST] [--fb OUT.pgm]
+  tms340run.py --selftest
 """
 import struct
 import sys
@@ -41,9 +49,13 @@ class Machine:
         self.hits = 0
         self.hist = None        # PC -> execution count, when asked for
         self.ints = 0           # interrupts enabled, as EINT/DINT leave it
+        self.stop_at = None
+        self.blits = 0
+        self.pixels = 0
         self.unknown = {}
         self.skip_unknown = 0
         self.cop = {}           # TMS34082 coprocessor registers, by command
+        self.copcmds = {}       # which commands the run actually issued
         self.copn = 0
         self.conv = {}          # what SETCSP/SETCDP/SETCMP last latched
         self._psize = 8         # until the firmware writes PSIZE
@@ -112,6 +124,55 @@ class Machine:
         return (self.b[4] + (v >> 16) * self.b[3]
                 + (v & 0xFFFF) * self.psize) & 0xFFFFFFFF
 
+    # The B file is the graphics instructions' operand set: B0 SADDR, B1 SPTCH,
+    # B2 DADDR, B3 DPTCH, B4 OFFSET, B5 WSTART, B6 WEND, B7 DYDX, B8 COLOR0,
+    # B9 COLOR1. PIXBLT and FILL take everything from there and carry no
+    # operands of their own, which is why they encode as bare opcodes.
+    SADDR, SPTCH, DADDR, DPTCH, OFFSET, DYDX = 0, 1, 2, 3, 4, 7
+    COLOR0, COLOR1 = 8, 9
+
+    def row(self, reg, pitch, y, xy):
+        """Bit address of row y of a source or destination."""
+        if xy:
+            return self.xy_linear((self.b[reg] + (y << 16)) & 0xFFFFFFFF)
+        return (self.b[reg] + y * self.b[pitch]) & 0xFFFFFFFF
+
+    def blit(self, op):
+        """PIXBLT and FILL.
+
+        ponytail: replace only. The pixel-processing operation and the plane
+        mask in CONTROL are not applied, and neither is window clipping - the
+        firmware sets W to 0 for the frame it draws into. Transparency is, and
+        has to be, because that is how a binary source draws text.
+        """
+        ps = self.psize
+        dy, dx = self.b[self.DYDX] >> 16, self.b[self.DYDX] & 0xFFFF
+        transparent = (self.field_read(IO_BASE + 0xB0, 16) >> 5) & 1
+        dxy, sxy = op in (0x0F20, 0x0F60, 0x0FA0, 0x0FE0), op in (0x0F40, 0x0F60)
+        fill, binary = op in (0x0FC0, 0x0FE0), op in (0x0F80, 0x0FA0)
+        colour, back = self.b[self.COLOR1], self.b[self.COLOR0]
+        for y in range(dy):
+            d = self.row(self.DADDR, self.DPTCH, y, dxy)
+            s = self.row(self.SADDR, self.SPTCH, y, sxy) if not fill else 0
+            for x in range(dx):
+                if fill:
+                    v = colour
+                elif binary:
+                    # one bit per pixel, expanded to COLOR1 and COLOR0
+                    if self.field_read(s + x, 1):
+                        v = colour
+                    elif transparent:
+                        continue
+                    else:
+                        v = back
+                else:
+                    v = self.field_read(s + x * ps, ps)
+                    if transparent and v == 0:
+                        continue
+                self.field_write(d + x * ps, ps, v)
+        self.blits += 1
+        self.pixels += dy * dx
+
     def rl(self, addr):
         return self.field_read(addr, 32)
 
@@ -152,6 +213,14 @@ class Machine:
 
 
 # The coprocessor group, all three words wide (TMS34020 User's Guide, 13.2).
+# PIXBLT source and destination forms, and FILL. All bare - see Machine.blit.
+BLIT = (0x0F00, 0x0F20, 0x0F40, 0x0F60, 0x0F80, 0x0FA0, 0x0FC0, 0x0FE0)
+PIXT = (0xF000, 0xF200, 0xF400, 0xF800, 0xFA00, 0xFC00)
+
+COPNAME = {0x0600: "CEXEC", 0x0620: "CMOVGC", 0x0640: "CMOVGC", 0x0660: "CMOVCG",
+           0x0680: "CMOVMC", 0x06A0: "CMOVCM", 0x06C0: "CMOVCS", 0x06E0: "CMOVMC",
+           0x0820: "CMOVMC"}
+
 COPROC = (0x0600, 0x0620, 0x0640, 0x0660, 0x0680, 0x06A0, 0x06C0, 0x06E0,
           0x0820)
 
@@ -169,6 +238,9 @@ def run(m, steps, trace, brk=None):
     executed = 0
     while executed < steps:
         here = m.pc
+        if here == m.stop_at:
+            m.halted = "returned to the sentinel at $%08X" % here
+            return executed
         if brk is not None and here == brk and m.hits < 3:
             m.hits += 1
             print("  break at $%08X after %d instructions" % (here, executed))
@@ -214,6 +286,20 @@ def run(m, steps, trace, brk=None):
             m.setstatus(m.rl(m.a[15]))
             m.a[15] += 32
             m.ints = 1
+            continue
+        # The graphics group: bare opcodes, operands all in the B file.
+        if op in BLIT:
+            m.blit(op)
+            continue
+        if op & 0xFE00 in PIXT:                                 # single pixel
+            base = op & 0xFE00
+            src = m.reg(f, rs)
+            v = src if base in (0xF000, 0xF800) else m.field_read(
+                m.xy_linear(src) if base in (0xF200, 0xF400) else src, m.psize)
+            dst = m.reg(f, rd)
+            m.field_write(m.xy_linear(dst) if base in (0xF000, 0xF400, 0xF600)
+                          else dst, m.psize, v)
+            m.pixels += 1
             continue
         if op & 0xFFE0 == 0x0160:                               # JUMP Rs
             m.pc = m.reg(f, rd)
@@ -328,6 +414,35 @@ def run(m, steps, trace, brk=None):
         if op == 0x0340:                                        # MOVB @a,@b
             src, dst = m.fetchl(), m.fetchl()
             m.field_write(dst, 8, m.field_read(src, 8))
+            continue
+
+        # memory to memory, both postincrementing. The renderer's object draw
+        # uses it to stream a transform through.
+        if op & 0xFC00 == 0x9800:                       # MOVE *Rs+, *Rd+
+            fld = (op >> 9) & 1
+            size = m.fs[fld]
+            src, dst = m.reg(f, rs), m.reg(f, rd)
+            m.field_write(dst, size, m.field_read(src, size))
+            m.setreg(f, rs, src + size)
+            m.setreg(f, rd, dst + size)
+            continue
+        if op & 0xFC00 == 0xA800:                       # MOVE *-Rs, *-Rd
+            fld = (op >> 9) & 1
+            size = m.fs[fld]
+            src, dst = m.reg(f, rs) - size, m.reg(f, rd) - size
+            m.setreg(f, rs, src)
+            m.setreg(f, rd, dst)
+            m.field_write(dst, size, m.field_read(src, size))
+            continue
+        if op & 0xFC00 == 0xB800:                       # MOVE *Rs(o), *Rd(o)
+            fld = (op >> 9) & 1
+            size = m.fs[fld]
+            w = m.fetch()
+            so = w - 0x10000 if w & 0x8000 else w
+            w = m.fetch()
+            do = w - 0x10000 if w & 0x8000 else w
+            m.field_write(m.reg(f, rd) + do, size,
+                          m.field_read(m.reg(f, rs) + so, size))
             continue
 
         # register indirect, the forms this code actually uses
@@ -604,8 +719,9 @@ def run(m, steps, trace, brk=None):
         # ponytail: registers recorded, arithmetic not modelled; the FPU goes
         # in when the geometry path is the thing being chased.
         if op & 0xFC00 == 0xD800:               # CEXEC, short form: two words
-            m.fetch()
+            cmd = (op & 0x3FF) << 16 | m.fetch()
             m.copn += 1
+            m.copcmds[(0x0600, cmd)] = m.copcmds.get((0x0600, cmd), 0) + 1
             continue
         if op & 0xFFE0 in COPROC:
             cmd = m.fetchl()
@@ -618,6 +734,7 @@ def run(m, steps, trace, brk=None):
             elif op & 0xFFE0 == 0x0660:                         # back from it
                 m.setreg(f, rd, m.cop.get(cmd & 0xFFFF, 0))
             m.copn += 1
+            m.copcmds[(op & 0xFFE0, cmd)] = m.copcmds.get((op & 0xFFE0, cmd), 0) + 1
             continue
 
         # SETCDP/SETCSP/SETCMP recompute the cached pitch conversions the XY
@@ -699,7 +816,10 @@ def main(argv):
         vec, _, per = spec.partition(":")
         m.irq_vector = int(vec, 0)
         m.irq_every = int(per or "20000", 0)
-    n = run(m, steps, opt("--trace", 0),
+    # With --render the first run is only there to bring the hardware up, so it
+    # gets its own budget and --steps belongs to the walk that follows.
+    boot = opt("--boot", 0 if "--render" in argv else steps)
+    n = run(m, boot, opt("--trace", 0),
             int(argv[argv.index("--break") + 1], 0) if "--break" in argv else None)
     print("\nexecuted %d instructions" % n)
     print("stopped: %s" % (m.halted or "step limit reached"))
@@ -708,6 +828,8 @@ def main(argv):
     if m.unknown:
         print("unknown opcodes: %s"
               % " ".join("$%04X x%d" % kv for kv in sorted(m.unknown.items())))
+    if m.blits or m.pixels:
+        print("%d blits, %d pixels written" % (m.blits, m.pixels))
     if m.copn:
         print("%d coprocessor instructions, %d registers written"
               % (m.copn, len(m.cop)))
@@ -720,6 +842,47 @@ def main(argv):
         print("\non-chip I/O registers, busiest first:")
         for a in sorted(m.ioacc, key=lambda k: -m.ioacc[k])[:8]:
             print("   $%08X  %d accesses" % (a, m.ioacc[a]))
+    # Drive the renderer straight at a display list, which is the only way to
+    # see it draw: the 68020 only ever sends one once a game has started, and a
+    # game needs a network this does not have.
+    if "--render" in argv:
+        arg = argv[argv.index("--render") + 1] if len(argv) > argv.index("--render") + 1 else ""
+        words = ([int.from_bytes(open(arg, "rb").read()[i:i + 4], "big")
+                  for i in range(0, len(open(arg, "rb").read()), 4)]
+                 if arg and not arg.startswith("--") else demo_list())
+        addr = load_list(m, words)
+        print("display list: %d longwords at TI bit $%08X" % (len(words), addr))
+        if m.hist is not None:
+            m.hist = {}
+        m.copcmds, m.blits, m.pixels = {}, 0, 0
+        m.halted = None
+        m.a[15] = opt("--sp", 0xFE034DC0)
+        m.a[15] -= 32
+        m.wl(m.a[15], SENTINEL)                 # where the walker returns to
+        m.a[0] = addr
+        m.pc = opt("--entry", WALKER)
+        m.stop_at = SENTINEL
+        n = run(m, steps, opt("--trace", 0))
+        print("\nwalked %d instructions" % n)
+        print("stopped: %s" % (m.halted or "step limit reached"))
+        if m.unknown:
+            print("unknown opcodes: %s"
+                  % " ".join("$%04X x%d" % kv for kv in sorted(m.unknown.items())))
+        if m.blits or m.pixels:
+            print("%d blits, %d pixels written" % (m.blits, m.pixels))
+        if m.copcmds:
+            print("coprocessor commands this walk needed: %d distinct, %d issued"
+                  % (len(m.copcmds), sum(m.copcmds.values())))
+            for (base, cmd), k in sorted(m.copcmds.items(), key=lambda kv: -kv[1]):
+                print("   %-7s $%08X  x%d" % (COPNAME.get(base, "?"), cmd, k))
+        if m.hist:
+            print("busiest addresses:")
+            for a in sorted(m.hist, key=lambda k: -m.hist[k])[:12]:
+                print("   $%08X  %d" % (a, m.hist[a]))
+        if "--fb" in argv:
+            dump_fb(m, argv[argv.index("--fb") + 1])
+        return
+
     if "--fb" in argv:
         dump_fb(m, argv[argv.index("--fb") + 1])
     print("\nmemory regions touched (by top byte of the bit address):")
@@ -730,6 +893,47 @@ def main(argv):
         elif r == IO_BASE >> 24:
             note = "  <- on-chip I/O registers"
         print("   $%02X......  %d accesses%s" % (r, m.touched[r], note))
+
+
+SCRATCH_BIT = 0x10000000        # somewhere the renderer's own map does not use
+SENTINEL = 0x00000020           # a return address that means "the call finished"
+WALKER = 0xFE009D80             # the display-list walker, from opcode 6's handler
+
+
+def demo_list():
+    """A display list in the format DEVICES.md describes: one viewport, one
+    object with the identity transform and a string item. Built here rather
+    than captured, because a cockpit that has not started a game never sends
+    one - so this is the first list the renderer has ever been handed."""
+    text = b"BATTLETECH"
+    # Two header longwords: the walker skips 0x40 bits before its first record,
+    # and the 68020's copy loop takes its length from the first of them.
+    words = [0, 0]
+    words += [8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0]
+    obj = [1, 0]                                # type, length - filled in
+    obj += [0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0, 0x3F800000, 0, 0, 0]
+    obj += [0, 0x3F800000, 1, 0, 0, 479, 359] + [0] * 13 + [1]
+    items = [0x1E0]
+    pad = text + b"\0" * (4 - len(text) % 4)
+    for i in range(0, len(pad), 4):             # bytes reversed per longword
+        items.append(int.from_bytes(pad[i:i + 4][::-1], "big"))
+    items.append(0)
+    obj += items
+    obj[1] = len(obj) - 2
+    words += obj
+    # A type 2 record is the draw order: 1-based indices into the objects the
+    # type 1 records collected, ending at a negative one. Without it the
+    # renderer collects the list and draws none of it.
+    words += [2, 2, 1, 0xFFFFFFFF]
+    words += [0xFFFFFFFF]
+    words[0] = len(words)
+    return words
+
+
+def load_list(m, words):
+    for i, v in enumerate(words):
+        m.wl(SCRATCH_BIT + i * 32, v)
+    return SCRATCH_BIT
 
 
 def dump_fb(m, path):
@@ -794,6 +998,24 @@ def selftest():
     run(m, 1, 0)
     assert m.a[0] == (0 << 16) | 0xFFFA, "X borrows without touching Y"
     assert m.n == 0 and m.z == 1 and m.v == 1
+
+    # FILL takes everything from the B file and nothing from the opcode.
+    m = machine([0x0FC0], b2=0x1000, b3=0x100, b7=(2 << 16) | 3, b9=0x1234)
+    m.mem[PSIZE_REG] = 16
+    run(m, 1, 0)
+    for a in (0x1000, 0x1010, 0x1020, 0x1100, 0x1110, 0x1120):
+        assert m.field_read(a, 16) == 0x1234, "FILL missed %04X" % a
+    assert m.field_read(0x1030, 16) == 0, "FILL ran past DYDX"
+    assert m.pixels == 6
+
+    # A binary source expands one bit per pixel into COLOR1 and COLOR0, which
+    # is how the cockpit draws text.
+    m = machine([0x0F80], b0=0x2000, b1=8, b2=0x3000, b3=0x100,
+                b7=(1 << 16) | 4, b8=0x1111, b9=0x7777)
+    m.mem[PSIZE_REG] = 16
+    m.field_write(0x2000, 4, 0b1101)            # bit 0 first: 1, 0, 1, 1
+    run(m, 1, 0)
+    assert [m.field_read(0x3000 + i * 16, 16) for i in range(4)] ==         [0x7777, 0x1111, 0x7777, 0x7777], "binary PIXBLT did not expand"
 
     # Field access is bit-addressed and must not disturb its neighbours.
     m = machine([])

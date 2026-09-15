@@ -1040,6 +1040,45 @@ little-endian TI:
 | `0x160` | 4 | `0x300` | 1 |
 | `0x180` | 2 | | |
 
+### Handing the renderer a list
+
+`tools/tms340run.py --render` builds a display list from the format above and
+drives R.BIN at it directly, which is the only way to watch the renderer draw:
+the 68020 only builds a list once a game has started, and starting one needs a
+network. It is also a test of the format — a list built from these notes either
+walks or it does not.
+
+It walks. The renderer takes it, dispatches record 8 to the viewport collector
+and record 1 to the object collector, reaches the terminator, and runs its
+second pass. Two things the format needed, both found this way:
+
+- **The list header is two longwords, not one.** The walker does
+  `ADDI #$0040, A0` before its first record, and the 68020's copy loop takes
+  its length from the first of them.
+- **Without a type 2 record nothing draws at all.** The renderer collects
+  every object and then iterates the draw order; with no draw order it spins
+  on an empty one. Record type 2 is not optional.
+
+With both right the renderer runs the whole object path — 236 instructions,
+no unimplemented opcode — and draws nothing, for a reason that is now measured
+rather than assumed. The object's transform goes through `0xFE0220F0`, which
+is `CEXEC`/`CMOVGC`/`CMOVCM` and nothing else, and with no coprocessor to
+answer them the object is culled before its item stream is ever interpreted.
+
+**The whole walk needs ten distinct coprocessor commands**, twelve issued:
+
+```
+CMOVGC  $001B4C00 x2     CEXEC   $0000E000 x1
+CMOVMC  $01C09E0C x2     CMOVCM  $00178F02 x1
+CMOVGC  $00004C0D x1     CMOVMC  $00008D0C x1
+CMOVGC  $00024C0D x1     CEXEC   $0000D800 x1
+CMOVGC  $00044D0D x1     CMOVCM  $00008F03 x1
+```
+
+Eight of those are register and memory transfers. Only two are operations —
+`CEXEC $E000` and `CEXEC $D800`. That is the size of the TMS34082 work needed
+to get a first frame, and it is nothing like the whole part.
+
 `battlepod --rstub` decodes all of this the moment a render command arrives —
 records, matrix, item stream and the strings. Nothing in the release sends one
 yet, because a cockpit that has not started a game never renders, so

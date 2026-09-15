@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The renderer accepts a display list and walks it.** `tms340run.py --render`
+  builds one from the format in DEVICES.md and drives R.BIN at it directly,
+  which is the only way to see the renderer draw: the 68020 only builds a list
+  once a game has started. It is also a test of the format, and it found two
+  things missing from it - the list header is **two** longwords, not one, and a
+  **type 2 record is not optional**: with no draw order the renderer collects
+  every object and iterates an empty list.
+- **Why nothing draws yet, measured rather than assumed.** The whole object
+  path runs - 236 instructions, no unimplemented opcode - and culls the object
+  before its item stream, because its transform at `0xFE0220F0` is
+  `CEXEC`/`CMOVGC`/`CMOVCM` and nothing else. The walk needs **ten distinct
+  coprocessor commands, twelve issued**, of which eight are register and memory
+  transfers and only two are operations: `CEXEC $E000` and `CEXEC $D800`. That
+  is the size of the TMS34082 work standing between here and a first frame.
+- PIXBLT, FILL and PIXT in the interpreter, taking their operands from the B
+  file the way the hardware does, including the binary-source form that expands
+  one bit per pixel into COLOR1 and COLOR0 - which is how the cockpit draws
+  text. Self-tested.
+- `MOVE *Rs+, *Rd+`, `MOVE *-Rs, *-Rd` and `MOVE *Rs(o), *Rd(o)`, which the
+  object draw uses to stream a transform through. Code segment recognition
+  95% -> **97%**.
+- `--boot N` to give the hardware bring-up its own budget, and a coprocessor
+  command log so a run says exactly which commands it needed.
+
 - **The display list format**, read off the two emitters in ROM3_0 that build
   it rather than off the wire. It is a flat array of big-endian longwords with
   a leading count, copied verbatim into the renderer's memory. Record type 8 is
