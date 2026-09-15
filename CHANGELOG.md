@@ -75,6 +75,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The object record's trailing groups are pick queries, not geometry**, and
+  both the docs and `--rstub` said geometry. Seven longwords each, capped at 32:
+  the 68020 writes a screen X and Y, and the renderer fills in what it drew at
+  that pixel - entity, sub-part tag and position - while drawing, reading the
+  frame buffer at `0xFE01A280` and restoring the pixel afterwards. It is how the
+  cockpit knows what is under the crosshairs. `--rstub` now decodes them.
+- **DEVICES.md contradicted itself on the renderer's command dispatch table**,
+  listing it two rows off - opcodes 3 to 12 with 1 and 2 null. The command loop
+  does `DEC A0` before indexing, entry 0 jumps to the reset code and entry 1
+  writes error, handle and address, so entry *i* serves opcode *i+1*.
+
 - `tools/tms340dis.py` printed the cross-file `MOVE` (`0x4E00`) with both
   operands in the same register file. Bit 4 is the *direction*: `FE01A150` is
   `MOVE A12, B0` and is followed by `CPW B0, B0`, and `FE013210` has to reach

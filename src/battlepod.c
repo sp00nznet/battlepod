@@ -509,8 +509,9 @@ static void rs_put(uint32_t off, uint32_t v)
  *
  * Record 8 is a viewport; its width, height and centre are derived from its
  * corners by the emitter, which is what identifies it. Record 1 draws an
- * object and carries a 4x4 matrix of IEEE singles, so the geometry is
- * transformed by the renderer's coprocessor, not by the 68020. */
+ * object and carries twelve IEEE singles - four rows of three, a rotation and
+ * a translation - so the transform is the renderer's coprocessor's job, not the
+ * 68020's. */
 static float as_float(uint32_t v)
 {
 	float f;
@@ -607,7 +608,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			      (int)dl_word(ti_byte_addr, at + 8), (int)dl_word(ti_byte_addr, at + 9));
 		} else if (type == 1) {
 			int r, c;
-			rslog("    object    %u groups, %u longwords, viewport %u, "
+			rslog("    object    %u picks, %u longwords, viewport %u, "
 			      "items from record %u, screen %dx%d\n",
 			      dl_word(ti_byte_addr, at + 34), len,
 			      dl_word(ti_byte_addr, at + 16),
@@ -623,18 +624,31 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 					rslog("%9.4f ", as_float(dl_word(ti_byte_addr, at + 2 + r * 3 + c)));
 				rslog("\n");
 			}
-			/* What follows the header is not the item stream. The
-			 * renderer takes +0x88 as a count and hands what comes
-			 * after it to 0xFE019D50, which transforms it through
-			 * the coprocessor - and the emitter's own length,
-			 * 7n + 33, says each of those n groups is 7 longwords.
+			/* What follows the header is neither the item stream nor
+			 * geometry: it is a list of **pick queries**, n of them
+			 * at seven longwords each, capped at 32. The 68020 puts
+			 * a screen X and Y in the first two; the renderer fills
+			 * the rest in as it draws, with whatever it painted over
+			 * that pixel.
+			 *
+			 * 0xFE019BE0 packs lw0 and lw1 into an XY address with
+			 * MOVY and files it; 0xFE01A280 reads the frame buffer
+			 * there while drawing and records the entity, the
+			 * sub-part tag and its position; 0xFE019D50 copies the
+			 * answers back out. lw2 == 0 means nothing was hit.
+			 *
 			 * The item stream lives in a type 7 record instead,
 			 * named by +0x58. */
-			if (len > 35)
-				rslog("        %u longwords of geometry, %u per group\n",
-				      len - 35,
-				      dl_word(ti_byte_addr, at + 34)
-				      ? (len - 35) / dl_word(ti_byte_addr, at + 34) : 0);
+			for (r = 0; r < (int)dl_word(ti_byte_addr, at + 34) && r < 32; r++) {
+				uint32_t q = at + 35 + r * 7;
+				if (q + 6 >= at + len)
+					break;
+				rslog("        pick (%d,%d) -> entity %u part %u\n",
+				      (int)dl_word(ti_byte_addr, q),
+				      (int)dl_word(ti_byte_addr, q + 1),
+				      dl_word(ti_byte_addr, q + 2),
+				      dl_word(ti_byte_addr, q + 3));
+			}
 		} else if (type == 7) {
 			rslog("    items     %u longwords\n", len - 2);
 			dl_items(ti_byte_addr, at + 2, len - 2);
@@ -1147,9 +1161,9 @@ static const uint32_t g_dl_test[] = {
 	0,
 	3,					/* +0x58: which type 7 record   */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	2,					/* +0x88: how many groups       */
-	0, 0, 0, 0, 0, 0, 0,			/* two groups of seven          */
-	0, 0, 0, 0, 0, 0, 0,
+	2,					/* +0x88: how many pick queries */
+	120, 200, 0, 0, 0, 0, 0,		/* each seven longwords, the    */
+	300, 90, 0, 0, 0, 0, 0,			/* first two a screen X and Y   */
 	7, 12,					/* a type 7 record: the items   */
 	0x040, 0, 0, 0, 0, 0, 0, 0,		/* an eight-longword item       */
 	0x1E0, 0x4C4C4548, 0x0000004F,		/* "HELLO", bytes reversed      */
@@ -1173,9 +1187,10 @@ static int selftest_dlist(void)
 		return 1;
 	}
 	if (!strstr(g_rslog + mark,
-		    "object    2 groups, 49 longwords, viewport 2, "
+		    "object    2 picks, 49 longwords, viewport 2, "
 		    "items from record 3, screen 480x360") ||
-	    !strstr(g_rslog + mark, "14 longwords of geometry, 7 per group")) {
+	    !strstr(g_rslog + mark, "pick (120,200) -> entity 0 part 0") ||
+	    !strstr(g_rslog + mark, "pick (300,90) -> entity 0 part 0")) {
 		printf("FAIL: object record not decoded\n%s", g_rslog + mark);
 		return 1;
 	}

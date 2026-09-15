@@ -439,23 +439,26 @@ status word four bytes into the block, the queue eight bytes in, `0xFFFFFFFF`
 as the terminator, and π as the ready signal.
 
 **The dispatch table at `0xFE028460`** is indexed by `opcode - 1`, 32 bits per
-entry, and holds handlers for opcodes 3 through 12:
+entry:
 
-| opcode | handler |
-|---|---|
-| 3 | `$FE0072A0` |
-| 4 | `$FE0072D0` |
-| 5 | `$FE0073F0` — load resource map |
-| 6 | `$FE0074B0` |
-| 7 | `$FE0075A0` |
-| 8 | `$FE007630` |
-| 9 | `$FE0076E0` |
-| 10 | `$FE007780` |
-| 11 | `$FE007880` |
-| 12 | `$FE007980` |
+| opcode | handler | |
+|---|---|---|
+| 1 | `$FE0072A0` | reset — jumps straight to the reset code |
+| 2 | `$FE0072D0` | allocate — writes back error, handle and address |
+| 3 | `$FE0073F0` | free |
+| 4 | `$FE0074B0` | compact |
+| 5 | `$FE0075A0` | load resource map |
+| 6 | `$FE007630` | **render** |
+| 7 | `$FE0076E0` | |
+| 8 | `$FE007780` | |
+| 9 | `$FE007880` | |
+| 10 | `$FE007980` | |
 
-Entries for opcodes 1 and 2 are null, so reset and allocate are handled before
-the table is reached. Every handler decodes at 100%.
+An earlier version of this table was listed two rows off, claiming the entries
+served opcodes 3 to 12 with 1 and 2 null. They are not: the command loop does
+`DEC A0` before indexing, entry 0 is a jump to the reset code, and entry 1
+writes three reply words — error, handle, address — which is exactly the
+20-byte record the ROM builds for allocate. Every handler decodes at 100%.
 
 The table base and its indexing are confirmed independently: scanning the image
 for words that *hold* handler addresses finds them at `0xFE0284A0`,
@@ -1016,12 +1019,27 @@ FE00B2B0  MOVE  *A0, A7, 1
 FE00B2C0  CALLA $FE022800           ; run its items
 ```
 
-What follows the object's own header is geometry: the renderer takes `+0x88`
-as a count and passes what comes after to `0xFE019D50`, which transforms it
-through the coprocessor. The emitter's length formula settles the shape —
-`7n + 33` for `n` at `+0x88` means **n groups of seven longwords**. That
-routine runs a *second* item interpreter of the same design, with its own
-24-entry table at `0xFE018A00`, which is why there are two.
+What follows the object's own header is **not** geometry, which is what an
+earlier reading of this said. It is a list of **pick queries** — `n` of them at
+`+0x88`, seven longwords each, and `n` is capped at 32 because that is the size
+of the slot array the renderer allocates at `0xFE00C1B0`.
+
+| longword | direction | contents |
+|---|---|---|
+| `lw0` | in | screen **X** |
+| `lw1` | in | screen **Y** |
+| `lw2` | out | the entity drawn at that pixel; **0 means nothing was hit** |
+| `lw3` | out | the sub-part tag, set by model opcode `$480` |
+| `lw4`–`lw6` | out | its position, through the object's rotation and translation |
+
+`0xFE019BE0` packs `lw0` and `lw1` into an XY address with `MOVY` and files it;
+`0xFE01A280` reads the frame buffer at that address while drawing, records what
+it found and paints a marker; `0xFE01A5D0` restores the pixel afterwards; and
+`0xFE019D50` copies the answers back into the list for the 68020 to read. It is
+how the cockpit knows what the pilot has under the crosshairs.
+
+The geometry lives in the archive, not in the display list — see the model
+format in RENDERING.md.
 
 Items and their opcodes are **multiples of `0x20` because the renderer uses the
 opcode directly as a bit offset**:
