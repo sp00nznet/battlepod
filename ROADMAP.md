@@ -30,91 +30,65 @@ emit real Remote I/O packets with verifying checksums.
 cockpit now boots end to end and settles into its main loop polling for a
 packet.
 
+**Phase 5 — the renderer named and run.** It is a **TMS34020** with a
+**TMS34082** floating-point coprocessor, both identified from instructions that
+exist on no other part. `tools/tms340dis.py` reads 98% of its code;
+`tools/tms340run.py` runs it, brings up the hardware, takes the display
+interrupt and walks a display list handed to it.
+
+**Phase 6 — the display list and the model format.** The list is a flat array
+of longwords with nine record types, decoded from the 68020's emitters and
+confirmed against the renderer's own walker. A type 1 resource turned out not
+to be a mesh at all but a **threaded program** of 45 opcodes; `tools/model.py`
+runs it and every one of the 130 models in the archive now walks to a return.
+
+**Phase 7 — pictures.** `tools/render.py` draws what comes out: z-buffered
+flat-shaded triangles, cast shadows, a graded sky, at the pod's own 480x360.
+Terrain mesas, towers, buildings and mech parts all come out recognisable
+against period footage.
+
 ## Next
 
-**Start a game over the network.** Packets can be handed to the firmware and it
-consumes them, the opcode dispatch is mapped, and the message vocabulary and
-game-start order are now known from the operator console log. What is missing is
-the byte encoding of each message.
+**The four draw opcodes.** `$200` puts down a single pixel at a vertex, `$220`
+fills a rectangle between two, and `$280`/`$2A0` draw a sized marker — the
+running lights and panel glow on a mech. All four are measured and gated on
+visibility; none is interpreted, so `render.py` draws a model's polygons but
+not its lights.
 
-Two ways to get it, and they check each other:
+**The bounding-box gap.** 120 models decode the right number of vertices and 84
+reproduce their stated box. The failures are all *inside* the stated box, which
+is what you would see if the box was computed by the authoring tool over a mesh
+that was decimated before it reached the file. If that is right the gap is a
+ceiling and not a bug, and saying so with evidence would close it.
 
-- Read the pod's handlers for the low opcodes, which is where the game messages
-  land.
-- Read the sender. `tools/macres.py` now extracts the console's 20 `CODE`
-  segments, but the application is THINK C's far model and its `CREL`/`DREL`
-  relocations are applied at load time, so references to the protocol strings
-  are placeholders on disk. This route is blocked until those tables are
-  understood.
+## Blocked, and on what
 
-Neither is quick, and neither is needed for a picture on screen.
+**A standing mech.** The archive holds **rigs, not poses**: `$460` says which
+sub-models make up an object and `$040` says how their nodes compose, but the
+transforms that place them come from a table the 68020 fills in per frame. Two
+independent lines of evidence agree on this — the parts' bounding boxes, and
+the instruction stream. Getting a pose means running the game.
 
-**The panel, which is the nearest thing to finished.** The Remote I/O protocol
-is decoded end to end and the captured stream already turns back into panel
-state. What is left is drawing it, and labelling which id is which instrument -
-a question for the operations manuals and the cockpit patent figures, not for
-the firmware. See [RENDERING.md](RENDERING.md).
+**Starting a game.** Still the oldest blocker. The firmware consumes packets
+and the opcode dispatch is mapped, but the byte encoding of each message is
+not, and the sender — the Macintosh console — is behind THINK C's `CREL`/`DREL`
+relocations.
 
-**Run the renderer rather than read it.** If `R.BIN` executes, it draws its own
-frames and the model format stops mattering - the renderer reads it for us.
-`tools/tms340run.py` now runs **3,000,000 instructions without meeting an opcode
-it does not know**. It brings up the hardware, writes the on-chip I/O registers,
-and clears the frame buffer - 262,144 writes to `0xA0000000`.
+**Two coprocessor operations.** Short-form `CEXEC` splits its command across
+two words, and one mode 3 routine is unidentified. The scanned TMS34082
+handbook is not legible enough at those tables to settle either, and guessing
+would put numbers on screen no cockpit produced.
 
-One of the three things that was missing is now in: the bit-addressed memory
-model is real. Fields are read and written at arbitrary bit addresses across
-word boundaries, `SETF` sets the size and sign-extension per field, and every
-move uses the field its opcode selects.
-
-What is left:
-
-- **The graphics instructions.** `PIXBLT`, `FILL` and `LINE` take their
-  operands from the B-file registers rather than the instruction. They decode
-  but do nothing. These are what actually put pixels down.
-- **The on-chip I/O registers** at `0xC0000000`, which are written but not
-  modelled, so nothing reads back sensibly.
-- **`0x0620` and `0x0660`.** Their length is settled - three words - but not
-  their effect. 77 occurrences between them.
-
-The renderer now runs 5,000,000 instructions without meeting an unknown opcode,
-clears the frame buffer and programs the video hardware, then loops through its
-initialisation again rather than settling. Finding out why it restarts is the
-next thread, and the graphics instructions are what stands between that and a
-visible frame.
-
-**Work out the renderer's calling convention, then follow opcode 5.** The main
-loop and dispatch table are decoded and every handler reads at 100%, but the
-handlers do not all take their arguments from the command queue - opcode 5's
-dereferences `A1`, so a register carries state in from the caller. Until that is
-pinned down the handler bodies can be read but not interpreted. After it, opcode
-5 and the data table at `$FE0323C0` are the path to the type 1 model layout.
-Background on why this is the route: watching the whole
-archive across a complete boot shows the 68020 reading only the 16-byte headers
-and never a byte of a model body. The parser is in `R.BIN` - 28 KB of TMS340
-code - so the geometry format cannot be reached from the 68k side at all.
-
-28 KB is small. The instruction set is documented, MAME has a core to check
-against, and the entry sequence is already decoded by hand in DEVICES.md. This
-needs no network, no Macintosh and no relocations.
-
-**The geometry is nearby.** The renderer code carries `Out of Solids...`,
-`Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and
-`Suspect cylinder data... shape %d` - so solids, cylinders and "ARES" are the
-display list's primitive types. That is a thread straight into the resource
-archive.
-
-**Resource archive.** Four type classes, 467 resources, index already printed
-by the firmware. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
-offset 0x30, so the geometry is in there. Decoding the container is what makes
-a first screenshot possible.
-
-**Display list capture.** The firmware calls it a Dlist and has overflow errors
-named for it. Intercepting it is the point at which this stops being a probe
-and starts being a renderer.
+**Type 7, 607 KB of the archive.** Compressed, and the decompressor at
+`0xFE0090F0` is readable — but the first longword is shared across whole groups
+of records rather than being a per-record length, so there is no oracle to
+check a decompressor against. Everything else in this project was settled by
+having one.
 
 ## Later
 
-- Draw the display list with a modern renderer.
+- Draw a whole display list rather than one model at a time. `render.py` takes
+  a resource id today; the list format is decoded and the pieces are there.
 - Remote I/O: keyboard or HOTAS to stick, throttle, pedals; lamps, heat scale
   and bargraphs somewhere visible.
 - The Amiga 500 secondary display: either HLE the 674-byte SecCom protocol or
