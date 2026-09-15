@@ -12,9 +12,12 @@ The part numbers below come from VWE's own cockpit patent, WO 97/00106
 
 ## 1. The primary monitor — the 3D view
 
-**Hardware.** The 68020 builds a display list; the TMS340x0 rasterises it into
-the primary monitor (part 82), which is magnified by the pod's optics rather
-than being a large panel. The firmware calls the list a "Dlist" and has
+**Hardware.** The 68020 builds a display list; a **TMS34020** rasterises it
+into the primary monitor (part 82), which is magnified by the pod's optics
+rather than being a large panel. The '20 does not do the 3D arithmetic itself —
+it hands that to a **TMS34082 floating-point coprocessor** over the coprocessor
+bus, 419 instructions' worth in R.BIN, starting five instructions after reset.
+DEVICES.md shows how both parts were identified from the instruction stream. The firmware calls the list a "Dlist" and has
 dedicated errors for it: `Pre Dlist overflow!`, `Post Dlist Overflow`,
 `Render List Overflow`.
 
@@ -45,7 +48,17 @@ DEVICES.md.
 **The strategy is not to emulate the TMS340.** It is to intercept the display
 list the 68020 already builds and draw it with a modern renderer. Emulating the
 graphics processor would mean reproducing its video timing, shift registers and
-VRAM to get the same pixels a different way.
+VRAM to get the same pixels a different way — and, now that the coprocessor is
+known to be there, a TMS34082 as well.
+
+`tools/tms340run.py` exists anyway, because running the renderer's own code is
+the only way to read a format nothing else documents. It currently boots the
+'20 through hardware initialisation, clears both frame buffers, takes the
+display interrupt, sets up double buffering and reaches boot stage 5, where it
+stops in the routine that uploads the coprocessor's tables. That is the
+boundary: **past this point the renderer's behaviour depends on floating-point
+results the '82 produces**, so the next real step for the interpreter is the
+'82's instruction set, not more of the '20's.
 
 Worth knowing: VWE patented its asset pipeline too — US 5,710,878, "Method for
 facilitating material application for a group of objects of a computer graphic"

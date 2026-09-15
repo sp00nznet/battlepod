@@ -58,7 +58,8 @@ The card cage holds four boards on a backplane:
   │ CPU board   68020 + 68881                                    │
   │             game simulation, display lists, ARCNET           │──▶ main screen
   │                                                              │
-  │   0x20000000  ──▶  TMS340x0 renderer   (rasterises)          │
+  │   0x20000000  ──▶  TMS34020 renderer   (rasterises)          │
+  │                      └─▶ TMS34082 FPU (3D maths)            │
   │   0x40000000  ──▶  "Secondary": an Amiga 500  ───────────────│──▶ MFD screen
   │   0x50000000  ──▶  audio board                               │──▶ speakers
   │   serial      ──▶  Remote I/O board                          │◀── stick, throttle,
@@ -71,10 +72,14 @@ The two surprises, if you have only read the marketing:
 - The **"Amiga board" is a literal Amiga 500 motherboard** on a VWE carrier
   card. It does not run the game — it draws the cockpit's secondary
   multi-function display. Its code is 61 KB compiled with Manx Aztec C.
-- The **renderer is a Texas Instruments TMS340x0 graphics processor**, and its
-  entire bit-addressed address space is mapped into the 68020 at `0x20000000`.
-  The 68020 uploads the renderer's microcode at boot, byte-reversing every
-  longword on the way because the TMS340 is little-endian and the 68020 is not.
+- The **renderer is a Texas Instruments TMS34020 graphics processor with a
+  TMS34082 floating-point coprocessor**, and its entire bit-addressed address
+  space is mapped into the 68020 at `0x20000000`. The 68020 uploads the
+  renderer's microcode at boot, byte-reversing every longword on the way
+  because the TMS340 is little-endian and the 68020 is not. The '20 rasterises;
+  the '82 does the 3D arithmetic, driven over the coprocessor bus by 419
+  `CEXEC`/`CMOV*` instructions in R.BIN. See DEVICES.md for how the part was
+  identified from the instruction stream.
 
 ### What gets loaded where
 
@@ -343,8 +348,9 @@ board photographs, and the datasheets for the parts its author identified,
 with notes inviting someone to take a serious crack at it.
 
 Those notes are worth reading before this one. They independently reach the
-same load map and the same uncertainty about the renderer ("TMS34010, maybe an
-020, not sure yet"), and they name two parts this project had not yet
+same load map, and the uncertainty they leave open about the renderer
+("TMS34010, maybe an 020, not sure yet") is now settled — it is an 020. They
+also name two parts this project had not yet
 identified: the sound board's **Analog Devices ADSP-21020** DSP — which is why
 `btAudio.dld` is a `.dld`, the Analog Devices downloadable-executable extension
 — and the **SMC COM90C66** ARCNET controller. The System 3.0 manual confirms

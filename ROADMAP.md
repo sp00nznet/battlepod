@@ -9,7 +9,8 @@ findings are in [DEVICES.md](DEVICES.md).
 68020 core, sparse memory with a bus logger. Produced the cockpit's address map
 by observation.
 
-**Phase 1 — boot.** Identified the renderer as a TMS340x0 and decoded its
+**Phase 1 — boot.** Identified the renderer as a TMS340 family part and
+decoded its
 handshake and command protocol. Stubbed the renderer, audio signature and Amiga
 handshake far enough for the firmware to parse its resource archive and reach
 `main game loop (SecCom 674 bytes).`

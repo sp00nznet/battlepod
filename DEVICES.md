@@ -365,20 +365,46 @@ targets across a 512 MB address space and essentially none would fall inside a
 The graphics group is in — `PIXT` in all six addressing forms, the six
 `PIXBLT` variants, `FILL L`/`FILL XY` and `LINE`.
 
-The remaining gap is the absolute-move group at `0x0400`–`0x07FF`, and it is
-worth saying why it stays a gap. The scanned manual's table for it is the least
-legible part of the document, and the load/store split it appears to give
-contradicts what the firmware demonstrably does. So that group is settled
-empirically instead:
+The absolute-move group at `0x0400`–`0x07FF` used to be the largest gap, and
+was for a while settled wrongly. The TMS34020 User's Guide (August 1990) gives
+it as `0000 01F1 100R SSSS` for a store and `0000 01F1 101R DDDD` for a load,
+with bit 9 choosing which of the two field-size registers applies:
 
-- **all seven** writes to `0xFFFFFDE0` use `0x0780`, and that word is the
-  renderer state the 68020 polls — so `0x0780` is a store, whatever the OCR says
-- `0x0580` writes `0xC0000080` and `0xC0000110`, the TMS34010's own I/O
-  registers — also a store
+| opcode | instruction |
+|---|---|
+| `0x0580` / `0x0780` | `MOVE Rs, @address` — store, field 0 / field 1 |
+| `0x05A0` / `0x07A0` | `MOVE @address, Rd` — load, field 0 / field 1 |
+| `0x05C0` / `0x07C0` | `MOVE @address, @address` |
+| `0x05E0` / `0x07E0` | `MOVB` store / load |
 
-Those forms are implemented; the rest of the group is left unrecognised rather
-than filled in from a reading that does not hold up. `0x0700` and `0x0740` were
-tried as loads, decoded to implausible addresses, and were removed.
+Reading `0x05A0` and `0x07A0` as stores as well — which is what the firmware's
+*writes* alone seemed to show — is what broke the display interrupt for two
+sessions. Its handler read-modify-writes `INTPEND`:
+
+```
+FE000DF0  MMTM    SP, #$8000
+FE000E10  MOVE    @$C0000120, A0, 0   ; INTPEND
+FE000E40  ANDNI   #$00000400, A0      ; clear DIP, the display interrupt
+FE000E70  MOVE    A0, @$C0000120, 0
+FE000EA0  CLR     A0
+FE000EB0  MOVB    A0, @$FE028020      ; the flag the main loop waits on
+FE000EE0  MOVE    @$FFFF0BC0, A0, 1   ; a frame counter
+FE000F10  INC     A0
+FE000F20  MOVE    A0, @$FFFF0BC0, 1
+FE000F50  MMFM    SP, #$0001
+FE000F70  RETI
+```
+
+With a store where the load belongs, `INTPEND` never clears, `$FE028020` never
+clears, and the renderer times out of its vertical-blank wait 500,000 times and
+restarts hardware initialisation — which is exactly the symptom that had been
+mistaken for a missing hardware poll.
+
+One more thing that group taught: **`MMTM` and `MMFM` do not share a mask.**
+`MMTM`'s bit 15 names A0; `MMFM`'s bit 0 does. Every matched pair in the image
+is an exact bit reversal — `#$8000`/`#$0001`, `#$E000`/`#$0007`,
+`#$B000`/`#$000D`, 25 pairs, no exceptions. Reading both the same way pops the
+saved register into the stack pointer, which sends `RETI` to address zero.
 
 ### The renderer's side of the command protocol
 
@@ -499,7 +525,7 @@ it reads unambiguously:
 
 ```
 FE0007C0  MOVI    #$5007, A0
-FE0007E0  MOVB    A0, @$C0000080      ; TMS34010 I/O register block
+FE0007E0  MOVB    A0, @$C0000080      ; TMS34020 I/O register block
 FE000820  MOVB    A0, @$C0000120
 FE000850  MOVB    A0, @$C0000110
 FE000880  EINT
@@ -510,7 +536,7 @@ FE000920  CLR     A2
 FE000930  MOVE    A2, *A0+, 1         ; clear it
 ```
 
-`0xC0000000` is the TMS34010's documented on-chip I/O register block, and the
+`0xC0000000` is the TMS34020's documented on-chip I/O register block, and the
 firmware writes three registers in it before enabling interrupts. That is a
 semantic check on the disassembler, not just a structural one: the addresses it
 produces land where the processor's own registers live.
@@ -735,7 +761,7 @@ Three facts, all verified:
 
 1. **`TI_address = (68k_address - 0x20000000) * 8`**, exactly, for all five
    uploaded segments. Renderer addresses are *bit* addresses — the signature of
-   the TI TMS34010 / TMS34020. Its 512 MB bit-addressed space is mapped
+   the TI TMS340 family. Its 512 MB bit-addressed space is mapped
    linearly into the 68020 at `0x20000000`. The ROM performs the inverse itself
    with a literal `addi.l #$20000000` after reading the comm block pointer.
 
@@ -756,7 +782,39 @@ Three facts, all verified:
    ```
 
    `0xFFFFFDE0` is the bit address of `0x3FFFFFBC`, and `0xFE034DC0` lands
-   inside the uploaded region. 34010 vs 34020 is still open.
+   inside the uploaded region.
+
+4. **The processor is a TMS34020, and it drives a coprocessor.** This was open
+   for a long time and is now settled by the firmware's own instruction stream.
+   R.BIN executes opcodes that do not exist on a TMS34010:
+
+   | opcode | instruction | what it does |
+   |---|---|---|
+   | `$0273` | `SETCDP` | recompute CONVDP from DPTCH |
+   | `$0251` | `SETCSP` | recompute CONVSP from SPTCH |
+   | `$02FB` | `SETCMP` | recompute CONVMP from MPTCH |
+   | `$0280` | `RPIX` | replicate a pixel across a register |
+   | `$0A00` | `VLCOL` | latch the VRAM colour register |
+   | `$0A57` | `VFILL` | VRAM block fill |
+   | `$08F2` | `CLIP` | clip to the window |
+
+   `SETCDP` in particular appears exactly where it must: immediately after
+   `MOVI #$2000, B3`, which is the destination pitch it reads.
+
+   And at `$0600`–`$06FF` sit 419 coprocessor instructions — `CEXEC`,
+   `CMOVGC`, `CMOVCG`, `CMOVMC`, `CMOVCM` — each three words, opcode plus a
+   32-bit command naming the coprocessor and the operation. The '20's
+   coprocessor is the **TMS34082 floating-point unit**, and the very first one
+   the renderer executes is at reset, five instructions in:
+
+   ```
+   FE0000F0  MOVI    #$CA000438, A0
+   FE000120  CMOVGC  A0, $000D4C00
+   FE000150  CMOVCG  A0, $000C4E00
+   ```
+
+   That is where the renderer's 3D arithmetic goes, and it is the reason the
+   geometry cannot be followed by reading the '20's code alone.
 
 ### Renderer handshake and command protocol
 
@@ -854,7 +912,6 @@ With only the signature answered the ROM gets further and reports
 - The UART receive register — needed to drive the ROM's built-in diagnostic
   menu, which can start the renderer, the Secondary and a test game on demand.
 - Resource type semantics (1, 2, 4, 7).
-- 34010 or 34020.
 - ARCNET has still not been touched; the boot reaches the main loop without it.
   The controller is reported to be an **SMC COM90C66**, on the CPU board.
 - After the audio download the ROM jumps through a null pointer. Expected while

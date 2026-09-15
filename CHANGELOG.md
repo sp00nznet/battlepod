@@ -8,7 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `tools/tms340run.py`: an interpreter for the renderer's TMS34010 code. If
+- The renderer's processor is identified: a **TMS34020**, not the TMS34010 it
+  had been read as, driving a **TMS34082 floating-point coprocessor**. R.BIN
+  executes `SETCDP`, `SETCSP`, `SETCMP`, `RPIX`, `VLCOL`, `VFILL` and `CLIP`,
+  none of which exist on a '10, and 419 `CEXEC`/`CMOV*` coprocessor
+  instructions - the first of them five instructions after reset. Both tools
+  now follow the TMS34020 User's Guide (August 1990) instead of the '10's.
+- `tools/tms340run.py --selftest`: assertions pinning the three decodings that
+  had been wrong - absolute load versus store, the MMTM/MMFM mask order, and
+  SUBXY's flags.
+- `tools/tms340run.py --skip-unknown`: step over unrecognised opcodes and count
+  them, for measuring how much further a run would get. A diagnostic, never a
+  claim that the run was faithful.
+- The XY instruction group (ADDXY, SUBXY, CMPXY, MOVX, MOVY, CVXYL, CVSXYL,
+  ADDXYI), the coprocessor group, RPIX, the SETC*P family, the field-1 SEXT and
+  ZEXT forms, and absolute memory-to-memory MOVE.
+- The full branch condition table. Only 7 of the 16 conditions were evaluated;
+  the arithmetic never set carry or overflow at all, so LT/GE/LE/GT/HI/LS could
+  not have worked.
+
+- `tools/tms340run.py`: an interpreter for the renderer's TMS34020 code. If
   R.BIN executes it draws its own frames, which would make the model format
   something the renderer reads rather than something that has to be decoded.
   It runs 3,000,000 instructions without meeting an unknown opcode, brings up
@@ -23,6 +42,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **The display interrupt now runs, and with it the whole vertical-blank path.**
+  Two decoding errors kept it dead. `0x05A0`/`0x07A0` are absolute *loads*, not
+  stores - the manual gives the group as `0000 01F1 100R SSSS` for a store and
+  `0000 01F1 101R DDDD` for a load - so the handler's read-modify-write of
+  `INTPEND` never read anything and never cleared the pending bit. And `MMFM`'s
+  register mask is `MMTM`'s reversed: bit 15 names A0 in one and bit 0 names it
+  in the other, which every one of the 25 matched pairs in the image confirms.
+  Reading both the same way popped the saved register into the stack pointer and
+  sent `RETI` to address zero.
+
+  With both fixed the renderer stops timing out of its frame wait - 1,142,192
+  spins down to 5,078 - and gets through double-buffer setup to boot stage 5.
+  Execution reaches 570,000 instructions before the first unknown opcode, up
+  from 20,000.
+- `SUBI IW` is `0x0BE0`, not `0x0CE0`.
+- `MOVE Rs, Rd` across register files (`0x4E00`) wrote the destination in the
+  source's file.
 - Every TI instruction address the disassembler printed was 0x40 bits too high:
   the 8-byte file header was being counted as part of the image, when the
   68020's upload log says file offset 8 is TI 0xFE000000. Building the
@@ -36,8 +72,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- `tools/tms340dis.py`: a TMS34010 disassembler, written from the encodings in
-  the TMS34010 User's Guide. 36% of `R.BIN` is recognised - the
+- `tools/tms340dis.py`: a TMS340 disassembler, written from the encodings in
+  the User's Guide. 36% of `R.BIN` is recognised - the
   register-indirect MOVE family and the graphics group are the gaps - but 164 of
   164 absolute call and jump targets land inside the image on all three renderer
   binaries, which is what shows it is in sync. Now 49% of all words, 70%
@@ -133,10 +169,10 @@ All notable changes to this project are documented here. The format follows
 - The manual's absolute-move table is the least legible part of the scan and its
   load/store split contradicts the firmware. Settled from the data instead: all
   seven writes to the renderer state word use 0x0780, and 0x0580 writes the
-  TMS34010's own I/O registers, so both are stores. The rest of that opcode
+  TMS34020's own I/O registers, so both are stores. The rest of that opcode
   group is left unrecognised rather than guessed.
 - The renderer's hardware init reads cleanly: it writes three registers in the
-  TMS34010's documented I/O block at 0xC0000000, enables interrupts, then clears
+  TMS34020's documented I/O block at 0xC0000000, enables interrupts, then clears
   0x40000 bits of frame buffer at bit address 0xA0000000. That the addresses land
   on the processor's own register block is a semantic check on the disassembler.
 - The renderer kernel is engine code, not game content: `R.BIN3_0` and

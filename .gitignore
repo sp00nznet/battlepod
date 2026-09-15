@@ -9,3 +9,7 @@ out/
 
 build/
 third_party/
+
+# Python bytecode
+__pycache__/
+*.pyc

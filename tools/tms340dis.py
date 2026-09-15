@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""A TMS34010 disassembler, for reading the cockpit's renderer.
+"""A TMS340x0 disassembler, for reading the cockpit's renderer.
 
 The 68020 never reads inside a model - it only walks the 16-byte resource
 headers - so the geometry format is parsed entirely by the TMS340 code in
 R.BIN. That code is 28 KB and is the only route to it.
 
-Encodings follow the TMS34010 User's Guide (Texas Instruments, 1988). The
-processor is little-endian in 16-bit words and its addresses are *bit*
-addresses, so a byte at file offset n sits at bit address n*8.
+The renderer is a **TMS34020**, not the TMS34010 first assumed. R.BIN uses
+instructions that exist only on the '20 - SETCDP ($0273), SETCSP ($0251),
+SETCMP ($02FB), RPIX ($0280), VLCOL ($0A00), VFILL ($0A57), CLIP ($08F2) - and
+it drives a coprocessor through the CMOVGC/CMOVCG group at $0600-$06FF, which
+on this board can only be a TMS34082 floating-point unit. That is where the
+renderer's 3D maths goes.
+
+Encodings follow the TMS34020 User's Guide (Texas Instruments, August 1990),
+whose summary table gives every instruction word bit by bit. The processor is
+little-endian in 16-bit words and its addresses are *bit* addresses, so a byte
+at file offset n sits at bit address n*8.
 
 Not every instruction is implemented; anything unrecognised prints as `.word`,
 which keeps the stream in sync because an unknown opcode is still one word long.
-The graphics group - PIXT, PIXBLT, FILL, LINE - and a few absolute MOVE forms
-are the remaining gaps. They are left out rather than guessed: two opcodes were
-tried as absolute moves, decoded to implausible addresses, and were removed.
 
 The image holds data as well as code, so a linear disassembly can never reach
 100%; the reported figures separate zero fill from genuine unknowns.
@@ -55,15 +60,24 @@ LOAD_BASE = 0
 # base opcode -> (mnemonic, class). Classes describe how the operands are
 # packed into the low bits and what extension words follow.
 NOARG = {
-    0x0100: "EMU", 0x01C0: "POPST", 0x01E0: "PUSHST", 0x0300: "NOP",
-    0x0320: "CLRC", 0x0360: "DINT", 0x0940: "RETI", 0x0D60: "EINT",
-    0x0DE0: "SETC",
+    0x0040: "IDLE", 0x0080: "MWAIT", 0x0100: "EMU", 0x01C0: "POPST",
+    0x01E0: "PUSHST", 0x0300: "NOP", 0x0320: "CLRC", 0x0360: "DINT",
+    0x0940: "RETI", 0x0D60: "EINT", 0x0DE0: "SETC",
+    # TMS34020 only. SETCDP/SETCSP/SETCMP recompute the cached pitch
+    # conversions from DPTCH/SPTCH/MPTCH, which is why they carry no operand
+    # even though their encodings look like they hold a register number.
+    0x0251: "SETCSP", 0x0273: "SETCDP", 0x02FB: "SETCMP",
+    0x0860: "RETM", 0x080F: "TRAPL", 0x08F2: "CLIP", 0x0C57: "LINIT",
+    0x0A00: "VLCOL", 0x0A37: "PFILL  XY", 0x0A57: "VFILL", 0x0857: "VBLT",
+    0x0EFA: "TFILL  XY",
 }
 ONEREG = {
     0x0020: "REV", 0x0120: "EXGPC", 0x0140: "GETPC", 0x0180: "GETST",
     0x01A0: "PUTST", 0x0380: "ABS", 0x03A0: "NEG", 0x03C0: "NEGB",
-    0x03E0: "NOT", 0x1020: "INC", 0x1420: "DEC", 0x0500: "SEXT",
-    0x0520: "ZEXT",
+    0x03E0: "NOT", 0x1020: "INC", 0x1420: "DEC",
+    0x0500: "SEXT", 0x0520: "ZEXT",        # field 0; field 1 adds 0x0200
+    0x0700: "SEXT", 0x0720: "ZEXT",
+    0x0280: "RPIX", 0x0A60: "CVMXYL", 0x0A80: "CVDXYL",     # '20 only
 }
 TWOREG = {
     0x4000: "ADD", 0x4200: "ADDC", 0x4400: "SUB", 0x4600: "SUBB",
@@ -72,11 +86,12 @@ TWOREG = {
     0x5A00: "DIVU", 0x5C00: "MPYS", 0x5E00: "MPYU", 0x6A00: "LMO",
     0x6C00: "MODS", 0x6E00: "MODU", 0x1C00: "BTST", 0xE000: "ADDXY",
     0xE200: "SUBXY", 0xE400: "CMPXY", 0xE600: "CPW", 0xE800: "CVXYL",
-    0xEC00: "MOVX", 0xEE00: "MOVY", 0xF600: "DRAV",
+    0xEC00: "MOVX", 0xEE00: "MOVY", 0xF600: "DRAV", 0xEA00: "CVSXYL",
 }
 # immediate forms: long takes two extension words, short takes one
-IMM_LONG = {0x09E0: "MOVI", 0x0B20: "ADDI", 0x0B60: "CMPI", 0x0D00: "SUBI"}
-IMM_SHORT = {0x09C0: "MOVI", 0x0B00: "ADDI", 0x0B40: "CMPI", 0x0CE0: "SUBI"}
+IMM_LONG = {0x09E0: "MOVI", 0x0B20: "ADDI", 0x0B60: "CMPI", 0x0D00: "SUBI",
+            0x0C00: "ADDXYI"}
+IMM_SHORT = {0x09C0: "MOVI", 0x0B00: "ADDI", 0x0B40: "CMPI", 0x0BE0: "SUBI"}
 LIMREG = {0x0B80: "ANDNI", 0x0BA0: "ORI", 0x0BC0: "XORI"}
 KREG = {0x1000: "ADDK", 0x1400: "SUBK", 0x1800: "MOVK",
         0x2000: "SLA", 0x2400: "SLL", 0x2800: "SRA", 0x2C00: "SRL",
@@ -91,25 +106,26 @@ JUMP_ABS = {b | 0x80: n.replace("JR", "JA") for b, n in JUMP_REL.items()}
 
 
 # Absolute-addressing moves, where a 32-bit bit-address follows the opcode.
-#
-# The scanned manual's table for this group is the least legible part of it and
-# its load/store split contradicts what the firmware actually does, so the
-# entries kept here are the ones confirmed against observed behaviour instead:
-#
-#   0x0780  every one of the seven writes to 0xFFFFFDE0 uses it, and that word
-#           is the renderer state the 68020 polls - so it is a store
-#   0x07A0  same family, used on 0xFFFFFDA0
-#   0x0580  writes 0xC0000080 and 0xC0000110, the TMS34010's own I/O registers
-#
-# 0x0700 and 0x0740 were tried as loads, decoded to implausible addresses, and
-# are left unrecognised. The rest of the 0x0400-0x07FF group stays unknown
-# rather than being filled in from an OCR reading that does not hold up.
+# The '20 manual gives these as `0000 01F1 100R SSSS` for a store and
+# `0000 01F1 101R DDDD` for a load, with bit 9 selecting which of the two
+# field-size registers applies. Reading both as stores was wrong and it broke
+# the display interrupt, whose handler read-modify-writes INTPEND.
+#   base -> (mnemonic, direction, field)
 ABS_ONE = {
-    0x0580: ("MOVB", "store"), 0x05A0: ("MOVB", "store"),
-    0x0780: ("MOVE", "store"), 0x07A0: ("MOVE", "store"),
-    0x07E0: ("MOVB", "load"),
+    0x0580: ("MOVE", "store", 0), 0x05A0: ("MOVE", "load", 0),
+    0x0780: ("MOVE", "store", 1), 0x07A0: ("MOVE", "load", 1),
+    0x05E0: ("MOVB", "store", None), 0x07E0: ("MOVB", "load", None),
 }
-ABS_TWO = {0x0340: "MOVB"}          # absolute to absolute, two addresses
+
+# The coprocessor group: a 32-bit command word follows each, so three words.
+COPROC = {
+    0x0600: "CEXEC", 0x0620: "CMOVGC", 0x0640: "CMOVGC", 0x0660: "CMOVCG",
+    0x0680: "CMOVMC", 0x06A0: "CMOVCM", 0x06C0: "CMOVCS", 0x06E0: "CMOVMC",
+    0x0820: "CMOVMC",
+}
+
+ABS_TWO = {0x0340: "MOVB", 0x05C0: "MOVE", 0x07C0: "MOVE"}
+                                    # absolute to absolute, two addresses
 
 # Register-indirect moves. The User's Guide gives these as `oooo ooFS SSSR DDDD`
 # for MOVE - six opcode bits then a field-select bit - and `oooo oooS SSSR DDDD`
@@ -236,17 +252,23 @@ def decode(s):
             off = d - 0x100 if d & 0x80 else d
         return done("%-7s $%08X" % (m, LOAD_BASE + (s.at + off) * 16))
     if op & 0xFFE0 in ABS_ONE:
-        m, dirn = ABS_ONE[op & 0xFFE0]
+        m, dirn, fld = ABS_ONE[op & 0xFFE0]
         a = s.long()
+        tail = "" if fld is None else ", %d" % fld
         if dirn == "store":
-            return done("%-7s %s, @$%08X" % (m, regname(f, rd), a))
-        return done("%-7s @$%08X, %s" % (m, a, regname(f, rd)))
+            return done("%-7s %s, @$%08X%s" % (m, regname(f, rd), a, tail))
+        return done("%-7s @$%08X, %s%s" % (m, a, regname(f, rd), tail))
+    if op & 0xFFE0 in COPROC:
+        return done("%-7s %s, $%08X" % (COPROC[op & 0xFFE0], regname(f, rd), s.long()))
+    if (op & 0xFDC0) == 0x0540:                 # SETF FS, FE, F
+        return done("%-7s %d, %d, %d"
+                    % ("SETF", (op & 0x1F) or 32, (op >> 5) & 1, (op >> 9) & 1))
     if op & 0xFFE0 in DSJ:
         d = s.word()
         off = d - 0x10000 if d & 0x8000 else d
         return done("%-7s %s, $%08X"
                     % (DSJ[op & 0xFFE0], regname(f, rd), (start + 2 + off) * 16))
-    if op & 0xFC00 == 0x3800:
+    if op & 0xF800 == 0x3800:
         k = (op >> 5) & 0x1F
         back = (op >> 10) & 1
         return done("%-7s %s, $%08X"
