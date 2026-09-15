@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The disassembler now decodes FPU instructions, following `--cpu`. The
+  cockpit's geometry and physics code is dense in them and previously read as
+  `dc.w $f2xx`.
 - `tools/resmap.py`: walks a cockpit resource archive. The format comes from the
   firmware's own parser, and the walk accounts for every byte of the file and
   reproduces the firmware's printed index exactly.
@@ -56,6 +59,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The renderer keeps a pool of up to 1500 "solids" of 32 bytes each, built from
+  three validated primitive kinds: solids, cylinders and ARES, each with a
+  direction the firmware sanity-checks.
+- A type 1 model's body is variable-length: no relation of the form
+  `a*field + b*field + c` explains the resource size for even half the models,
+  so the header fields are not counts of fixed-stride records.
 - The resource archive format: 16-byte headers, `-1` terminated, with an alias
   bit that makes `+0x0C` name another resource instead of counting data.
 - Type 1 is 3D models - bounding box valid in 130 of 130, bounding sphere in

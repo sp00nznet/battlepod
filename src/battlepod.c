@@ -64,6 +64,7 @@ static uint32_t g_note_addr;
 static uint32_t g_vector_hit;	/* address of an unmapped vector-table fetch */
 static uint32_t g_vbr;		/* vector base; the pod's monitor puts it in RAM */
 static uint32_t g_vecfetch;	/* last vector-table read, mapped or not */
+static unsigned g_dis_cpu = M68K_CPU_TYPE_68040;  /* disassemble with the FPU decoded */
 
 /* MC68681 DUART, the cockpit's two serial ports. Register N sits at BASE+N*2,
  * channel A at registers 0-7 and channel B at 8-15, which is how the ROM's
@@ -959,7 +960,7 @@ static void disasm_at(uint32_t pc, int count)
 		char buf[128];
 		unsigned n;
 		if (!mapped(pc)) { printf("  %08X  <unmapped>\n", pc); return; }
-		n = m68k_disassemble(buf, pc, M68K_CPU_TYPE_68020);
+		n = m68k_disassemble(buf, pc, g_dis_cpu);
 		printf("  %08X  %s\n", pc, buf);
 		pc += n;
 	}
@@ -1236,7 +1237,7 @@ int main(int argc, char **argv)
 
 		if (trace_n && step >= trace_from && step < trace_from + trace_n) {
 			char buf[128];
-			m68k_disassemble(buf, pc, M68K_CPU_TYPE_68020);
+			m68k_disassemble(buf, pc, g_dis_cpu);
 			printf("%8llu  %08X  %-40s", (unsigned long long)step, pc, buf);
 			g_note_flag = 0;
 			m68k_execute(1);

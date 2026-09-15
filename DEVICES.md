@@ -310,6 +310,40 @@ clean one-to-one table. Its type 2 set is the same six ids at the same sizes,
 and ids 90 and 94 are byte-for-byte identical across both games, so those two
 are engine data rather than game content.
 
+### Inside a type 1 model — what is known and what is not
+
+Not much beyond the bounding volume, and it is worth being precise about why.
+
+The nine longwords before the bounding box are not counts of fixed-size records.
+A brute-force search over every pair of those fields, with integer strides up to
+64 and a free constant, fails to explain the resource size for even half of the
+130 models. So the body is variable-length — sections with their own internal
+structure, not arrays of a fixed stride.
+
+What the renderer does with a model is clearer. It maintains a pool of
+**"solids"**: the allocator at `0x0214891E` caps the count at `0x5DC` (1500) and
+bumps a pointer by `0x20`, so a solid is **32 bytes**. The initialiser at
+`0x021488E8` fills one by copying six longwords from a source, then a word at
+`+0x18`, a word at `+0x1A`, and clearing a long at `+0x1C`.
+
+Three primitive kinds are validated on the way in — the firmware complains about
+each by name:
+
+```
+Weird solid direction %f... shape %d      Suspect solid data... shape %d
+Weird ARES direction %f... shape %d       Suspect ARES data... shape %d
+                                          Suspect cylinder data... shape %d
+```
+
+So models are built from solids, cylinders and something called ARES, each
+carrying a direction that gets sanity-checked. Solids are allocated from nine
+sites across the firmware, not just the model loader, so they are a general
+runtime structure rather than a file-format artifact.
+
+Reading the loader that turns resource bytes into solids is the next step, and
+it is now practical: the disassembler decodes FPU instructions, without which
+this whole layer read as `dc.w $f2xx`.
+
 ## The network packet interface
 
 The firmware's main loop polls monitor slot `+0x18` and, when it gets a pointer,

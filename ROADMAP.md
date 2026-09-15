@@ -54,11 +54,12 @@ state. What is left is drawing it, and labelling which id is which instrument -
 a question for the operations manuals and the cockpit patent figures, not for
 the firmware. See [RENDERING.md](RENDERING.md).
 
-**The resource archive, which is the shorter road to something visible.** 467
-resources in four type classes, the index already printed by the firmware, and
-the renderer's own diagnostics naming solids, cylinders and "ARES" as the
-primitive types. `BattleTech_TI_Res` is 1.5 MB with big-endian IEEE floats from
-offset 0x30. This needs no network and no Macintosh.
+**Inside a type 1 model.** The archive format is decoded and type 1 is
+confirmed geometry, but the body past the bounding volume is variable-length and
+resists black-box analysis. The route in is the firmware's own loader - the code
+that turns resource bytes into the renderer's 32-byte solids - which is now
+readable since the disassembler decodes FPU instructions. This needs no network
+and no Macintosh.
 
 **The geometry is nearby.** The renderer code carries `Out of Solids...`,
 `Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and
