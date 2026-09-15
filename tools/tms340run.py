@@ -37,6 +37,7 @@ class Machine:
         self.fs = [32, 32]
         self.fe = [0, 0]
         self.setf = 0
+        self.hits = 0
 
     # ---- memory -------------------------------------------------------
     #
@@ -128,11 +129,19 @@ def s32(v):
     return v - 0x100000000 if v & 0x80000000 else v
 
 
-def run(m, steps, trace):
+def run(m, steps, trace, brk=None):
     """Execute until something unimplemented turns up, and say what it was."""
     executed = 0
     while executed < steps:
         here = m.pc
+        if brk is not None and here == brk and m.hits < 3:
+            m.hits += 1
+            print("  break at $%08X after %d instructions" % (here, executed))
+            print("    A: %s" % " ".join("%08X" % v for v in m.a[:8]))
+            print("       %s" % " ".join("%08X" % v for v in m.a[8:]))
+            print("    B: %s" % " ".join("%08X" % v for v in m.b[:8]))
+            print("       %s" % " ".join("%08X" % v for v in m.b[8:]))
+            print("    fs %s fe %s" % (m.fs, m.fe))
         op = m.fetch()
         f, rd, rs = (op >> 4) & 1, op & 0xF, (op >> 5) & 0xF
         executed += 1
@@ -196,7 +205,14 @@ def run(m, steps, trace):
             m.wl(m.fetchl(), m.reg(f, rd))
             continue
         if op & 0xFFE0 == 0x07E0:                               # MOVB @addr,Rd
-            m.setreg(f, rd, m.rl(m.fetchl()))
+            m.setreg(f, rd, m.flags(m.field_read(m.fetchl(), 8, 1)))
+            continue
+        if op & 0xFFE0 == 0x05E0:                               # MOVB Rs,@addr
+            m.field_write(m.fetchl(), 8, m.reg(f, rd))
+            continue
+        if op == 0x0340:                                        # MOVB @a,@b
+            src, dst = m.fetchl(), m.fetchl()
+            m.field_write(dst, 8, m.field_read(src, 8))
             continue
 
         # register indirect, the forms this code actually uses
@@ -452,6 +468,26 @@ def run(m, steps, trace):
     return executed
 
 
+def segments(blob):
+    """R.BIN is a scatter-load image, not one flat block.
+
+    Records of (target offset, longword count) big-endian, each followed by its
+    data, terminated by 0xFFFFFFFF. The 68020 logs exactly this when it uploads
+    - "68K src 2ae649c ... TI ffff0000, Count 616" - and the target offset maps
+    to a TI bit address as (0x1FC00000 + target) * 8. Loading the file as one
+    flat block at 0xFE000000, which is what this did first, leaves the last two
+    segments missing: the I/O register initialisation table and the processor's
+    own trap vectors.
+    """
+    at = 0
+    while at + 8 <= len(blob):
+        tgt, cnt = struct.unpack(">II", blob[at:at + 8])
+        if cnt == 0 or cnt > 0x100000:
+            return
+        yield tgt, cnt, at + 8
+        at += 8 + cnt * 4
+
+
 def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
@@ -465,12 +501,16 @@ def main(argv):
     steps = opt("--steps", 200000)
 
     m = Machine(base)
-    for i in range((len(blob) - skip) // 2):
-        m.mem[base + i * WORD] = struct.unpack("<H", blob[skip + i * 2:skip + i * 2 + 2])[0]
-    # file offset `skip` is TI 0xFE000000, which is also the entry point
-    print("loaded %d words at $%08X" % (len(m.mem), base))
+    for tgt, cnt, at in segments(blob):
+        ti = ((0x1FC00000 + tgt) * 8) & 0xFFFFFFFF
+        for i in range(cnt * 2):
+            m.mem[ti + i * WORD] = struct.unpack(
+                "<H", blob[at + i * 2:at + i * 2 + 2])[0]
+        print("  segment: %-6d longs -> TI $%08X" % (cnt, ti))
+    print("loaded %d words" % len(m.mem))
 
-    n = run(m, steps, opt("--trace", 0))
+    n = run(m, steps, opt("--trace", 0),
+            int(argv[argv.index("--break") + 1], 0) if "--break" in argv else None)
     print("\nexecuted %d instructions" % n)
     print("stopped: %s" % (m.halted or "step limit reached"))
     print("pc $%08X  sp $%08X" % (m.pc, m.a[15]))

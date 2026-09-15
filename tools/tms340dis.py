@@ -24,6 +24,21 @@ usage:
 import struct
 import sys
 
+
+def segments(blob):
+    """R.BIN is a scatter-load image: records of (target offset, longword
+    count) big-endian, each followed by its data. Only the first segment is
+    code; the rest are data the 68020 places elsewhere in the renderer's
+    memory. Disassembling the file as one flat block counts all of that as
+    instructions, which is why it used to look so unrecognisable."""
+    at = 0
+    while at + 8 <= len(blob):
+        tgt, cnt = struct.unpack(">II", blob[at:at + 8])
+        if cnt == 0 or cnt > 0x100000:
+            return
+        yield ((0x1FC00000 + tgt) * 8) & 0xFFFFFFFF, cnt, at + 8
+        at += 8 + cnt * 4
+
 REG = ["A%d" % i for i in range(15)] + ["SP"]
 REGB = ["B%d" % i for i in range(16)]
 
@@ -268,6 +283,14 @@ def main(argv):
 
     blob = open(argv[1], "rb").read()
     skip = opt("--skip", 0)                  # bytes of file header to ignore
+    if "--segments" in argv:
+        for ti, cnt, at in segments(blob):
+            print("  TI $%08X  %6d longs  file +%06X" % (ti, cnt, at))
+        return
+    if "--code" in argv:                     # just the first segment, in place
+        for ti, cnt, at in segments(blob):
+            blob, skip = blob[:at + cnt * 4], at
+            break
     base = opt("--base", 0)                  # bit address the code is loaded at
     count = opt("--count", 48)
     at = opt("--at", None)

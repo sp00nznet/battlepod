@@ -73,9 +73,13 @@ What is left:
 - **The on-chip I/O registers** at `0xC0000000`, which are written but not
   modelled, so nothing reads back sensibly.
 - **`0x0620` and `0x0660`.** Their length is settled - three words - but not
-  their effect. 77 occurrences between them, and execution currently ends up in
-  a copy loop with a pointer that was never set, which is what an unmodelled
-  side effect looks like.
+  their effect. 77 occurrences between them.
+
+The renderer now runs 5,000,000 instructions without meeting an unknown opcode,
+clears the frame buffer and programs the video hardware, then loops through its
+initialisation again rather than settling. Finding out why it restarts is the
+next thread, and the graphics instructions are what stands between that and a
+visible frame.
 
 **Work out the renderer's calling convention, then follow opcode 5.** The main
 loop and dispatch table are decoded and every handler reads at 100%, but the

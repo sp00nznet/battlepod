@@ -446,6 +446,35 @@ argument from the queue, so a register is carrying state in from the caller.
 That is the next thing to pin down, and it is what stands between here and the
 model format.
 
+### R.BIN is a scatter-load image
+
+Not one flat block. It is a sequence of records — a big-endian target offset and
+a longword count, then that much data — and the 68020 places each somewhere
+different in the renderer's memory. Its own upload log says so plainly, and
+parsing the file reproduces it exactly:
+
+| TI address | longs | what it is |
+|---|---|---|
+| `$FE000000` | 5116 | the code |
+| `$FE027F80` | 1314 | data |
+| `$FE0455C0` | 1 | data |
+| `$FFFF0000` | 616 | **the I/O register initialisation table** |
+| `$FFFFFBC0` | 34 | the processor's trap vectors |
+
+The records account for 28,364 of the file's 28,368 bytes; the remainder is the
+`0xFFFFFFFF` terminator.
+
+This matters twice over. The interpreter was loading the whole file flat at
+`$FE000000`, so the last two segments were simply absent — which is why the
+renderer's I/O setup loop, which walks a table at `$FFFF0000`, read zeroes and
+spun forever writing to `$C0000000`. With the segments placed properly it
+programs eight distinct video registers, as intended.
+
+And the disassembler was treating all five segments as code at one base. Reading
+only the code segment changes the picture: **72% of it is recognised**, not the
+49% previously reported across the whole file, and only 177 words are zero fill
+rather than 3285. 919 of 934 call and branch targets land inside the image.
+
 ### An address-frame correction
 
 Every TI address this document quoted from the disassembler was **0x40 bits too

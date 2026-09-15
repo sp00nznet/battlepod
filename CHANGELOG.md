@@ -96,6 +96,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- R.BIN is a scatter-load image: records of a big-endian target offset and a
+  longword count, each followed by its data, which the 68020 places at five
+  different TI addresses. The records account for all but the four-byte
+  terminator. Only the first segment is code; the fourth is the I/O register
+  initialisation table at 0xFFFF0000 and the fifth the processor's trap
+  vectors.
+- Loading it flat, which is what both tools did, left those segments absent -
+  so the renderer's I/O setup loop read zeroes and spun forever writing to
+  0xC0000000. Placed properly it programs eight distinct video registers.
+- Disassembling only the code segment gives 72% recognised rather than the 49%
+  previously reported across the whole file; the earlier figure counted data
+  segments as code.
 - SETF is encoded 0000 01F1 01FE SSSSS - field select in bit 9, sign-extend in
   bit 5, size in the low five bits with zero meaning 32. 0x0550 and 0x0740 are
   SETF; that much of the earlier reading holds.
