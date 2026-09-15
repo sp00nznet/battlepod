@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `tools/tms340dis.py`: a TMS34010 disassembler, written from the encodings in
+  the TMS34010 User's Guide. 36% of `R.BIN` is recognised - the
+  register-indirect MOVE family is not implemented - but 164 of 164 absolute
+  call and jump targets land inside the image on all three renderer binaries,
+  which is what shows it is in sync.
 - `--watch BASE:LEN` logs accesses inside a mapped region, which the unmapped
   log cannot see. Pointed at a loaded resource it shows exactly which offsets
   the firmware reads and from where.
@@ -62,6 +67,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The renderer kernel is engine code, not game content: `R.BIN3_0` and
+  `R.BIN2_5` are byte-identical between BattleTech and Red Planet.
 - The 68020 never reads inside a model. Watching the whole archive across a
   complete boot shows reads only at offsets 0, 4, 8, 0x0B and 0x0C - the 16-byte
   header - with every reading PC inside the resource-map builder. The model body

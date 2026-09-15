@@ -330,7 +330,40 @@ headers to build its map and never reads a byte of the bodies.
 
 So the type 1 model body is parsed by the TMS340 code in `R.BIN`, and no amount
 of 68k disassembly will reach it. Reading it means reading TMS340 code — 28 KB
-of it.
+of it, and `tools/tms340dis.py` now does, partially.
+
+The renderer kernel is **identical across both games**: `R.BIN3_0` and
+`R.BIN2_5` are byte-for-byte the same in BattleTech and Red Planet. It is engine
+code, not game content, which is a useful thing to know before spending effort
+on it.
+
+The entry decodes cleanly and agrees with the sequence worked out by hand
+earlier:
+
+```
+FE000040  DINT
+FE000050  CLR     A0
+FE000060  MOVE    A0, @$FFFFFDA0
+FE0000C0  DINT
+FE000100  MOVE    A0, @$FFFFFDE0      ; the handshake word the 68020 polls
+FE0001C0  MOVI    #$FE034DC0, SP      ; stack, inside the uploaded image
+FE0001F0  MOVI    #$0001, A0
+FE000210  MOVE    A0, @$FFFFFDE0      ; state = 1
+FE000290  CALLA   $FE000780
+FE0002C0  MOVI    #$0003, A0
+FE000310  CALLA   $FE0016D0
+```
+
+**36% of the image decodes.** That is honest rather than good: the
+register-indirect `MOVE` family is not implemented, and it is the bulk of real
+code. What makes the 36% trustworthy is the cross-check — **164 of 164 absolute
+call and jump targets land inside the image, on all three renderer binaries.**
+A decoder that had lost sync would produce targets scattered across a 512 MB
+address space, and essentially none would fall inside a 28 KB window.
+
+Two opcodes, `0x0700` and `0x0740`, were tried as absolute moves and decoded to
+implausible addresses, so they are left unrecognised rather than printing a
+confident lie.
 
 One caveat: this boot never starts a game, so nothing is ever drawn. Whether the
 68020 reads model bodies while rendering cannot be settled from a boot alone.

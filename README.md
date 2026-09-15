@@ -257,6 +257,17 @@ Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
 how the device map in [DEVICES.md](DEVICES.md) was built.
 
+**Disassemble the TMS340 renderer:**
+
+```
+python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000
+python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000     --count 20000 --validate
+```
+
+Partial - 36% of the image is recognised - but every absolute call and jump
+target it produces lands inside the image, which is the check that it is in
+sync rather than confidently wrong.
+
 **Walk the resource archive:**
 
 ```
