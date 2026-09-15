@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`$460` draws another model by resource id** - models nest. Twenty-two use
+  it, and `516`/`517` draw `501`-`505` and `511`-`515`, exactly the mech part
+  sets the bounding boxes had already paired off, which makes them the only two
+  models that both compose transforms and assemble parts. `516` goes from 7
+  polygons to **1035** once its sub-models are resolved. `model.py` follows
+  them when handed the archive; their geometry joins the mesh but not the
+  `written` list the box check uses.
+- **They arrive unplaced**: `$040` builds transforms from the model's node
+  table at header `+0x0C`, which is not decoded, so sub-models merge at the
+  origin and 516's 1035 polygons pile into a spike. Decoding that table is what
+  would stand it up.
+- `render.py` decides whether to walk every branch from the data rather than a
+  rule of thumb: a model keeping levels of detail behind its branches rewrites
+  the *same* vertex slots on each arm, while one using them as a sequence -
+  one `$460` per arm - writes each slot once. Take the full walk when nothing
+  was rewritten, otherwise the fuller single path.
+
 - **`render.py` draws the cast shadow**, by flattening a model onto the ground
   plane and drawing that before the model itself. The footage has a hard-edged
   dark shadow under every mech and it is most of what sits a model on the

@@ -63,7 +63,14 @@ PREDICATE_GAP = ()
 class Model:
     """One type 1 resource, executed."""
 
-    def __init__(self, data, paths="all"):
+    def __init__(self, data, paths="all", archive=None, depth=0):
+        # `archive` maps a resource id to its bytes, and lets $460 - "draw this
+        # other model here" - actually pull the sub-model in. Its geometry
+        # joins this model's mesh but *not* its `written` list, because the
+        # bounding box a model states is over its own vertices: all 19 models
+        # that use $460 already span their box without the sub-model's.
+        self.archive, self.depth = archive, depth
+        self.subs = []          # resource ids drawn by $460
         # "all" collects everything the model can draw, which is what the
         # checks want. A picture wants one level of detail instead, because
         # stacking them puts the near and far versions in the same frame -
@@ -199,6 +206,9 @@ class Model:
                             at = self.target(self.w[end])
                             continue
                         at = end + 1
+                    elif op == 0x460:           # draw another model here
+                        self.submodel(self.w[at + 2])
+                        at += 3
                     elif op == 0x420:
                         # evaluates a predicate and stores the answer in a
                         # slot, so it is one predicate program plus an index
@@ -255,6 +265,22 @@ class Model:
             self.stopped = "step limit"
 
     # -- the checks ------------------------------------------------------
+    def submodel(self, rid):
+        """$460 names a resource id and runs that model in place."""
+        self.subs.append(rid)
+        if not self.archive or self.depth > 3 or rid not in self.archive:
+            return
+        sub = Model(self.archive[rid], self.paths, self.archive, self.depth + 1)
+        sub.run()
+        base = (max(self.vert) + 1) if self.vert else 0
+        moff = (max(self.mat) + 1) if self.mat else 0
+        for k, v in sub.vert.items():
+            self.vert[base + k] = v
+        for k, v in sub.mat.items():
+            self.mat[moff + k] = v
+        for f, vs, mi in sub.poly:
+            self.poly.append((f, [base + v for v in vs], moff + mi))
+
     def box_matches(self):
         """The model's own bounding box against the vertices we decoded.
 
@@ -329,7 +355,7 @@ FIXED = {
     0x2E0: 2,
     0x300: 2, 0x340: 2,
     0x380: 0, 0x3A0: 0, 0x3C0: 1, 0x3E0: 2, 0x400: 0,
-    0x440: 1, 0x460: 3,
+    0x440: 1,
     0x500: 0,
     # $540 is two instructions falling into $520's handler with one flag
     # changed, so the two consume the same five longwords.
@@ -339,8 +365,8 @@ FIXED = {
 
 # Opcodes with a length this interpreter computes rather than looks up.
 HANDLED = (0x000, 0x020, 0x0A0, 0x0C0, 0x160, 0x1A0, 0x240, 0x260,
-           0x2C0, 0x300, 0x320, 0x340, 0x360, 0x420, 0x480, 0x4A0, 0x4C0,
-           0x4E0, 0x560, 0x580)
+           0x2C0, 0x300, 0x320, 0x340, 0x360, 0x420, 0x460, 0x480, 0x4A0,
+           0x4C0, 0x4E0, 0x560, 0x580)
 
 # Every opcode the renderer's table has an entry for. The walk can only follow
 # the ones it can measure, but all 45 are real, and the check that the stream
@@ -358,6 +384,11 @@ def walk(blob):
         inline = 0 if (flags & 0xFF) & 0x10 else count * 4
         yield rid, rtype, blob[at + 16:at + 16 + inline]
         at += 16 + inline
+
+
+def archive(blob):
+    """Every type 1 resource by id, so $460 can resolve what it names."""
+    return {rid: d for rid, t, d in walk(blob) if t == 1}
 
 
 def obj(m, path):
@@ -455,10 +486,11 @@ def main(argv):
         return stats(blob)
 
     want = int(argv[argv.index("--id") + 1])
+    lib = archive(blob)
     for rid, rtype, data in walk(blob):
         if rid != want or rtype != 1:
             continue
-        m = Model(data)
+        m = Model(data, archive=lib)
         m.run()
         print("model %d: %d longwords" % (rid, len(m.w)))
         print("  header says %d vertices, %d normals, %d faces, %d nodes, %d materials"
@@ -471,6 +503,8 @@ def main(argv):
               % ("matches" if m.box_matches() else "NO",
                  "sane" if m.indices_sane() else "NO"))
         print("  stopped: %s" % (m.stopped or "ran to a return"))
+        if m.subs:
+            print("  draws sub-models: %s" % " ".join(str(x) for x in m.subs))
         print("  opcodes: %s" % " ".join("$%03X x%d" % kv for kv in sorted(m.seen.items())))
         if "--obj" in argv:
             obj(m, argv[argv.index("--obj") + 1])

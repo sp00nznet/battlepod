@@ -196,6 +196,35 @@ little *larger* than what we decode, `-7.80..10.50` against a header of
 opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
 `$2A0` are measured but never interpreted, and they are the obvious suspects.
 
+### Models draw other models
+
+`$460` takes a resource id and runs *that* model in place:
+
+```
+FE015E00  MOVE  *A7+, A0, 1        ; a resource id
+FE015E10  MOVE  A7, -*SP, 1
+FE015E20  CALLR $FE00DF90          ; run that model
+FE015E40  MOVE  *SP+, A7, 1
+```
+
+Twenty-two models use it, and the two most interesting are `516` and `517`:
+they draw `501`–`505` and `511`–`515`, which are exactly the mech part sets the
+bounding boxes identified, and they are the only two models that compose
+transforms with `$040`. **So assembly does happen inside the model format**, at
+least for these — 516 goes from 7 polygons to 1035 once its sub-models are
+pulled in.
+
+`model.py` follows them when given the archive to resolve ids against. Their
+geometry joins the mesh but not the `written` list the box check uses, because
+the box a model states is over its own vertices — all 19 models that use `$460`
+and have a correct vertex count already span their box without the sub-model's.
+
+**They arrive unplaced.** `$040` composes transforms out of the model's node
+table — header `+0x0C` counts them, 56 bytes each — and that table is not
+decoded, so every sub-model is merged at the origin. 516 draws all 1035 of its
+polygons and they pile into a spike. Decoding the node table is what turns that
+into a standing machine, and it is the next thing.
+
 ## Drawing it
 
 `tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,

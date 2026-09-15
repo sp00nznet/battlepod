@@ -227,6 +227,7 @@ def main(argv):
     if len(argv) < 2 or "--id" not in argv:
         sys.exit(__doc__)
     blob = open(argv[1], "rb").read()
+    lib = M.archive(blob)
     want = int(argv[argv.index("--id") + 1])
     size = SCREEN
     if "--size" in argv:
@@ -236,16 +237,25 @@ def main(argv):
     for rid, rtype, data in M.walk(blob):
         if rid != want or rtype != 1:
             continue
-        # One level of detail, not the union of them - stacking every branch
-        # puts the near and far versions of the model in the same frame. Which
-        # side of a branch holds the detailed geometry differs per model, so
-        # walk it both ways and keep whichever drew more.
-        best = None
-        for how in ("fall", "take"):
-            cand = M.Model(data, paths=how)
-            cand.run()
-            if best is None or len(cand.poly) > len(best.poly):
-                best = cand
+        # Walking every branch is right for some models and wrong for
+        # others, and the data says which. A model that keeps levels of detail
+        # behind its branches writes the *same* vertex slots again on each arm,
+        # so a full walk ends up with several versions stacked in one frame.
+        # A model that uses its branches as a sequence - one $460 sub-model per
+        # arm, which is how the assembled ones are built - writes each slot
+        # once. So: take the full walk when it did not rewrite anything, and
+        # otherwise take whichever single path drew more.
+        full = M.Model(data, paths="all", archive=lib)
+        full.run()
+        if len(full.written) <= max(1, full.nvert) * 1.2:
+            best = full
+        else:
+            best = None
+            for how in ("fall", "take"):
+                cand = M.Model(data, paths=how, archive=lib)
+                cand.run()
+                if best is None or len(cand.poly) > len(best.poly):
+                    best = cand
         m = best
         print("model %d: %d vertices, %d polygons, %d materials%s"
               % (rid, len(m.vert), len(m.poly), len(m.mat),
