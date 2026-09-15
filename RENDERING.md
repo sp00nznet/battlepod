@@ -219,11 +219,30 @@ geometry joins the mesh but not the `written` list the box check uses, because
 the box a model states is over its own vertices — all 19 models that use `$460`
 and have a correct vertex count already span their box without the sub-model's.
 
-**They arrive unplaced.** `$040` composes transforms out of the model's node
-table — header `+0x0C` counts them, 56 bytes each — and that table is not
-decoded, so every sub-model is merged at the origin. 516 draws all 1035 of its
-polygons and they pile into a spike. Decoding the node table is what turns that
-into a standing machine, and it is the next thing.
+**They arrive unplaced, and that is the right answer rather than a gap.**
+`$040` reads three operands and does this:
+
+```
+FE00F5D0  MOVE *A7+, A13      ; node i,  from the model's node table (56 bytes each)
+FE00F600  MOVE *A7+, A13      ; node j,  same table
+FE00F650  MOVE *A7+, A13      ; instance k
+FE00F660  DEC  A13            ; one-based
+FE00F670  MPYU #$180, A13     ; 48 bytes - twelve floats, a 3x3 and a translation
+FE00F680  ADD  A13, A10       ; into the array at @$FE028C60
+```
+
+So a model says *node i becomes node j composed with instance transform k* —
+the shape of a rig. But the 48-byte instance array is **not allocated from the
+model's header**: the seven counts there allocate 28, 16, 36, 56, 40, 12 and 20
+bytes an entry, and none of them is 48. `@$FE028C60` is a global the caller
+sets before running the model.
+
+**The archive holds rigs, not poses.** A model names its parts and says how
+they compose; the transforms that actually place them are handed in from
+outside, per frame, by the 68020 — which is the same conclusion the part
+bounding boxes reached from the other direction. With no pose to supply, every
+node composes to identity and 516's 1035 polygons pile up at the origin. That
+is not our tooling failing; it is what the data says on its own.
 
 ## Drawing it
 

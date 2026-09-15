@@ -15,10 +15,15 @@ All notable changes to this project are documented here. The format follows
   polygons to **1035** once its sub-models are resolved. `model.py` follows
   them when handed the archive; their geometry joins the mesh but not the
   `written` list the box check uses.
-- **They arrive unplaced**: `$040` builds transforms from the model's node
-  table at header `+0x0C`, which is not decoded, so sub-models merge at the
-  origin and 516's 1035 polygons pile into a spike. Decoding that table is what
-  would stand it up.
+- **They arrive unplaced, and that is the answer rather than a gap.** `$040`
+  reads three operands - two node indices and a one-based index into a 48-byte
+  table of twelve floats - and composes *node i = node j x instance k*. That
+  48-byte table is **not** allocated from the model's header: its seven counts
+  allocate 28, 16, 36, 56, 40, 12 and 20 bytes an entry and none is 48. It is a
+  global the caller sets before running the model. **The archive holds rigs,
+  not poses** - a model names its parts and says how they compose, and the
+  transforms that place them come from the 68020 per frame, which is what the
+  part bounding boxes had already implied from the other side.
 - `render.py` decides whether to walk every branch from the data rather than a
   rule of thumb: a model keeping levels of detail behind its branches rewrites
   the *same* vertex slots on each arm, while one using them as a sequence -
