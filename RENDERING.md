@@ -162,6 +162,7 @@ The checks `model.py --stats` reports over the whole archive:
   stream walks to a return       : 130 / 130
   vertex count matches the header: 120 / 130
   vertices reproduce the box     :  84 / 130
+  and the same with x mirrored   :   5 / 130
   material count matches         :  56 / 130
   face and material indices sane : 128 / 130
 ```
@@ -181,9 +182,19 @@ also matches an independent reading of its handler as *(destination, near, far,
 source A, source B)*. Worth being plain that those two are measured by
 consequence rather than read off the code.
 
+**Five models are mirrored.** They span their stated box only with x negated,
+which is how a left and a right part share one set of vertices — and why pairs
+like 491 and 494 state boxes identical to the float. `--stats` counts those on
+their own line rather than folding them into the pass, because a mirrored match
+is a different claim from a plain one.
+
 What remains is the gap between counts: 120 models decode the right number of
 vertices but only 84 reproduce their box, and two still have an index out of
-range. Those are the next thing to chase.
+range. The failures have a shape, though — the stated box is consistently a
+little *larger* than what we decode, `-7.80..10.50` against a header of
+`-8.00..11.00` — which is what you would see if a few vertices come from an
+opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
+`$2A0` are measured but never interpreted, and they are the obvious suspects.
 
 One correction worth making here: solids, cylinders and ARES turned out **not**
 to be the drawing primitives. They live in the *68020's* own archive, keyed by

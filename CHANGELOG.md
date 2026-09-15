@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The complement fix reconciles two halves of the project.** The renderer's
+  resource loader tests its flag word with what read at face value as
+  `BTST #27`; the archive format, decoded from the 68020 side long before and
+  sitting in `resmap.py` ever since, says the flag is *bit 4*. Those could not
+  both be right. Complemented, `~27 & 31` is 4, and they are the same statement.
+- `model.py --stats` counts **mirrored** models on their own line: five span
+  their stated box only with x negated, which is how a left and a right part
+  share one set of vertices, and why pairs like 491 and 494 state identical
+  boxes. A mirrored match is a different claim from a plain one.
+- The remaining box failures have a shape worth recording: the stated box is
+  consistently a little larger than what we decode, which is what a few
+  vertices coming from an opcode we skip without reading would look like.
+  `$200`, `$220`, `$280` and `$2A0` are measured but never interpreted.
+
 - **Every model in the archive now walks to a return — 130 of 130.** All 45
   opcodes are measured. Most came off the handlers, counting `MOVE *A7+` as one
   longword and `ADDI #n, A7` as `n/32` more, with each handler's bounds taken
