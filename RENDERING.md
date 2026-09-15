@@ -135,13 +135,35 @@ list. `tools/model.py` runs one and collects what it draws.
 | materials | `$4C0` flat and `$4E0` lit, six longwords: index, three floats of colour, and a fourth that is `0.5` in every record so far |
 | culling | the sign of a dot product, stored in the plane record by `$180` |
 
-The checks it reports, run over the whole archive:
+**The branches carry a language of their own.** `$320`, `$360` and `$420` do
+not carry a target, they carry a *predicate program*, evaluated by a second
+threaded interpreter at `0xFE018910` through a 24-entry table at `0xFE018A00`.
+It is postfix on a small stack: five push forms taking one operand each
+(`$020`–`$0A0`), then NOT, OR, AND, XOR, NEG, ADD, SUB, five comparisons and
+two short-circuit forms taking none, terminated by `$000`, which pops the
+result and returns to the branch.
+
+So this, out of model 30:
+
+```
+$320  $080 $000  $040 $00C8  $260  $000  $1440
+```
+
+reads as *"if value(0) >= 200, jump 0x1440 bits on"* — a distance test choosing
+a level of detail. **That is where most models keep their geometry**, which is
+why the first version of this walked straight past the polygons and came back
+with nothing but a material table. `$2C0` is the unconditional form of the same
+jump.
+
+The checks `model.py --stats` reports over the whole archive:
 
 ```
   header +0x58 is a known opcode : 130 / 130
-  vertex count matches the header:  31 / 130
-  vertices reproduce the box     :  17 / 130
-  material count matches         :  31 / 130
+  stream walks to a return       :  98 / 130
+  vertex count matches the header:  84 / 130
+  vertices reproduce the box     :  41 / 130
+  material count matches         :  55 / 130
+  face and material indices sane : 129 / 130
 ```
 
 Where a walk completes, it is *right*: model 24 decodes 246 vertices against a
@@ -149,18 +171,16 @@ header that says 246, 29 materials against 29, and reproduces its own stated
 bounding box. That box is the thing that makes this checkable at all — the
 model carries it, so a wrong vertex decode cannot fake it.
 
-**What is missing, and it is one thing.** `$320` and `$360` branch on a
-predicate, and the predicate is a *second* threaded interpreter: `0xFE018910`
-reads its own opcodes from the same stream through a 24-entry table at
-`0xFE018A00` — push forms, then NOT, OR, AND, XOR, NEG, ADD, SUB and five
-comparisons as zero-operand operators, terminated by `$000`. A postfix
-expression. Its programs' length has not been measured, because several push
-handlers open with a `CALLR` that consumes operands of its own.
+**What is still open.** The box check lags the count check, 41 against 84, and
+that gap is not explained. It is not the transforms: none of those 84 models
+executes a transform opcode. The likeliest reading is that walking every branch
+mixes levels of detail — each writes the same vertex slots with different
+values, so what is left at the end belongs to no single one of them. Taking the
+union of every value ever written lifts the check from 41 to 48, which says
+that is part of the story and not all of it.
 
-**76 of 130 models stop there**, and they stop *before* their polygons, which
-is why vertices decode and faces do not — most models put their geometry behind
-a distance test, which is how they select a level of detail. Reading those 24
-handlers is the next step and it unblocks the rest at once.
+Four model opcodes remain unmeasured — `$200`, `$220`, `$440`, `$460` — and
+they stop eight models between them.
 
 One correction worth making here: solids, cylinders and ARES turned out **not**
 to be the drawing primitives. They live in the *68020's* own archive, keyed by

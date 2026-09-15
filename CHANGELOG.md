@@ -20,6 +20,18 @@ All notable changes to this project are documented here. The format follows
   says 246, 29 materials against 29, and reproduces its stated box exactly.
 - Branch and call targets are bit offsets; `$160` is `2 + 3n`; `$520`/`$540`
   take one operand each, not five.
+- **The model branch predicate.** `$320`, `$360` and `$420` do not carry a
+  target, they carry a *program*, run by a second threaded interpreter at
+  `0xFE018910` through a 24-entry table at `0xFE018A00` - postfix, five
+  one-operand push forms then operators taking none, terminated by `$000`.
+  `$320 $080 $000 $040 $00C8 $260 $000 $1440` is "if value(0) >= 200, jump
+  0x1440 bits on": a distance test choosing a level of detail, which is where
+  most models keep their geometry. `$2C0` is the unconditional form.
+  Clean walks went 38 -> **98** of 130, vertex counts matching the header
+  31 -> **84**, boxes reproduced 17 -> **41**, materials 31 -> **55**.
+- The box check still lags the count check and the gap is written down as the
+  hypothesis it is, not as a finding: it is not transforms, and walking every
+  branch mixing levels of detail explains part of it but not all.
 
 - **Reference footage, and a correction.** Two period videos carry real screen
   capture - the BattleTech 3.0 Dooley Trainer and a Discovery Channel piece -
