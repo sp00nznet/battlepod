@@ -197,6 +197,18 @@ vertices and 132 polygons, and it is recognisably one of the buttes standing
 behind the mechs in the reference footage. That is the check that matters more
 than any count: the thing that comes out looks like the thing the pod drew.
 
+Rendering the two dozen fullest models together says what the archive holds.
+Flat-topped **mesas** and tall narrow **towers** — the Nazca arena is described
+in the data supplement as "mysterious towers and a light scattering of rocky
+terrain", and there they are. Low **buildings** with banded fronts, for the
+Urbana and Badlands city maps. Several red-brown **vehicles**, some dark
+elongated craft, a white and red **rocket**. So type 1 is the scenery and the
+props, which fits: a mech is articulated, so it cannot be one rigid model, and
+it has to be assembled part by part through the display list.
+
+That is the next thing to find — which resources are the mech parts, and what
+assembles them.
+
 **What is still open.** The box check lags the count check, 63 against 84, and
 that gap is not explained. It is not the transforms: none of those 84 models
 executes a transform opcode, and the origin and union rules above account for
