@@ -125,6 +125,44 @@ done <<EOF
 $CHECKS
 EOF
 
+# The model archive gets its own checkpoints. These are floors, not equalities:
+# the decoder is meant to get better, and a number going up should not fail a
+# build - but a number going down means something that used to decode no longer
+# does, which is exactly what this is for.
+TI_RES="${VWE_GAME_FILES}/Cockpit Software/battletech_ti_res"
+if [ -f "$TI_RES" ]; then
+    echo
+    echo "== model archive =="
+    MODELS=$(python tools/model.py "$TI_RES" --stats 2>/dev/null)
+    check_at_least() {
+        got=$(echo "$MODELS" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
+        total=$((total + 1))
+        if [ -n "$got" ] && [ "$got" -ge "$2" ]; then
+            pass=$((pass + 1))
+            printf '  ok    %-32s %s (floor %s)\n' "$1" "$got" "$2"
+        else
+            printf '  FAIL  %-32s %s (floor %s)\n' "$1" "${got:-?}" "$2"
+        fi
+    }
+    check_at_least "header +0x58 is a known opcode" 130
+    check_at_least "stream walks to a return"        98
+    check_at_least "vertex count matches the header" 84
+    check_at_least "vertices reproduce the box"      63
+    check_at_least "material count matches"          55
+fi
+
+echo
+echo "== tool self-checks =="
+for t in tools/model.py tools/render.py tools/tms340run.py; do
+    total=$((total + 1))
+    if python "$t" --selftest >/dev/null 2>&1; then
+        pass=$((pass + 1))
+        printf '  ok    %s --selftest\n' "$t"
+    else
+        printf '  FAIL  %s --selftest\n' "$t"
+    fi
+done
+
 echo
 echo "conformance: $pass/$total checkpoints passed"
 

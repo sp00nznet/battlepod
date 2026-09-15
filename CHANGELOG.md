@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The model tools are in the conformance harness**, which now runs
+  **38/38** rather than 30/30. Five of the new checkpoints are the model
+  archive's own numbers - the header opcode, clean walks, vertex and material
+  counts, and the bounding-box check - recorded as *floors* rather than
+  equalities, since the decoder is meant to improve and a number going up
+  should not fail a build while a number going down means something that used
+  to decode no longer does. The other three run each tool's `--selftest`.
+- README documents `model.py` and `render.py`, which it had not mentioned at
+  all, and the disassembler's figure is corrected from 95% to 98%.
+
 - **Found the mechs.** Rendering all 81 models that produce polygons puts three
   dozen chunky red-brown parts in the high ids, 463 to 514, and their bounding
   boxes give the game away: `491 == 494`, `492 == 495`, `493 == 496` exactly,

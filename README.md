@@ -11,8 +11,8 @@ find out what it was.
 
 ## Status
 
-**v0.1.0 — alpha, a research tool, not a game.** Nothing renders yet.
-Conformance: **30/30** checkpoints.
+**v0.1.0 — alpha, a research tool, not a game.** Geometry out of the archive
+renders; the cockpit itself does not. Conformance: **38/38** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
@@ -269,7 +269,7 @@ python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE00
 python tools/tms340dis.py "$GF/Cockpit Software/R.BIN3_0" --skip 8 --base 0xFE000000     --count 20000 --validate
 ```
 
-95% of the code segment is recognised, and 963 of 971 call and branch targets
+98% of the code segment is recognised, and 963 of 971 call and branch targets
 land inside the image, which is the check that it is in sync rather than
 confidently wrong. `--segments` shows the scatter-load layout; `--code`
 disassembles only the segment that holds code.
@@ -280,6 +280,32 @@ disassembles only the segment that holds code.
 python tools/resmap.py "$GF/Cockpit Software/battletech_ti_res"
 python tools/resmap.py "$GF/Cockpit Software/battletech_ti_res" --dump 11
 ```
+
+**Read a 3D model.** A type 1 resource is not a mesh, it is a threaded program
+of 45 opcodes; `model.py` runs it and collects the vertices, polygons and
+materials it draws:
+
+```
+python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --stats
+python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --id 24
+python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --id 24 --obj out/m24.obj
+```
+
+`--stats` runs all 130 and reports the checks the data itself provides — every
+model carries a bounding box its vertices have to reproduce, which is what
+makes a wrong decode fail loudly instead of quietly.
+
+**Draw one:**
+
+```
+python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --id 30 --out out/mesa.png
+```
+
+Z-buffered flat-shaded triangles at the pod's own 480x360, written as a PNG
+with nothing but the standard library. Model 30 comes out as one of the terrain
+mesas that stand behind the mechs in the period footage. See
+[RENDERING.md](RENDERING.md) for what the pod looked like and why flat shading
+is the right target.
 
 **Extract Macintosh resources** (the operator console's code lives in them):
 
@@ -317,7 +343,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 30/30). Skips with a clear message if no
+reporting a pass count (currently 38/38). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile
