@@ -199,8 +199,37 @@ def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png", shadow=True)
         for k in range(1, len(flat) - 1):       # fan, so quads work too
             frame.triangle(flat[0], flat[k], flat[k + 1], colour)
         drawn += 1
+    # A model's lights and markers: $200 puts one pixel at a vertex, $280 and
+    # $2A0 a marker whose size is a world measurement the renderer scales by
+    # distance. Drawn after the polygons and unlit, because they are emissive.
+    lit = 0
+    for vi, size, mat in m.points:
+        if vi not in cam:
+            continue
+        p = project(cam[vi], w, h)
+        if p is None:
+            continue
+        rgb = m.mat.get(mat, (0, 1.0, 1.0, 0.8, 0.5))[1:4]
+        colour = tuple(min(255, int(255 * c)) for c in rgb)
+        r = max(0, int(size * (w / 2) / math.tan(0.95 / 2) / max(p[2], 1e-3) / 2))
+        r = min(r, 24)
+        # A light sits on the surface it belongs to, so it is coplanar with the
+        # polygon underneath and loses a straight depth test. Pull it a hair
+        # toward the camera rather than widen the test.
+        z = p[2] * 0.998
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                x, y = int(p[0]) + dx, int(p[1]) + dy
+                if 0 <= x < w and 0 <= y < h:
+                    i = y * w + x
+                    if z <= frame.z[i]:
+                        frame.z[i] = z
+                        frame.px[i*3:i*3+3] = bytes(colour)
+        lit += 1
+
     png(out, w, h, frame.px)
-    print("%s: %dx%d, %d polygons drawn of %d" % (out, w, h, drawn, len(m.poly)))
+    print("%s: %dx%d, %d polygons and %d lights drawn"
+          % (out, w, h, drawn, lit))
 
 
 def selftest():
@@ -257,8 +286,8 @@ def main(argv):
                 if best is None or len(cand.poly) > len(best.poly):
                     best = cand
         m = best
-        print("model %d: %d vertices, %d polygons, %d materials%s"
-              % (rid, len(m.vert), len(m.poly), len(m.mat),
+        print("model %d: %d vertices, %d polygons, %d materials, %d points%s"
+              % (rid, len(m.vert), len(m.poly), len(m.mat), len(m.points),
                  "" if m.box_matches() else "  (box check does NOT pass)"))
         if not m.poly:
             print("nothing to draw - the walk stopped at %s" % m.stopped)

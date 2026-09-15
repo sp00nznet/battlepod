@@ -196,6 +196,29 @@ little *larger* than what we decode, `-7.80..10.50` against a header of
 opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
 `$2A0` are measured but never interpreted, and they are the obvious suspects.
 
+### Lights
+
+Four opcodes draw something other than a polygon, and all four gate on
+visibility first:
+
+| opcode | what it draws |
+|---|---|
+| `$200` | one pixel at a vertex, via `PIXT` — gated on the face facing |
+| `$220` | a rectangle filled between two corners — `RPIX` then `FILL` |
+| `$280`, `$2A0` | a marker at a vertex, sized by a world measurement the handler streams to the coprocessor to scale by distance |
+
+`$200` takes a face, a vertex and a material; `$280`/`$2A0` take a vertex, that
+size as an inline float, and a material. Model 112 is the proof the reading is
+right: **92 `$200` points, every one of them on material 2** — which is `kind 0`
+and `1.00, 0.80, 0.50`, a warm amber — while its 25 polygons use material 1, a
+flat grey. A dark structure with ninety-two lights on it. Model 84 shows the
+other form, eleven markers at real sizes from 0.1 to 0.37 across five
+materials.
+
+`render.py` draws them unlit, since they are emissive, and biases them a hair
+toward the camera: a light sits *on* the surface it belongs to, so it is
+coplanar with the polygon underneath and loses a straight depth test.
+
 ### Models draw other models
 
 `$460` takes a resource id and runs *that* model in place:

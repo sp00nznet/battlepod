@@ -71,6 +71,7 @@ class Model:
         # that use $460 already span their box without the sub-model's.
         self.archive, self.depth = archive, depth
         self.subs = []          # resource ids drawn by $460
+        self.points = []        # (vertex, size, material) - lights and markers
         # "all" collects everything the model can draw, which is what the
         # checks want. A picture wants one level of detail instead, because
         # stacking them puts the near and far versions in the same frame -
@@ -206,6 +207,18 @@ class Model:
                             at = self.target(self.w[end])
                             continue
                         at = end + 1
+                    elif op == 0x200:
+                        # one pixel at a vertex, gated on the face facing:
+                        # face, vertex, material
+                        self.points.append((self.w[at + 1], 0.0, self.w[at + 2]))
+                        at += 3
+                    elif op in (0x280, 0x2A0):
+                        # a sized marker at a vertex - the running lights. The
+                        # size is a float the handler streams to the FPU to be
+                        # scaled by distance: vertex, size, material.
+                        self.points.append((self.w[at], f32(self.w[at + 1]),
+                                            self.w[at + 2]))
+                        at += 3
                     elif op == 0x460:           # draw another model here
                         self.submodel(self.w[at + 2])
                         at += 3
@@ -278,6 +291,8 @@ class Model:
             self.vert[base + k] = v
         for k, v in sub.mat.items():
             self.mat[moff + k] = v
+        for vi, size, mi in sub.points:
+            self.points.append((base + vi, size, moff + mi))
         for f, vs, mi in sub.poly:
             self.poly.append((f, [base + v for v in vs], moff + mi))
 
@@ -497,8 +512,8 @@ def main(argv):
               % (m.nvert, m.nnorm, m.nface, m.nnode, m.nmat))
         print("  box x %.2f..%.2f  y %.2f..%.2f  z %.2f..%.2f  radius %.3f"
               % tuple(m.box))
-        print("  decoded %d vertices, %d polygons, %d materials"
-              % (len(m.vert), len(m.poly), len(m.mat)))
+        print("  decoded %d vertices, %d polygons, %d materials, %d points"
+              % (len(m.vert), len(m.poly), len(m.mat), len(m.points)))
         print("  box check: %s   indices: %s"
               % ("matches" if m.box_matches() else "NO",
                  "sane" if m.indices_sane() else "NO"))

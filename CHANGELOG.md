@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The four draw opcodes that are not polygons.** `$200` puts one pixel at a
+  vertex through `PIXT`; `$220` fills a rectangle between two corners;
+  `$280`/`$2A0` draw a marker whose size is a world measurement the handler
+  streams to the coprocessor to be scaled by distance. `model.py` collects the
+  point forms and `render.py` draws them, unlit and biased a hair toward the
+  camera - a light is coplanar with the surface it sits on and loses a straight
+  depth test.
+- Model 112 is the evidence the operand reading is right: **92 `$200` points,
+  every one on material 2** - `kind 0`, rgb `1.00, 0.80, 0.50`, a warm amber -
+  against 25 polygons on a flat grey. A dark structure with ninety-two lights.
+  Model 84 shows the sized form, eleven markers from 0.1 to 0.37.
+
 - **`$460` draws another model by resource id** - models nest. Twenty-two use
   it, and `516`/`517` draw `501`-`505` and `511`-`515`, exactly the mech part
   sets the bounding boxes had already paired off, which makes them the only two
