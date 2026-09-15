@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The TMS34082's command word, and the first coprocessor routine running.**
+  The 32 bits after a `CMOV*`/`CEXEC` opcode are the coprocessor's instruction:
+  `ID | ra | rb | rd | md | fpuop`. The `md` field needs no guessing - all nine
+  commands R.BIN issues during a render agree with it, each matching the mode
+  its TMS34020 instruction implies. **Mode 3 selects a routine from the '82's
+  internal ROM**, about 160 of them documented, which is what changes the size
+  of this job: the arithmetic is documented silicon, not microcode to reverse.
+- `CEXEC $D800` decodes as `SCALE` - the perspective divide and viewport
+  transform - and now runs. A render walk reports one routine executed and
+  **one still unidentified**, named rather than guessed.
+- `MCADDR` is written before the draw, so the renderer points the coprocessor
+  at something first.
+
 - **The renderer accepts a display list and walks it.** `tms340run.py --render`
   builds one from the format in DEVICES.md and drives R.BIN at it directly,
   which is the only way to see the renderer draw: the 68020 only builds a list
@@ -134,6 +147,9 @@ All notable changes to this project are documented here. The format follows
 - Reaching the diagnostic monitor by patching an `RTS` over the game
   initialisation also disabled menu item `y - START TEST GAME`, which calls
   that same function. Patching the call site instead leaves both working.
+- `BTST K, Rd` occupies the whole of `0x1C00`-`0x1FFF`, five bits of constant -
+  it was decoded as a two-register form, so a quarter of the block was
+  unrecognised. Code segment recognition 97% -> **98%**.
 - `SUBI IW` is `0x0BE0`, not `0x0CE0`.
 - `DSJ` and `DSJS` printed targets with no load base, and `DSJS` measured its
   displacement from its own address rather than the next instruction. Branch

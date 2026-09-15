@@ -54,7 +54,9 @@ class Machine:
         self.pixels = 0
         self.unknown = {}
         self.skip_unknown = 0
-        self.cop = {}           # TMS34082 coprocessor registers, by command
+        self.fpu = [0] * 32     # the TMS34082's register file
+        self.fpu_ran = {}       # coprocessor routines this run executed
+        self.fpu_missing = {}   # and the ones it could not
         self.copcmds = {}       # which commands the run actually issued
         self.copn = 0
         self.conv = {}          # what SETCSP/SETCDP/SETCMP last latched
@@ -173,6 +175,22 @@ class Machine:
         self.blits += 1
         self.pixels += dy * dx
 
+    def fpu_exec(self, cmd):
+        """Run a coprocessor operation, or say which one is missing.
+
+        Mode 3 names a routine in the '82's internal ROM, so this is ordinary
+        floating-point arithmetic and not microcode somebody would have to
+        emulate. Only the routines actually identified are run; anything else
+        is counted and named, because faking one would put numbers on the
+        screen that no cockpit ever produced.
+        """
+        md, fpuop = (cmd >> 14) & 3, (cmd >> 8) & 0x3F
+        if md == MD_ROM and fpuop in FPU_ROM:
+            FPU_ROM[fpuop][1](self.fpu)
+            self.fpu_ran[fpuop] = self.fpu_ran.get(fpuop, 0) + 1
+        else:
+            self.fpu_missing[(md, fpuop)] = self.fpu_missing.get((md, fpuop), 0) + 1
+
     def rl(self, addr):
         return self.field_read(addr, 32)
 
@@ -216,6 +234,56 @@ class Machine:
 # PIXBLT source and destination forms, and FILL. All bare - see Machine.blit.
 BLIT = (0x0F00, 0x0F20, 0x0F40, 0x0F60, 0x0F80, 0x0FA0, 0x0FC0, 0x0FE0)
 PIXT = (0xF000, 0xF200, 0xF400, 0xF800, 0xFA00, 0xFC00)
+
+# ---------------------------------------------------------------------------
+# The TMS34082 floating-point coprocessor.
+#
+# Its command word is the 32 bits following the '20's CMOV*/CEXEC opcode:
+#
+#   31-29 ID   28-25 ra   24-21 rb   20-16 rd   15-14 md   13-8 fpuop   7-0 ...
+#
+# The md field is the part that matters and it is not guesswork: every one of
+# the nine commands R.BIN issues during a render agrees with it - the three
+# CMOVGCs read 01, the four memory moves read 10, the two CEXECs read 11, and
+# those are exactly the modes the TMS34020 instructions they belong to imply.
+# The low byte carries the other GSP register the '20 opcode had no room for.
+#
+# Register file, from the handbook's Table 4-3.
+FPU_REGS = (["RA%d" % i for i in range(10)] + ["C", "CT", "STATUS", "CONFIG",
+            "COUNTX", "COUNTY"] + ["RB%d" % i for i in range(10)] +
+            ["VECTOR", "MCADDR", "SUBADD0", "SUBADD1"])
+RA0, C_REG, CT_REG, RB0 = 0, 10, 11, 16
+
+MD_EXEC, MD_REG, MD_MEM, MD_ROM = 0, 1, 2, 3
+
+
+def f2b(x):
+    return struct.unpack(">I", struct.pack(">f", x))[0]
+
+
+def b2f(v):
+    return struct.unpack(">f", struct.pack(">I", v & 0xFFFFFFFF))[0]
+
+
+def fpu_scale(r):
+    """SCALE: the perspective divide and viewport transform, from the
+    handbook's own algorithm listing.
+
+        RA0 = (X1/W1) * Sx + Cx      with X1..W1 in RA0..RA3,
+        RA1 = (Y1/W1) * Sy + Cy           Sx,Sy,Sz in RA7..RA9,
+        RA2 = (Z1/W1) * Sz + Cz           Cx,Cy,Cz in RB7..RB9
+    """
+    w = b2f(r[RA0 + 3])
+    if w == 0.0:
+        return
+    for i in range(3):
+        v = b2f(r[RA0 + i]) / w
+        r[RA0 + i] = f2b(v * b2f(r[RA0 + 7 + i]) + b2f(r[RB0 + 7 + i]))
+    r[CT_REG] = r[RA0 + 3]
+
+
+FPU_ROM = {0x018: ("SCALE", fpu_scale)}
+
 
 COPNAME = {0x0600: "CEXEC", 0x0620: "CMOVGC", 0x0640: "CMOVGC", 0x0660: "CMOVCG",
            0x0680: "CMOVMC", 0x06A0: "CMOVCM", 0x06C0: "CMOVCS", 0x06E0: "CMOVMC",
@@ -623,8 +691,13 @@ def run(m, steps, trace, brk=None):
             continue
 
         # two-register arithmetic that is not plain add or move
+        # BTST K, Rd is 0001 11KK KKKR DDDD, so the whole 0x1C00-0x1FFF block
+        # is one instruction with a five-bit constant - not a two-register form.
+        if op & 0xFC00 == 0x1C00:
+            m.z = 0 if m.reg(f, rd) & (1 << ((op >> 5) & 0x1F)) else 1
+            continue
         if op & 0xFE00 in (0x4200, 0x4600, 0x5800, 0x5A00, 0x5C00, 0x5E00,
-                           0x6C00, 0x6E00, 0x1C00):
+                           0x6C00, 0x6E00, 0x4A00):
             a, bb, base = m.reg(f, rd), m.reg(f, rs), op & 0xFE00
             if base == 0x4200:
                 r = a + bb + m.c
@@ -636,7 +709,7 @@ def run(m, steps, trace, brk=None):
                 r = s32(a) * s32(bb) if base == 0x5C00 else a * bb
             elif base in (0x6C00, 0x6E00):
                 r = 0 if bb == 0 else (s32(a) % s32(bb) if base == 0x6C00 else a % bb)
-            else:                                               # BTST
+            else:                                               # BTST Rs,Rd
                 m.z = 0 if a & (1 << (bb & 31)) else 1
                 continue
             m.setreg(f, rd, m.flags(r))
@@ -720,21 +793,35 @@ def run(m, steps, trace, brk=None):
         # in when the geometry path is the thing being chased.
         if op & 0xFC00 == 0xD800:               # CEXEC, short form: two words
             cmd = (op & 0x3FF) << 16 | m.fetch()
+            m.fpu_exec(cmd)
             m.copn += 1
             m.copcmds[(0x0600, cmd)] = m.copcmds.get((0x0600, cmd), 0) + 1
             continue
         if op & 0xFFE0 in COPROC:
             cmd = m.fetchl()
-            # Only the register forms are modelled at all. The *Rs+ forms
-            # carry their transfer count in the low five bits and their pointer
-            # in the command word, and moving memory into an FPU that does not
-            # exist here would be theatre.
-            if op & 0xFFE0 in (0x0620, 0x0640):                 # to the FPU
-                m.cop[cmd & 0xFFFF] = m.reg(f, rd)
-            elif op & 0xFFE0 == 0x0660:                         # back from it
-                m.setreg(f, rd, m.cop.get(cmd & 0xFFFF, 0))
+            base = op & 0xFFE0
+            crd, other = (cmd >> 16) & 0x1F, cmd & 0x1F
             m.copn += 1
-            m.copcmds[(op & 0xFFE0, cmd)] = m.copcmds.get((op & 0xFFE0, cmd), 0) + 1
+            m.copcmds[(base, cmd)] = m.copcmds.get((base, cmd), 0) + 1
+            if base in (0x0620, 0x0640):                # GSP registers -> FPU
+                m.fpu[crd] = m.reg(f, rd)
+                if base == 0x0640:                      # the two-register form
+                    m.fpu[(crd + 1) & 0x1F] = m.reg(f, other)
+            elif base == 0x0660:                        # FPU -> GSP register
+                m.setreg(f, rd, m.fpu[crd])
+            elif base == 0x06A0:                        # FPU -> memory
+                a = m.reg(f, rd)
+                for i in range(max(1, other)):
+                    m.wl(a + i * 32, m.fpu[(crd + i) & 0x1F])
+                m.setreg(f, rd, a + max(1, other) * 32)
+            elif base in (0x0680, 0x06E0, 0x0820):      # memory -> FPU
+                count = op & 0x1F if base in (0x0680, 0x0820) else m.reg(f, rd)
+                a = m.reg(f, other)
+                for i in range(count):
+                    m.fpu[(crd + i) & 0x1F] = m.rl(a + i * 32)
+                m.setreg(f, other, a + count * 32)
+            elif base == 0x0600:                        # CEXEC
+                m.fpu_exec(cmd)
             continue
 
         # SETCDP/SETCSP/SETCMP recompute the cached pitch conversions the XY
@@ -831,8 +918,7 @@ def main(argv):
     if m.blits or m.pixels:
         print("%d blits, %d pixels written" % (m.blits, m.pixels))
     if m.copn:
-        print("%d coprocessor instructions, %d registers written"
-              % (m.copn, len(m.cop)))
+        print("%d coprocessor instructions" % m.copn)
     print("pc $%08X  sp $%08X" % (m.pc, m.a[15]))
     if m.hist:
         print("\nbusiest addresses:")
@@ -855,6 +941,7 @@ def main(argv):
         if m.hist is not None:
             m.hist = {}
         m.copcmds, m.blits, m.pixels = {}, 0, 0
+        m.fpu_ran, m.fpu_missing = {}, {}
         m.halted = None
         m.a[15] = opt("--sp", 0xFE034DC0)
         m.a[15] -= 32
@@ -870,6 +957,14 @@ def main(argv):
                   % " ".join("$%04X x%d" % kv for kv in sorted(m.unknown.items())))
         if m.blits or m.pixels:
             print("%d blits, %d pixels written" % (m.blits, m.pixels))
+        if m.fpu_ran:
+            print("coprocessor routines run: %s"
+                  % " ".join("%s x%d" % (FPU_ROM[k][0], v)
+                             for k, v in sorted(m.fpu_ran.items())))
+        if m.fpu_missing:
+            print("coprocessor routines still missing: %s"
+                  % " ".join("mode %d fpuop $%02X x%d" % (k[0], k[1], v)
+                             for k, v in sorted(m.fpu_missing.items())))
         if m.copcmds:
             print("coprocessor commands this walk needed: %d distinct, %d issued"
                   % (len(m.copcmds), sum(m.copcmds.values())))

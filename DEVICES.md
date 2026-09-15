@@ -1076,8 +1076,57 @@ CMOVGC  $00044D0D x1     CMOVCM  $00008F03 x1
 ```
 
 Eight of those are register and memory transfers. Only two are operations —
-`CEXEC $E000` and `CEXEC $D800`. That is the size of the TMS34082 work needed
-to get a first frame, and it is nothing like the whole part.
+`CEXEC $E000` and `CEXEC $D800`.
+
+### The TMS34082 command word
+
+The 32 bits after a `CMOV*`/`CEXEC` opcode are the coprocessor's instruction
+word, and the TMS34082 Designer's Handbook (1991) gives its fields:
+
+```
+31-29 ID   28-25 ra   24-21 rb   20-16 rd   15-14 md   13-8 fpuop   7-0 ...
+```
+
+`md` is the field that matters and it needs no guessing: **every one of the
+nine commands R.BIN issues during a render agrees with it.** The three
+`CMOVGC`s read `01`, the four memory moves read `10`, the two `CEXEC`s read
+`11` — which are exactly the modes the TMS34020 instructions carrying them
+imply. The low byte holds the other GSP register the '20's own opcode had no
+room for. The register file is the handbook's Table 4-3: `RA0`–`RA9`, `C`,
+`CT`, `STATUS`, `CONFIG`, `COUNTX`, `COUNTY`, `RB0`–`RB9`, `VECTOR`, `MCADDR`,
+`SUBADD0`, `SUBADD1`.
+
+Two things follow. `CMOVGC A12, $001B4C00` writes register `0x1B` — `MCADDR`,
+the indirect address register — with `$00010007`, so the renderer points the
+coprocessor at something before it runs. And **mode 3 selects a routine from
+the '82's internal ROM**, of which the handbook lists about 160. That is the
+finding that changes the size of the job: the arithmetic the renderer needs is
+*documented silicon*, not microcode somebody would have to reverse.
+
+`CEXEC $0000D800` decodes as mode 3, fpuop `$18` — **`SCALE`, "scale and
+convert coordinates for viewport"**, whose algorithm the handbook gives in
+full:
+
+```
+RA0..RA3 = X, Y, Z, W      RA7..RA9 = Sx, Sy, Sz     RB7..RB9 = Cx, Cy, Cz
+X' = (X/W) * Sx + Cx       Y' = (Y/W) * Sy + Cy      Z' = (Z/W) * Sz + Cz
+```
+
+The perspective divide and viewport transform, in exactly the place a renderer
+does them. `tools/tms340run.py` implements it, and a render walk now reports:
+
+```
+coprocessor routines run: SCALE x1
+coprocessor routines still missing: mode 3 fpuop $20 x1
+```
+
+**One routine left unidentified.** Table 7-1 reads `$020` as an integer `MOVE`,
+which does not fit what the calling code does — it loads six values into
+`RA0`–`RA5` and reads two back from `RB7` — so the `type` and `size` bits
+almost certainly compose into the ROM address as well, and that part of the
+scanned table is not legible enough to settle. It is named rather than guessed:
+a fabricated transform would put numbers on the screen no cockpit ever
+produced.
 
 `battlepod --rstub` decodes all of this the moment a render command arrives —
 records, matrix, item stream and the strings. Nothing in the release sends one
