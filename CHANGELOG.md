@@ -68,6 +68,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The renderer's main command loop at 0xFE006D80 decodes with no unknown words,
+  and is the same protocol already read off the 68020: status word four bytes
+  into the comm block, queue eight bytes in, 0xFFFFFFFF terminator, pi as the
+  ready signal. Its command dispatch table is at 0xFE028460, indexed by
+  opcode - 1, with handlers for opcodes 3 to 12; opcode 5 is load resource map.
+- Right shifts encode 32 minus the count, which the disassembler now accounts
+  for - it was printing SRL #29 where the firmware means SRL #3, the bit-address
+  to byte-address conversion.
 - The manual's absolute-move table is the least legible part of the scan and its
   load/store split contradicts the firmware. Settled from the data instead: all
   seven writes to the renderer state word use 0x0780, and 0x0580 writes the

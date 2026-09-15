@@ -184,6 +184,8 @@ def decode(s):
         m = KREG[op & 0xFC00]
         if m in ("ADDK", "SUBK") and k == 0:
             k = 32
+        elif m in ("SRA", "SRL", "RL"):
+            k = (32 - k) & 0x1F     # right shifts encode 32 minus the count
         return done("%-7s #%d, %s" % (m, k, regname(f, rd)))
     if op == 0x0D5F:
         return done("%-7s $%08X" % ("CALLA", s.long()))

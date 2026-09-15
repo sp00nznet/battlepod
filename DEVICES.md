@@ -380,6 +380,57 @@ Those forms are implemented; the rest of the group is left unrecognised rather
 than filled in from a reading that does not hold up. `0x0700` and `0x0740` were
 tried as loads, decoded to implausible addresses, and were removed.
 
+### The renderer's side of the command protocol
+
+Walking `R.BIN` from its entry reaches the renderer's main loop at
+`0xFE006D80`, and it decodes with **no unknown words at all**. It is the
+protocol already decoded from the 68020 side, seen from the other end:
+
+```
+FE006DD0  MOVE    *A1, A8, 1          ; A8 = the comm block
+FE006E20  SRL     #3, A2              ; bit address to byte address
+FE006E30  MOVE    A2, @$FFFFFDC0      ; publish it where the 68020 reads it
+FE006ED0  MOVE    A0, *A8(32), 1      ; status word = 0   (block + 4 bytes)
+FE006EF0  MOVI    #$31415926, A0
+FE006F20  MOVE    A0, @$FFFFFDE0      ; say hello
+wait:
+FE006F90  MOVE    *A8(32), A0, 1      ; poll the status word
+FE006FB0  JRNE    command
+FE006FF0  JRUC    wait
+command:
+FE007000  ADDI    #$0040, A8          ; the queue is block + 8 bytes
+FE007020  MOVE    *A8+, A0, 1         ; next command word
+FE007040  JRN     done                ; 0xFFFFFFFF terminates
+FE007050  DEC     A0
+FE0070A0  SLL     #5, A0              ; index by opcode - 1
+FE0070B0  ADDI    #$FE028460, A0      ; dispatch table
+FE0070E0  MOVE    *A0, A0, 1
+FE007100  CALL    A0
+```
+
+Every detail matches what was read off the 68020 months of guesswork ago: the
+status word four bytes into the block, the queue eight bytes in, `0xFFFFFFFF`
+as the terminator, and π as the ready signal.
+
+**The dispatch table at `0xFE028460`** is indexed by `opcode - 1`, 32 bits per
+entry, and holds handlers for opcodes 3 through 12:
+
+| opcode | handler |
+|---|---|
+| 3 | `$FE0072A0` |
+| 4 | `$FE0072D0` |
+| 5 | `$FE0073F0` — load resource map |
+| 6 | `$FE0074B0` |
+| 7 | `$FE0075A0` |
+| 8 | `$FE007630` |
+| 9 | `$FE0076E0` |
+| 10 | `$FE007780` |
+| 11 | `$FE007880` |
+| 12 | `$FE007980` |
+
+Entries for opcodes 1 and 2 are null, so reset and allocate are handled before
+the table is reached. Every handler decodes at 100%.
+
 ### The renderer's hardware init
 
 The first thing the entry calls is the renderer bringing up its own silicon, and
