@@ -171,13 +171,36 @@ header that says 246, 29 materials against 29, and reproduces its own stated
 bounding box. That box is the thing that makes this checkable at all — the
 model carries it, so a wrong vertex decode cannot fake it.
 
-**What is still open.** The box check lags the count check, 41 against 84, and
+**What the box actually spans**, since this took two goes to get right. It
+includes the **origin**: several models state a bound of exactly `0.0` on an
+axis no vertex reaches, which is what happens when a part has to keep its own
+pivot inside its box. And it spans **every value ever written to a vertex
+slot**, not only those left at the end — a model rewrites the same slots in
+each level of detail, so the set surviving a full walk belongs to no single
+one. Vertices alone match 41 of 84; plus the origin, 55; every write plus the
+origin, **63**.
+
+## Drawing it
+
+`tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,
+one directional light, a graded sky and a hazed ground, at the pod's own
+480x360. It writes a PNG, using nothing but the standard library.
+
+One thing it has to do that the checks do not: pick **one** level of detail.
+Walking every branch stacks the near and far versions of a model in the same
+frame, which renders as a solid lump. Which side of a branch carries the
+detailed geometry differs per model, so the renderer walks it both ways and
+keeps whichever drew more.
+
+The first geometry out of the archive is a **terrain mesa** — model 30, 81
+vertices and 132 polygons, and it is recognisably one of the buttes standing
+behind the mechs in the reference footage. That is the check that matters more
+than any count: the thing that comes out looks like the thing the pod drew.
+
+**What is still open.** The box check lags the count check, 63 against 84, and
 that gap is not explained. It is not the transforms: none of those 84 models
-executes a transform opcode. The likeliest reading is that walking every branch
-mixes levels of detail — each writes the same vertex slots with different
-values, so what is left at the end belongs to no single one of them. Taking the
-union of every value ever written lifts the check from 41 to 48, which says
-that is part of the story and not all of it.
+executes a transform opcode, and the origin and union rules above account for
+most of what was missing.
 
 Four model opcodes remain unmeasured — `$200`, `$220`, `$440`, `$460` — and
 they stop eight models between them.

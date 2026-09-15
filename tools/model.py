@@ -63,13 +63,22 @@ PREDICATE_GAP = ()
 class Model:
     """One type 1 resource, executed."""
 
-    def __init__(self, data):
+    def __init__(self, data, paths="all"):
+        # "all" collects everything the model can draw, which is what the
+        # checks want. A picture wants one level of detail instead, because
+        # stacking them puts the near and far versions in the same frame -
+        # so "fall" walks past every conditional branch and "take" walks
+        # through it. Which of those holds the detailed geometry differs
+        # per model, so the renderer tries both and keeps the fuller one.
+        self.paths = paths
+        self.allpaths = paths == "all"
         self.w = list(struct.unpack(">%dI" % (len(data) // 4), data[:len(data) // 4 * 4]))
         h = self.w
         self.nvert, self.nnorm, self.nface = h[0], h[1], h[2]
         self.nnode, self.nmat = h[3], h[6]
         self.box = [f32(x) for x in h[9:16]]
         self.vert = {}          # index -> (x, y, z), model space
+        self.written = []       # every value ever written to a slot
         self.poly = []          # (face, [vertex indices], material)
         self.mat = {}           # index -> (kind, p0, p1, p2, p3)
         self.parts = []         # sub-part tags pushed by $480
@@ -89,15 +98,19 @@ class Model:
     # computed from the operands, which is why this is an interpreter and not
     # a table.
 
+    def put(self, index, v):
+        self.vert[index] = v
+        self.written.append(v)
+
     def vertex(self, at, n):
         """$0A0 and $0C0: a vertex, or a run of them, as inline floats."""
         base = self.w[at]
         if n is None:                       # $0A0, one vertex
-            self.vert[base] = tuple(f32(self.w[at + 1 + i]) for i in range(3))
+            self.put(base, tuple(f32(self.w[at + 1 + i]) for i in range(3)))
             return at + 4
         for k in range(n):                  # $0C0, a run
             o = at + 2 + k * 3
-            self.vert[base + k] = tuple(f32(self.w[o + i]) for i in range(3))
+            self.put(base + k, tuple(f32(self.w[o + i]) for i in range(3)))
         return at + 2 + n * 3
 
     def polygon(self, at):
@@ -109,10 +122,15 @@ class Model:
         self.poly.append((face, list(verts), self.w[at + 2 + nv]))
         return at + 3 + nv
 
-    def material(self, at):
-        """$4C0 flat, $4E0 lit: index then four parameters, three a colour."""
+    def material(self, at, kind):
+        """$4C0 flat, $4E0 lit: index, then a colour and one more parameter.
+
+        Six longwords in all. The three floats are plainly red, green and blue;
+        the fourth is 0.5 in every record seen so far and is not identified.
+        """
         i = self.w[at]
-        self.mat[i] = tuple(self.w[at + 1 + k] for k in range(4))
+        rgb = tuple(f32(self.w[at + 1 + k]) for k in range(3))
+        self.mat[i] = (kind,) + rgb + (f32(self.w[at + 4]),)
         return at + 5
 
     def predicate(self, at):
@@ -175,7 +193,11 @@ class Model:
                     elif op in (0x320, 0x360):              # jump on a predicate
                         end = self.predicate(at)
                         self.jumps.append((op, self.w[end]))
-                        work.append(self.target(self.w[end]))
+                        if self.allpaths:
+                            work.append(self.target(self.w[end]))
+                        elif self.paths == "take":
+                            at = self.target(self.w[end])
+                            continue
                         at = end + 1
                     elif op == 0x420:
                         # evaluates a predicate and stores the answer in a
@@ -186,7 +208,11 @@ class Model:
                         at = self.target(self.w[at])
                     elif op in (0x300, 0x340):              # jump on face facing
                         self.jumps.append((op, self.w[at + 1]))
-                        work.append(self.target(self.w[at + 1]))
+                        if self.allpaths:
+                            work.append(self.target(self.w[at + 1]))
+                        elif self.paths == "take":
+                            at = self.target(self.w[at + 1])
+                            continue
                         at += 2
                     elif op == 0x0A0:
                         at = self.vertex(at, None)
@@ -195,7 +221,7 @@ class Model:
                     elif op in (0x240, 0x260):
                         at = self.polygon(at)
                     elif op in (0x4C0, 0x4E0):
-                        at = self.material(at)
+                        at = self.material(at, 0 if op == 0x4C0 else 1)
                     elif op == 0x160:
                         # index, count, then three floats per item. The handler
                         # streams them with CMOVMC through A0 and puts A0 back
@@ -230,10 +256,22 @@ class Model:
 
     # -- the checks ------------------------------------------------------
     def box_matches(self):
-        """The model's own bounding box against the vertices we decoded."""
-        if not self.vert:
+        """The model's own bounding box against the vertices we decoded.
+
+        Two things about what that box actually spans, both read off the data
+        rather than assumed. It includes the **origin** - several models state
+        a bound of exactly 0.0 on an axis where no vertex reaches it, which is
+        what you get when a part has to keep its own pivot inside its box. And
+        it spans **every value ever written to a vertex slot**, not just the
+        ones left at the end: a model writes the same slots again in each level
+        of detail, so the set surviving the walk belongs to no single one.
+
+        Vertices alone match 41 of 84; plus the origin, 55; every write plus
+        the origin, 63.
+        """
+        if not self.written:
             return False
-        vs = list(self.vert.values())
+        vs = self.written + [(0.0, 0.0, 0.0)]
         want = self.box
         for a in range(3):
             if abs(min(v[a] for v in vs) - want[a * 2]) > 1e-3:
@@ -361,7 +399,7 @@ def selftest():
     assert m.stopped is None, m.stopped
     assert len(m.vert) == 3 and m.vert[2] == tri[2], m.vert
     assert m.poly == [(0, [0, 1, 2], 0)], m.poly
-    assert m.mat[0][0] == 0x3F800000
+    assert m.mat[0] == (1, 1.0, 0.5, 0.0, 0.5), m.mat[0]
     assert m.box_matches(), "the box check must pass on a model we built"
     assert m.indices_sane()
 

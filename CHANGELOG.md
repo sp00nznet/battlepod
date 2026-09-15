@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/render.py` — the first geometry drawn out of the archive.**
+  Z-buffered flat-shaded triangles, one directional light, a graded sky and a
+  hazed ground, at the pod's own 480x360, written as a PNG with nothing but the
+  standard library. Model 30 comes out as a **terrain mesa**, recognisably one
+  of the buttes standing behind the mechs in the reference footage - which is a
+  better check than any count, because the thing that comes out looks like the
+  thing the pod drew.
+- A model has to be walked down **one** level of detail to be drawn: taking
+  every branch stacks the near and far versions in one frame and renders as a
+  lump. Which side carries the detail differs per model, so the renderer tries
+  both and keeps the fuller one.
+- **What the model's bounding box actually spans**: the vertices *and the
+  origin* - several models bound an axis at exactly `0.0` where no vertex
+  reaches, which is a part keeping its own pivot inside its box - and *every
+  value ever written to a vertex slot*, not just the survivors, because each
+  level of detail rewrites the same slots. Vertices alone matched 41 of 84;
+  plus the origin, 55; every write plus the origin, **63**. Archive-wide the
+  box check goes 41 -> **63** of 130.
+
 - **`tools/model.py` — the model format, and a tool that runs it.** A type 1
   resource is not a mesh but a **threaded program** of 45 opcodes, the same
   design as the display list, run by the renderer at `0xFE00EDB0` against a
