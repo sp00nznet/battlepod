@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The bounding-box gap measured properly, and both explanations for it were
+  wrong.** The claim in ROADMAP.md was that the failures all sit *inside* the
+  stated box, from an authoring tool computing it over a pre-decimation mesh.
+  Across all 31 rather than the handful that had been eyeballed, **27 poke
+  outside it**. Rounding the decoded box outward does not reproduce the header
+  either, at any granularity from 0.05 to 1.0.
+- What is true is that the misses are small. Allowing any of the eight
+  reflections: **89 exact, 105 within 2% of the model's own size, 117 within
+  10%**, with three worse than that. `--stats` reports the 2% and 10% figures
+  beside the strict one and the harness guards the 2% number, which takes it to
+  **39/39** checkpoints.
+
 - **The four draw opcodes that are not polygons.** `$200` puts one pixel at a
   vertex through `PIXT`; `$220` fills a rectangle between two corners;
   `$280`/`$2A0` draw a marker whose size is a world measurement the handler

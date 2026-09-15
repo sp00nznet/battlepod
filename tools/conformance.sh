@@ -148,6 +148,7 @@ if [ -f "$TI_RES" ]; then
     check_at_least "stream walks to a return"        130
     check_at_least "vertex count matches the header" 120
     check_at_least "vertices reproduce the box"      84
+    check_at_least "box within 2% of the model size" 105
     check_at_least "material count matches"          56
 fi
 

@@ -55,11 +55,27 @@ running lights and panel glow on a mech. All four are measured and gated on
 visibility; none is interpreted, so `render.py` draws a model's polygons but
 not its lights.
 
-**The bounding-box gap.** 120 models decode the right number of vertices and 84
-reproduce their stated box. The failures are all *inside* the stated box, which
-is what you would see if the box was computed by the authoring tool over a mesh
-that was decimated before it reached the file. If that is right the gap is a
-ceiling and not a bug, and saying so with evidence would close it.
+**The bounding-box gap**, which turned out not to be the thing this file
+previously said it was. The claim here was that the failures all sit *inside*
+the stated box, consistent with the box having been computed over a mesh that
+was decimated before it reached the file. Measured across all 31 rather than
+the handful that had been eyeballed, **27 of them poke outside it** — the
+opposite. Rounding does not explain it either.
+
+What does explain it is that the misses are *small*. Allowing any of the eight
+reflections and measuring the error against the model's own size:
+
+```
+  exact                 89 of 120
+  within 0.5% of span   91
+  within 2% of span    105
+  within 10% of span   117
+```
+
+Three models are worse than 10% and the worst is 50%. So the decode is right
+and something quantises or nudges the extremes — a plausible last step in an
+authoring tool, but not yet evidenced. `--stats` reports the 2% and 10% figures
+alongside the strict one, and the harness guards the 2% number.
 
 ## Blocked, and on what
 

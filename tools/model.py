@@ -339,6 +339,30 @@ class Model:
                 return False
         return True
 
+    def box_error(self):
+        """How far the decoded extent misses the stated box, as a fraction of
+        the model's own size, taking the best of the eight reflections.
+
+        The strict check above answers "is this exactly right". This answers
+        "how wrong is it", which turns out to be the more useful question: the
+        misses are mostly a percent or two, not a broken decode.
+        """
+        if not self.written:
+            return 1e9
+        bb = self.box
+        span = max(bb[1] - bb[0], bb[3] - bb[2], bb[5] - bb[4]) or 1.0
+        base = self.written + [(0.0, 0.0, 0.0)]
+        best = 1e9
+        for sx in (1, -1):
+            for sy in (1, -1):
+                for sz in (1, -1):
+                    vs = [(x * sx, y * sy, z * sz) for x, y, z in base]
+                    err = max(max(abs(min(v[a] for v in vs) - bb[a * 2]),
+                                  abs(max(v[a] for v in vs) - bb[a * 2 + 1]))
+                              for a in range(3))
+                    best = min(best, err)
+        return best / span
+
     def indices_sane(self):
         for face, verts, mat in self.poly:
             if face >= max(1, self.nface) or mat >= max(1, self.nmat):
@@ -422,6 +446,7 @@ def obj(m, path):
 def stats(blob):
     models = [(rid, d) for rid, t, d in walk(blob) if t == 1]
     first_ok = boxes = sane = clean = counts = mats = mirrored = 0
+    near2 = near10 = 0
     stops, lost = {}, {}
     for rid, data in models:
         m = Model(data)
@@ -432,6 +457,10 @@ def stats(blob):
         mirrored += m.box_matches_mirrored() and not m.box_matches()
         sane += m.indices_sane()
         counts += len(m.vert) == m.nvert and m.nvert > 0
+        if len(m.vert) == m.nvert and m.nvert:
+            e = m.box_error()
+            near2 += e < 0.02
+            near10 += e < 0.10
         mats += len(m.mat) == m.nmat and m.nmat > 0
         if m.stopped:
             key = m.stopped.split(" at ")[0]
@@ -445,6 +474,8 @@ def stats(blob):
     print("  vertex count matches the header: %3d / %d" % (counts, n))
     print("  vertices reproduce the box     : %3d / %d" % (boxes, n))
     print("  and the same with x mirrored   : %3d / %d" % (mirrored, n))
+    print("  box within 2%% of the model size: %3d / %d" % (near2, n))
+    print("  box within 10%% of the model size:%3d / %d" % (near10, n))
     print("  material count matches         : %3d / %d" % (mats, n))
     print("  face and material indices sane : %3d / %d" % (sane, n))
     if stops:

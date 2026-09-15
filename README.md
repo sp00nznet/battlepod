@@ -12,7 +12,7 @@ find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Geometry out of the archive
-renders; the cockpit itself does not. Conformance: **38/38** checkpoints.
+renders; the cockpit itself does not. Conformance: **39/39** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed. Along the way it parses its resource archive and
@@ -343,7 +343,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 38/38). Skips with a clear message if no
+reporting a pass count (currently 39/39). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile
