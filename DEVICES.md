@@ -400,7 +400,14 @@ clears, and the renderer times out of its vertical-blank wait 500,000 times and
 restarts hardware initialisation — which is exactly the symptom that had been
 mistaken for a missing hardware poll.
 
-**Three instructions store the one's complement of their immediate.** `CMPI`,
+**Three instructions store the one's complement of their immediate**, and the
+best evidence for it is that fixing it made two halves of this project stop
+contradicting each other. The renderer's resource loader tests its flag word
+with what reads at face value as `BTST #27`; the archive format, decoded years
+apart from the 68020 side, says the flag is *bit 4*. Complemented, `~27 & 31`
+**is** 4. Two independent readings that disagreed now agree exactly.
+
+ `CMPI`,
 `SUBI` and `BTST` all carry the `IMMCOM` flag in TI's own assembler: it flips
 the value you wrote before encoding it, and the hardware flips it back. Read
 the encoding at face value and the renderer's command-loop bounds check comes
