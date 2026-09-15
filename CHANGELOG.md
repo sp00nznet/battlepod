@@ -11,7 +11,15 @@ All notable changes to this project are documented here. The format follows
 - `tools/tms340run.py`: an interpreter for the renderer's TMS34010 code. If
   R.BIN executes it draws its own frames, which would make the model format
   something the renderer reads rather than something that has to be decoded.
-  It currently reaches 13 instructions.
+  It runs 3,000,000 instructions without meeting an unknown opcode, brings up
+  the hardware, writes the on-chip I/O registers and clears the frame buffer -
+  262,144 writes to 0xA0000000.
+- A real bit-addressed memory model: fields are read and written at arbitrary
+  bit addresses across word boundaries, and SETF sets the size and
+  sign-extension per field. Every move uses the field its opcode selects.
+- Instruction coverage for MOVB, the immediate arithmetic forms, ADDK/SUBK,
+  CALLR, DSJ and DSJS, PUSHST/POPST/GETST/PUTST, MMTM/MMFM, the
+  single-register arithmetic, multiply, divide, modulo, BTST and CALL Rd.
 
 ### Fixed
 
@@ -88,10 +96,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
-- 0x0550, 0x0620, 0x0660 and 0x0740 are single-word instructions, not the
-  absolute moves previously guessed: the word following each is always a valid
-  MOVE opcode rather than the low half of an address. 0x0540 and 0x0740 differ
-  by exactly the field-select bit, which is SETF for field 0 and field 1.
+- SETF is encoded 0000 01F1 01FE SSSSS - field select in bit 9, sign-extend in
+  bit 5, size in the low five bits with zero meaning 32. 0x0550 and 0x0740 are
+  SETF; that much of the earlier reading holds.
+- 0x0620 and 0x0660 are three words, not one: that reading lands execution on
+  the stack-pointer setup, where treating them as one word leaves an
+  unexplained 0x000D mid-entry. Their effect is still unknown. Their operands
+  look like a table of globals 32 bits apart, but modelling them as absolute
+  loads changed nothing observable, so that guess was withdrawn rather than
+  kept.
 - The renderer's dispatch table base and indexing are confirmed independently:
   the only places in the image holding handler addresses are exactly
   0xFE028460 + (opcode - 1) * 32 for opcodes 3, 4 and 5. Opcode 4's handler

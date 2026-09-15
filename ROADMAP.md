@@ -56,17 +56,26 @@ the firmware. See [RENDERING.md](RENDERING.md).
 
 **Run the renderer rather than read it.** If `R.BIN` executes, it draws its own
 frames and the model format stops mattering - the renderer reads it for us.
-`tools/tms340run.py` is a start and reaches 13 instructions.
+`tools/tms340run.py` now runs **3,000,000 instructions without meeting an opcode
+it does not know**. It brings up the hardware, writes the on-chip I/O registers,
+and clears the frame buffer - 262,144 writes to `0xA0000000`.
 
-Being honest about the distance: an interpreter that *decodes* is not one that
-*draws*. Getting a picture needs three things this does not have. The
-bit-addressed memory model with real field sizes, which this deliberately
-ignores - it always moves 32 bits, and every `SETF` is discarded. The graphics
-instructions' semantics: `PIXBLT`, `FILL` and `LINE` are the ones that put
-pixels down, they take their operands from the B-file registers rather than the
-instruction, and decoding them was the easy half. And the on-chip I/O registers
-at `0xC0000000`, which the firmware programs before it draws anything. None of
-that is out of reach, but none of it is close either.
+One of the three things that was missing is now in: the bit-addressed memory
+model is real. Fields are read and written at arbitrary bit addresses across
+word boundaries, `SETF` sets the size and sign-extension per field, and every
+move uses the field its opcode selects.
+
+What is left:
+
+- **The graphics instructions.** `PIXBLT`, `FILL` and `LINE` take their
+  operands from the B-file registers rather than the instruction. They decode
+  but do nothing. These are what actually put pixels down.
+- **The on-chip I/O registers** at `0xC0000000`, which are written but not
+  modelled, so nothing reads back sensibly.
+- **`0x0620` and `0x0660`.** Their length is settled - three words - but not
+  their effect. 77 occurrences between them, and execution currently ends up in
+  a copy loop with a pointer that was never set, which is what an unmodelled
+  side effect looks like.
 
 **Work out the renderer's calling convention, then follow opcode 5.** The main
 loop and dispatch table are decoded and every handler reads at 100%, but the
