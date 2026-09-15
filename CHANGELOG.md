@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `--watch BASE:LEN` logs accesses inside a mapped region, which the unmapped
+  log cannot see. Pointed at a loaded resource it shows exactly which offsets
+  the firmware reads and from where.
 - The disassembler now decodes FPU instructions, following `--cpu`. The
   cockpit's geometry and physics code is dense in them and previously read as
   `dc.w $f2xx`.
@@ -59,6 +62,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The 68020 never reads inside a model. Watching the whole archive across a
+  complete boot shows reads only at offsets 0, 4, 8, 0x0B and 0x0C - the 16-byte
+  header - with every reading PC inside the resource-map builder. The model body
+  is parsed by the TMS340 code in R.BIN, so reading it means reading TMS340 code.
 - The 68020-side archive format: a kind directory, then per kind a binary-searched
   table of 16-byte records, with the record chain verifying to the last byte of
   the file. Kinds 0 and 1 hold shapes - a count then 26-byte elements of six

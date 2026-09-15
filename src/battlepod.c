@@ -66,6 +66,11 @@ static uint32_t g_vbr;		/* vector base; the pod's monitor puts it in RAM */
 static uint32_t g_vecfetch;	/* last vector-table read, mapped or not */
 static unsigned g_dis_cpu = M68K_CPU_TYPE_68040;  /* disassemble with the FPU decoded */
 
+/* --watch: log accesses inside a region that is mapped RAM, which the unmapped
+ * log never sees. Pointed at a loaded resource it shows which offsets the
+ * firmware actually reads, and from where. */
+static uint32_t g_watch_base, g_watch_len;
+
 /* MC68681 DUART, the cockpit's two serial ports. Register N sits at BASE+N*2,
  * channel A at registers 0-7 and channel B at 8-15, which is how the ROM's
  * driver addresses it:
@@ -575,6 +580,7 @@ unsigned int m68k_read_memory_8(unsigned int a)
 {
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	unsigned t;
+	if (g_watch_len && (a - g_watch_base) < g_watch_len) note(a, 1, 0, 0);
 	if (p) return p[a & (PAGE_SIZE - 1)];
 	note(a, 1, 0, 0);
 	if (duart_read(a, &t)) return t;
@@ -586,6 +592,7 @@ unsigned int m68k_read_memory_16(unsigned int a)
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	uint32_t o = a & (PAGE_SIZE - 1);
 	unsigned t;
+	if (g_watch_len && (a - g_watch_base) < g_watch_len) note(a, 2, 0, 0);
 	if (p && o <= PAGE_SIZE - 2) return ((unsigned)p[o] << 8) | p[o + 1];
 	if (!p && o <= PAGE_SIZE - 2) { note(a, 2, 0, 0); return poke_take(a, &t) ? (t & 0xFFFF) : (g_openbus & 0xFFFF); }
 	return (m68k_read_memory_8(a) << 8) | m68k_read_memory_8(a + 1);
@@ -597,6 +604,7 @@ unsigned int m68k_read_memory_32(unsigned int a)
 	uint32_t o = a & (PAGE_SIZE - 1);
 	unsigned t;
 	if ((a - g_vbr) < 0x400 && !(a & 3)) g_vecfetch = a;
+	if (g_watch_len && (a - g_watch_base) < g_watch_len) note(a, 4, 0, 0);
 	if (p && o <= PAGE_SIZE - 4)
 		return ((unsigned)p[o] << 24) | ((unsigned)p[o+1] << 16) |
 		       ((unsigned)p[o+2] << 8) | p[o+3];
@@ -1100,6 +1108,11 @@ int main(int argc, char **argv)
 				g_pkt[g_pktlen++] = (uint8_t)b;
 				h = e;
 			}
+		}
+		else if (!strcmp(a, "--watch") && i + 1 < argc) {
+			char *c;
+			g_watch_base = (uint32_t)strtoul(argv[++i], &c, 16);
+			g_watch_len = (*c == ':') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0x1000;
 		}
 		else if (!strcmp(a, "--monitor")) {
 			monitor_base = (i + 1 < argc && argv[i+1][0] != '-')

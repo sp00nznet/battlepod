@@ -310,7 +310,33 @@ clean one-to-one table. Its type 2 set is the same six ids at the same sizes,
 and ids 90 and 94 are byte-for-byte identical across both games, so those two
 are engine data rather than game content.
 
-### Inside a type 1 model — what is known and what is not
+### The 68020 never looks inside a model
+
+`--watch` logs accesses inside a *mapped* region, which the unmapped log cannot
+see. Pointed at the whole loaded archive across a complete boot, the answer is
+unambiguous:
+
+| offset read | times | reading PC |
+|---|---|---|
+| `+0x00` | 1672 | `0x0214D0F2` |
+| `+0x0C` | 1118 | `0x0214D156`, `0x0214D1DE` |
+| `+0x04` | 422 | `0x0214D172` |
+| `+0x08` | 418 | `0x0214D13C` |
+| `+0x0B` | 418 | `0x0214D122` |
+
+Nothing at all past offset 16, on any resource, of any type — and every reading
+PC sits inside the resource-map builder at `0x0214D0AC`. The 68020 walks the
+headers to build its map and never reads a byte of the bodies.
+
+So the type 1 model body is parsed by the TMS340 code in `R.BIN`, and no amount
+of 68k disassembly will reach it. Reading it means reading TMS340 code — 28 KB
+of it.
+
+One caveat: this boot never starts a game, so nothing is ever drawn. Whether the
+68020 reads model bodies while rendering cannot be settled from a boot alone.
+But it does not do so to load them.
+
+### What is known about a type 1 model
 
 Not much beyond the bounding volume, and it is worth being precise about why.
 

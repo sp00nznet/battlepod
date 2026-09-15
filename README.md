@@ -249,6 +249,7 @@ Run with no arguments for the full option list. The ones that matter:
 | `--ram BASE:LEN` | declare a RAM region (hex); repeatable |
 | `--trace N` | disassemble the first `N` instructions, marking unmapped accesses inline |
 | `--dis ADDR[:N]` | disassemble `N` instructions at `ADDR` and exit |
+| `--watch BASE:LEN` | also log accesses inside a mapped region, so a loaded resource shows which offsets get read and from where |
 | `--csv FILE` | write the full unmapped-access table |
 | `--cpu TYPE` | `68020` / `68030` / `68040` |
 

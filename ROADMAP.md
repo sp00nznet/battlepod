@@ -54,13 +54,15 @@ state. What is left is drawing it, and labelling which id is which instrument -
 a question for the operations manuals and the cockpit patent figures, not for
 the firmware. See [RENDERING.md](RENDERING.md).
 
-**Inside a type 1 model.** (The 68020-side archive is now fully decoded; what
-remains is the TI-side model body.) The archive format is decoded and type 1 is
-confirmed geometry, but the body past the bounding volume is variable-length and
-resists black-box analysis. The route in is the firmware's own loader - the code
-that turns resource bytes into the renderer's 32-byte solids - which is now
-readable since the disassembler decodes FPU instructions. This needs no network
-and no Macintosh.
+**A TMS340 disassembler.** This is now the single thing standing between the
+project and a picture on screen, and it is no longer a guess: watching the whole
+archive across a complete boot shows the 68020 reading only the 16-byte headers
+and never a byte of a model body. The parser is in `R.BIN` - 28 KB of TMS340
+code - so the geometry format cannot be reached from the 68k side at all.
+
+28 KB is small. The instruction set is documented, MAME has a core to check
+against, and the entry sequence is already decoded by hand in DEVICES.md. This
+needs no network, no Macintosh and no relocations.
 
 **The geometry is nearby.** The renderer code carries `Out of Solids...`,
 `Weird solid direction %f... shape %d`, `Suspect ARES data... shape %d` and
