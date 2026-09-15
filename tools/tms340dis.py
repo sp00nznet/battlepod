@@ -273,15 +273,18 @@ def main(argv):
     at = opt("--at", None)
 
     global LOAD_BASE
-    LOAD_BASE = base
-    start_word = skip // 2 if at is None else (at - base) // 16
+    # The 68020 uploads from file offset 8 to TI 0xFE000000 - its own log says
+    # "68K src 2ae0008 ... TI fe000000" - so the header is not part of the image
+    # and addresses must be measured from there, not from the start of the file.
+    LOAD_BASE = base - skip * 8
+    start_word = skip // 2 if at is None else (at - LOAD_BASE) // 16
     quiet = "--validate" in argv
-    limit = base + len(blob) * 8            # one past the image, as a bit address
+    limit = base + (len(blob) - skip) * 8   # one past the image, as a bit address
 
     s = Stream(blob, start_word)
     decoded = unknown = zeros = targets = inrange = 0
     for _ in range(count):
-        here = base + (s.at * 16)
+        here = LOAD_BASE + (s.at * 16)
         try:
             text, _ = decode(s)
         except IndexError:

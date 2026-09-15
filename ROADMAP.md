@@ -54,6 +54,20 @@ state. What is left is drawing it, and labelling which id is which instrument -
 a question for the operations manuals and the cockpit patent figures, not for
 the firmware. See [RENDERING.md](RENDERING.md).
 
+**Run the renderer rather than read it.** If `R.BIN` executes, it draws its own
+frames and the model format stops mattering - the renderer reads it for us.
+`tools/tms340run.py` is a start and reaches 13 instructions.
+
+Being honest about the distance: an interpreter that *decodes* is not one that
+*draws*. Getting a picture needs three things this does not have. The
+bit-addressed memory model with real field sizes, which this deliberately
+ignores - it always moves 32 bits, and every `SETF` is discarded. The graphics
+instructions' semantics: `PIXBLT`, `FILL` and `LINE` are the ones that put
+pixels down, they take their operands from the B-file registers rather than the
+instruction, and decoding them was the easy half. And the on-chip I/O registers
+at `0xC0000000`, which the firmware programs before it draws anything. None of
+that is out of reach, but none of it is close either.
+
 **Work out the renderer's calling convention, then follow opcode 5.** The main
 loop and dispatch table are decoded and every handler reads at 100%, but the
 handlers do not all take their arguments from the command queue - opcode 5's

@@ -6,7 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tools/tms340run.py`: an interpreter for the renderer's TMS34010 code. If
+  R.BIN executes it draws its own frames, which would make the model format
+  something the renderer reads rather than something that has to be decoded.
+  It currently reaches 13 instructions.
+
 ### Fixed
+
+- Every TI instruction address the disassembler printed was 0x40 bits too high:
+  the 8-byte file header was being counted as part of the image, when the
+  68020's upload log says file offset 8 is TI 0xFE000000. Building the
+  interpreter is what exposed it. `CALLA $FE000780` now lands on the first
+  instruction of the hardware-init routine instead of mid-data.
 
 - Relative branch and call targets were missing the image's load base, so every
   `JR`, `CALLR` and `DSJ` target the disassembler printed was wrong. Validation
@@ -75,6 +88,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- 0x0550, 0x0620, 0x0660 and 0x0740 are single-word instructions, not the
+  absolute moves previously guessed: the word following each is always a valid
+  MOVE opcode rather than the low half of an address. 0x0540 and 0x0740 differ
+  by exactly the field-select bit, which is SETF for field 0 and field 1.
 - The renderer's dispatch table base and indexing are confirmed independently:
   the only places in the image holding handler addresses are exactly
   0xFE028460 + (opcode - 1) * 32 for opcodes 3, 4 and 5. Opcode 4's handler

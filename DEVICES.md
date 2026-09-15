@@ -446,6 +446,23 @@ argument from the queue, so a register is carrying state in from the caller.
 That is the next thing to pin down, and it is what stands between here and the
 model format.
 
+### An address-frame correction
+
+Every TI address this document quoted from the disassembler was **0x40 bits too
+high**, and building an interpreter is what exposed it. The tool was measuring
+from the start of the file, but the 8-byte header is not part of the image: the
+68020's own upload log says `68K src 2ae0008 ... TI fe000000`, so file offset 8
+is `0xFE000000`.
+
+The proof is unambiguous. `CALLA $FE000780` used to land on `.word $FE00`, in
+the middle of nothing; with the frame corrected it lands exactly on
+`MOVI #$5007, A0`, the first instruction of the hardware-init routine. Both
+tools now measure from file offset `skip`.
+
+Addresses that came from *code operands* were never affected — they are
+absolute and were always right — so the dispatch table at `0xFE028460` and the
+resource offsets stand. What moved is the labelling of instruction addresses.
+
 ### The renderer's hardware init
 
 The first thing the entry calls is the renderer bringing up its own silicon, and
