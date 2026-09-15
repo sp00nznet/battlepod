@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **What the pod actually looked like, settled.** Not wireframe: the renderer's
+  code segment contains **zero `LINE` instructions**, and only ten of the
+  TMS34020's own block primitives against 517 coprocessor operations - so the
+  spans are written by hand, which is what shading requires because `FILL` does
+  one flat colour. The frame buffer is 480x360 at 16 bits per pixel. And VWE's
+  1994 press kit describes the cockpit then in development - the Tesla pod,
+  which is this release - as the one that "utilizes texture mapped graphics".
+  The mech art in the operations manuals is print illustration, not screen
+  capture. See RENDERING.md.
+
 ### Fixed
 
 - **`MOVE *Rs+, Rd` clobbered the value it loaded when the two registers were

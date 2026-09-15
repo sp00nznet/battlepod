@@ -10,6 +10,48 @@ The part numbers below come from VWE's own cockpit patent, WO 97/00106
 
 ---
 
+## What it is supposed to look like
+
+Worth settling early, because it sets the target and the obvious guess is
+wrong. **It is not wireframe.** Three independent lines say so.
+
+**The renderer's own code.** Disassembling the code segment and tallying what
+it calls:
+
+| instruction | count |
+|---|---|
+| `LINE` | **0** |
+| `FILL` | 1 |
+| `PIXBLT` | 1 |
+| `PIXT` | 8 |
+| `CEXEC` (coprocessor) | **517** |
+
+Zero `LINE` instructions in six thousand words of renderer. A wireframe engine
+is nothing *but* line draws. And with only ten of the '20's own block
+primitives in the whole image, the rasteriser is not using them either — the
+spans are written by hand, which is what you have to do for anything shaded,
+because `FILL` only does one flat colour. The work is in the 517 coprocessor
+operations.
+
+**The frame buffer.** `PSIZE` reads 16, so the pod runs **480x360 at 16 bits
+per pixel**. Nobody spends 16 bits a pixel on lines.
+
+**VWE's own words.** The 1994 press kit, describing what was coming next:
+
+> In addition, we look forward to introducing a new cockpit, which utilizes
+> **texture mapped graphics** (for greater realism) in the first half of 1995.
+
+That new cockpit is the Tesla pod — System 3.0, this release. So the target is
+texture-mapped solid 3D, and the asset patent agrees: US 5,710,878 names
+polygon meshes with vertex normals and materials with "Gouraud and Phong
+shading, texture, bump and environment mapping".
+
+The mech line art in the operations manuals and data supplements is print
+illustration, not screen capture; it is good reference for *shape* — MadCat,
+Vulture, Loki, Thor and the rest — and no guide at all to how they were drawn.
+
+---
+
 ## 1. The primary monitor — the 3D view
 
 **Hardware.** The 68020 builds a display list; a **TMS34020** rasterises it
