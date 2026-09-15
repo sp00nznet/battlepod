@@ -196,6 +196,42 @@ little *larger* than what we decode, `-7.80..10.50` against a header of
 opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
 `$2A0` are measured but never interpreted, and they are the obvious suspects.
 
+### Checking against something outside the project
+
+BattleTech's mechs are among the most drawn machines in science fiction, which
+makes them a check this project could not otherwise get: a self-consistent
+wrong decode can satisfy every internal test, but it cannot accidentally
+produce a shape the rest of the world already recognises.
+
+Rendered side-on, the high-id parts are unmistakable. **463** is a mech torso —
+a wedge with a dark slit across the front where the canopy goes and a second
+aperture on the flank. **466** is a weapon pod with a barrel protruding from a
+rounded housing. **465** is a boxy rack of the kind the Clan mechs in the data
+supplement carry on their shoulders. Those are BattleTech components, drawn
+from floats this project decoded out of an instruction stream.
+
+Their material tables read like paint schemes rather than like noise. Model 463
+declares nine: browns and reds for armour across 322 of its polygons, a dark
+grey, a **near-black with a blue cast** (`0.009, 0.008, 0.041`) on 17 — canopy
+glass — a **green** (`0.20, 0.60, 0.20`) on four, and a **bright yellow**
+(`0.975, 0.938, 0.300`) on seven.
+
+### Materials are lit or emissive, and the archive says which
+
+That yellow is the only one of the nine declared `kind 0`; the other eight are
+`kind 1`. Across the whole archive:
+
+| | count | mean luminance | median |
+|---|---|---|---|
+| `kind 0` | 150 | 0.655 | 0.738 |
+| `kind 1` | 1573 | 0.368 | 0.312 |
+
+and **every one of the 212 lights and markers points at a `kind 0` material —
+not one points at a `kind 1`.** So `kind 0` is emissive and `kind 1` is a lit
+surface, which is what `$4C0` "flat" and `$4E0` "lit" were saying all along.
+`render.py` gives kind 0 no lighting term, so a cockpit lamp stays lit on the
+side facing away from the sun.
+
 ### Lights
 
 Four opcodes draw something other than a polygon, and all four gate on

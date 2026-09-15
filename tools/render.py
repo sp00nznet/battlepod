@@ -102,12 +102,18 @@ def normalise(v):
     return tuple(c / n for c in v)
 
 
-def shade(rgb, normal):
-    """Flat shading: the material's colour, lit by one directional source.
+def shade(rgb, normal, kind=1):
+    """One flat colour per face - lit, unless the material says otherwise.
 
-    The material kinds the model declares are "flat" and "lit"; both end up as
-    one colour per face, which is what the footage shows.
+    A model declares each material as kind 0 or kind 1, and the archive settles
+    what that means: every one of the 212 lights and markers in it points at a
+    kind 0 material and not one points at a kind 1, and kind 0 materials average
+    twice the luminance of kind 1. Kind 0 is emissive, so it takes no lighting
+    term - which is how a cockpit lamp stays lit on the side facing away from
+    the sun.
     """
+    if kind == 0:
+        return tuple(min(255, max(0, int(255 * c))) for c in rgb)
     d = max(0.0, sum(normal[i] * LIGHT[i] for i in range(3)))
     k = 0.35 + 0.65 * d
     return tuple(min(255, max(0, int(255 * c * k))) for c in rgb)
@@ -191,8 +197,8 @@ def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png", shadow=True)
         if sum(n[i] * a[i] for i in range(3)) > 0:
             n = tuple(-c for c in n)
             culled += 1
-        rgb = m.mat.get(mat, (0, 0.7, 0.7, 0.7, 0.5))[1:4]
-        colour = shade(rgb, n)
+        entry = m.mat.get(mat, (1, 0.7, 0.7, 0.7, 0.5))
+        colour = shade(entry[1:4], n, entry[0])
         flat = [project(p, w, h) for p in pts]
         if any(p is None for p in flat):
             continue
@@ -247,6 +253,7 @@ def selftest():
     f.triangle((1.0, 1.0, 1.0), (7.0, 1.0, 1.0), (1.0, 7.0, 1.0), (0, 0, 255))
     assert bytes(f.px[i:i + 3]) == b"\x00\x00\xff", "and accept the near one"
     assert shade((1.0, 1.0, 1.0), (0, 0, 0)) == (89, 89, 89), shade((1.,1.,1.), (0,0,0))
+    assert shade((1.0, 1.0, 1.0), (0, 0, 0), 0) == (255, 255, 255), "kind 0 takes no light"
     print("selftest: ok")
 
 

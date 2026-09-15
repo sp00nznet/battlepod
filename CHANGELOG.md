@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Material `kind` decoded: 0 is emissive, 1 is a lit surface.** Across the
+  archive, `kind 0` materials average twice the luminance of `kind 1` (0.655
+  against 0.368), and **every one of the 212 lights and markers points at a
+  `kind 0` material while not one points at a `kind 1`**. `render.py` now gives
+  kind 0 no lighting term, so a lamp stays lit on the side facing away from the
+  sun. This is what `$4C0` "flat" and `$4E0` "lit" were saying.
+- **Checked the decode against something outside the project.** A
+  self-consistent wrong decode can pass every internal test but cannot
+  accidentally produce a shape the world already recognises. Rendered side-on,
+  463 is a mech torso with a canopy slit and a flank aperture, 466 a weapon pod
+  with a barrel, 465 a shoulder rack. Their material tables read as paint
+  schemes - armour browns and reds, a blue-cast near-black for canopy glass, a
+  green sensor, an emissive yellow.
+
 - **The bounding-box gap measured properly, and both explanations for it were
   wrong.** The claim in ROADMAP.md was that the failures all sit *inside* the
   stated box, from an authoring tool computing it over a pre-decimation mesh.
