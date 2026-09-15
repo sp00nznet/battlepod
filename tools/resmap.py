@@ -15,6 +15,13 @@ When bit 4 is set the resource carries no data of its own and +0x0C names
 another resource instead; otherwise +0x0C is a count and count*4 bytes of data
 follow the header.
 
+The 68020-side archives use a different, simpler layout, taken from the lookup
+at ROM3_0 0x02143502: a count of kinds, then (kind, offset) pairs, then per kind
+a count and that many 16-byte directory records of (id, size, offset, 0) which
+the firmware binary-searches by id. Kind 0 and 1 hold shapes - a u32 count
+followed by count 26-byte elements of six floats and a word - which is how
+`size == 4 + 26 * count` falls out.
+
 usage:
   resmap.py <resource file>              summary by type
   resmap.py <resource file> --list       every resource
@@ -109,10 +116,54 @@ def looks_like_floats(data):
     return ok / max(1, n)
 
 
+SHAPE_ELEM = 26         # six floats and a word
+
+
+def is_directory(blob):
+    """The 68020-side layout: a kind count, then (kind, offset) pairs."""
+    if len(blob) < 16:
+        return False
+    n = struct.unpack(">I", blob[:4])[0]
+    if not 1 <= n <= 8:
+        return False
+    first = struct.unpack(">I", blob[8:12])[0]
+    return first == 4 + 8 * n
+
+
+def directory(blob, name):
+    u = lambda o: struct.unpack(">I", blob[o:o + 4])[0]
+    n = u(0)
+    print("%s: %d bytes, %d kinds (68020-side directory)" % (name, len(blob), n))
+    for i in range(n):
+        kind, off = u(4 + i * 8), u(8 + i * 8)
+        count = u(off)
+        shapes = fits = 0
+        ids = []
+        for j in range(count):
+            rid, size, doff, _ = struct.unpack(">4I", blob[off + 4 + j * 16:off + 20 + j * 16])
+            ids.append(rid)
+            elems = u(doff)
+            if size == 4 + SHAPE_ELEM * elems:
+                fits += 1
+                shapes += elems
+        print("  kind %d: %d records, ids %s"
+              % (kind, count, "%d-%d" % (min(ids), max(ids)) if ids else "-"))
+        if fits == count and count:
+            print("      all %d are shapes: %d elements of %d bytes in total"
+                  % (count, shapes, SHAPE_ELEM))
+        elif fits:
+            print("      %d of %d parse as shapes" % (fits, count))
+        else:
+            print("      not shapes - some other payload")
+
+
 def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
     blob = open(argv[1], "rb").read()
+    if is_directory(blob):
+        directory(blob, argv[1].split("/")[-1])
+        return
     items = list(walk(blob))
     consumed = sum(HEADER + len(d) for *_, d in items) + HEADER
     print("%s: %d bytes, %d resources, %d accounted for\n"

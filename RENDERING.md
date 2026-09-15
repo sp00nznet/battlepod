@@ -35,6 +35,13 @@ bulk payloads; type 2 is six compressed bitmaps.
 faces and material references sit after the bounding volume — and the display
 list's binary format.
 
+One correction worth making here: solids, cylinders and ARES turned out **not**
+to be the drawing primitives. They live in the *68020's* own archive, keyed by
+the same ids as the visual models but far coarser — a handful of elements per
+object where the model has thousands of bytes. They are how the pod reasons
+about shape in software, not how the TI puts pixels on the screen. See
+DEVICES.md.
+
 **The strategy is not to emulate the TMS340.** It is to intercept the display
 list the 68020 already builds and draw it with a modern renderer. Emulating the
 graphics processor would mean reproducing its video timing, shift registers and

@@ -59,6 +59,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Findings
 
+- The 68020-side archive format: a kind directory, then per kind a binary-searched
+  table of 16-byte records, with the record chain verifying to the last byte of
+  the file. Kinds 0 and 1 hold shapes - a count then 26-byte elements of six
+  floats and a word - which `size == 4 + 26*count` confirms for 228 of 244
+  records.
+- Shapes are keyed by the same ids as the visual models: 64 of Red Planet's 65
+  shape ids are also type 1 model ids. The TI holds the visual geometry and the
+  68020 keeps a far coarser solid-and-cylinder version of the same object.
+- Corrects an assumption recorded earlier: solids, cylinders and ARES are not
+  the drawing primitives. They are the 68020's own representation.
 - The renderer keeps a pool of up to 1500 "solids" of 32 bytes each, built from
   three validated primitive kinds: solids, cylinders and ARES, each with a
   direction the firmware sanity-checks.

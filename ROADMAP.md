@@ -54,7 +54,8 @@ state. What is left is drawing it, and labelling which id is which instrument -
 a question for the operations manuals and the cockpit patent figures, not for
 the firmware. See [RENDERING.md](RENDERING.md).
 
-**Inside a type 1 model.** The archive format is decoded and type 1 is
+**Inside a type 1 model.** (The 68020-side archive is now fully decoded; what
+remains is the TI-side model body.) The archive format is decoded and type 1 is
 confirmed geometry, but the body past the bounding volume is variable-length and
 resists black-box analysis. The route in is the firmware's own loader - the code
 that turns resource bytes into the renderer's 32-byte solids - which is now

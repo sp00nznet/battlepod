@@ -340,9 +340,47 @@ carrying a direction that gets sanity-checked. Solids are allocated from nine
 sites across the firmware, not just the model loader, so they are a general
 runtime structure rather than a file-format artifact.
 
-Reading the loader that turns resource bytes into solids is the next step, and
-it is now practical: the disassembler decodes FPU instructions, without which
-this whole layer read as `dc.w $f2xx`.
+### The 68020-side archive, and what it holds
+
+Reading that loader answered a different question than expected. The shape
+builder at `0x02148B18` starts by calling `0x02143502`, and that lookup does not
+touch the TI archive at all — it searches **`battletech_68020_res`**, loaded at
+`0x02AC0000`. So the two `_res` files are not two halves of one thing; they are
+the renderer's data and the 68020's own.
+
+Its layout, taken from that lookup:
+
+```
+u32  number of kinds
+     u32 kind, u32 offset          (one pair per kind)
+per kind, at its offset:
+u32  number of records
+     u32 id, u32 size, u32 offset, u32 0     (16 bytes, sorted, binary-searched)
+```
+
+The record chain verifies exactly: each offset is the previous offset plus its
+size, and the last record ends on the final byte of the file.
+
+**Kinds 0 and 1 hold shapes.** A shape is a `u32` count followed by that many
+**26-byte elements — six floats and a word**, which is why `size == 4 + 26 *
+count` holds for **228 of the 244 records** across both games' archives. The 16
+exceptions are all kind 2, which is a different payload.
+
+The shape builder reads one element at a time, copies its six longwords out,
+scales the first float by a caller-supplied factor, and normalises an angle
+argument into `[0, 360)` — `fcmp.d #$40768000` is a literal 360.0. Each element
+becomes one entry in the renderer's solid pool.
+
+**These shapes are keyed by the same ids as the visual models.** In Red Planet,
+**64 of its 65 shape ids are also type 1 model ids** in `red_planet_ti_res`.
+So the architecture is: the TI holds the visual geometry, and the 68020 keeps a
+much coarser solid-and-cylinder version of the same object — 163 elements across
+54 shapes in one kind, 90 across 57 in the other — for whatever it has to do in
+software. A Mad Cat that takes hundreds of polygons to draw is a handful of
+solids to collide with.
+
+That also explains the primitive vocabulary. Solids, cylinders and ARES are not
+how the pod draws; they are how it *reasons* about shape.
 
 ## The network packet interface
 
