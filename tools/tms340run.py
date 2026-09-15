@@ -573,6 +573,13 @@ def run(m, steps, trace, brk=None):
             imm = m.fetchl()
             a = m.reg(f, rd)
             base = op & 0xFFE0
+            # CMPI and SUBI store the one's complement of the immediate the
+            # programmer wrote - the assembler flips it and the hardware flips
+            # it back. Without this, the renderer's own bounds check reads
+            # `CMPI #$FFFFFFEF` where it means 16, and a decompressor's escape
+            # byte test can never match.
+            if base in (0x0B60, 0x0D00):
+                imm = ~imm & 0xFFFFFFFF
             if base == 0x0C00:                                  # ADDXYI
                 m.setreg(f, rd, (((a >> 16) + (imm >> 16)) & 0xFFFF) << 16
                          | ((a + imm) & 0xFFFF))
@@ -598,6 +605,8 @@ def run(m, steps, trace, brk=None):
             imm = w - 0x10000 if w & 0x8000 else w
             a = m.reg(f, rd)
             base = op & 0xFFE0
+            if base in (0x0B40, 0x0BE0):            # CMPI, SUBI: complemented
+                imm = ~imm & 0xFFFFFFFF
             r = a + imm if base == 0x0B00 else a - imm
             m.flags(r)
             m.c = (1 if a + imm > 0xFFFFFFFF else 0) if base == 0x0B00                 else (1 if (imm & 0xFFFFFFFF) > a else 0)
@@ -700,7 +709,9 @@ def run(m, steps, trace, brk=None):
         # BTST K, Rd is 0001 11KK KKKR DDDD, so the whole 0x1C00-0x1FFF block
         # is one instruction with a five-bit constant - not a two-register form.
         if op & 0xFC00 == 0x1C00:
-            m.z = 0 if m.reg(f, rd) & (1 << ((op >> 5) & 0x1F)) else 1
+            # the bit number is complemented in the encoding, like CMPI's
+            bit = ~((op >> 5) & 0x1F) & 0x1F
+            m.z = 0 if m.reg(f, rd) & (1 << bit) else 1
             continue
         if op & 0xFE00 in (0x4200, 0x4600, 0x5800, 0x5A00, 0x5C00, 0x5E00,
                            0x6C00, 0x6E00, 0x4A00):

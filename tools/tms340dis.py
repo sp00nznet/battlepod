@@ -92,6 +92,11 @@ TWOREG = {
 IMM_LONG = {0x09E0: "MOVI", 0x0B20: "ADDI", 0x0B60: "CMPI", 0x0D00: "SUBI",
             0x0C00: "ADDXYI"}
 IMM_SHORT = {0x09C0: "MOVI", 0x0B00: "ADDI", 0x0B40: "CMPI", 0x0BE0: "SUBI"}
+# CMPI, SUBI and BTST store the one's complement of what the programmer wrote:
+# the assembler flips the value and the hardware flips it back. Printing the
+# encoded form instead turns the renderer's bounds check of 16 into $FFFFFFEF.
+COMPLEMENTED = ("CMPI", "SUBI", "BTST")
+
 LIMREG = {0x0B80: "ANDNI", 0x0BA0: "ORI", 0x0BC0: "XORI"}
 KREG = {0x1000: "ADDK", 0x1400: "SUBK", 0x1800: "MOVK", 0x1C00: "BTST",
         0x2000: "SLA", 0x2400: "SLL", 0x2800: "SRA", 0x2C00: "SRL",
@@ -226,9 +231,16 @@ def decode(s):
         df = 1 - f if (op & 0xFE00) == 0x4E00 else f
         return done("%-7s %s, %s" % (m, regname(f, rs), regname(df, rd)))
     if op & 0xFFE0 in IMM_LONG:
-        return done("%-7s #$%08X, %s" % (IMM_LONG[op & 0xFFE0], s.long(), regname(f, rd)))
+        v = s.long()
+        if IMM_LONG[op & 0xFFE0] in COMPLEMENTED:
+            v = ~v & 0xFFFFFFFF
+        return done("%-7s #$%08X, %s" % (IMM_LONG[op & 0xFFE0], v, regname(f, rd)))
     if op & 0xFFE0 in IMM_SHORT:
-        return done("%-7s #$%04X, %s" % (IMM_SHORT[op & 0xFFE0], s.word(), regname(f, rd)))
+        w = s.word()
+        v = w - 0x10000 if w & 0x8000 else w
+        if IMM_SHORT[op & 0xFFE0] in COMPLEMENTED:
+            v = ~v & 0xFFFFFFFF
+        return done("%-7s #$%08X, %s" % (IMM_SHORT[op & 0xFFE0], v, regname(f, rd)))
     if op & 0xFFE0 in LIMREG:
         return done("%-7s #$%08X, %s" % (LIMREG[op & 0xFFE0], s.long(), regname(f, rd)))
     if op & 0xFC00 in KREG:
@@ -236,6 +248,8 @@ def decode(s):
         m = KREG[op & 0xFC00]
         if m in ("ADDK", "SUBK") and k == 0:
             k = 32
+        elif m == "BTST":
+            k = ~k & 0x1F           # the bit number is complemented too
         elif m in ("SRA", "SRL", "RL"):
             k = (32 - k) & 0x1F     # right shifts encode 32 minus the count
         return done("%-7s #%d, %s" % (m, k, regname(f, rd)))

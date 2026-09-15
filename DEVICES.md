@@ -400,6 +400,28 @@ clears, and the renderer times out of its vertical-blank wait 500,000 times and
 restarts hardware initialisation — which is exactly the symptom that had been
 mistaken for a missing hardware poll.
 
+**Three instructions store the one's complement of their immediate.** `CMPI`,
+`SUBI` and `BTST` all carry the `IMMCOM` flag in TI's own assembler: it flips
+the value you wrote before encoding it, and the hardware flips it back. Read
+the encoding at face value and the renderer's command-loop bounds check comes
+out as
+
+```
+FE007020  CMPI  #$FFFFFFEF, A0      ; -17, compared with JRHS - meaningless
+```
+
+when what it says is
+
+```
+FE007020  CMPI  #$00000010, A0      ; 16, the size of the dispatch table
+```
+
+The resource decompressor at `0xFE0090F0` is the other place it shows: its
+escape test reads `CMPI #$000000FF` — a `0xFF` byte, which is a sensible thing
+to escape on — and not `#$FFFFFF00`, which nothing could ever equal. `BTST`'s
+five-bit constant is complemented the same way, so its bit numbers were wrong
+too.
+
 One more thing that group taught: **`MMTM` and `MMFM` do not share a mask.**
 `MMTM`'s bit 15 names A0; `MMFM`'s bit 0 does. Every matched pair in the image
 is an exact bit reversal — `#$8000`/`#$0001`, `#$E000`/`#$0007`,

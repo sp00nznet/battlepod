@@ -113,6 +113,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **`CMPI`, `SUBI` and `BTST` store the one's complement of their immediate.**
+  TI's assembler flips the value before encoding and the hardware flips it
+  back, so reading the encoding at face value turns the renderer's command-loop
+  bounds check into `CMPI #$FFFFFFEF` - minus seventeen, compared unsigned -
+  where it means **16**, the size of its dispatch table. The resource
+  decompressor's escape test likewise reads `#$000000FF`, a `0xFF` byte, and
+  not `#$FFFFFF00`, which nothing could equal. `BTST`'s bit numbers were wrong
+  for the same reason. Both tools corrected.
+
 - **The object record's trailing groups are pick queries, not geometry**, and
   both the docs and `--rstub` said geometry. Seven longwords each, capped at 32:
   the 68020 writes a screen X and Y, and the renderer fills in what it drew at
