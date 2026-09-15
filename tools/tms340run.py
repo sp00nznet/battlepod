@@ -215,6 +215,9 @@ def run(m, steps, trace, brk=None):
             m.a[15] += 32
             m.ints = 1
             continue
+        if op & 0xFFE0 == 0x0160:                               # JUMP Rs
+            m.pc = m.reg(f, rd)
+            continue
         if op == 0x0DE0:                                        # SETC
             m.c = 1
             continue

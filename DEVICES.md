@@ -945,10 +945,106 @@ So the 68020 hands the renderer a **transform matrix**, not transformed
 vertices. The TMS34082 does the transform, which is why the coprocessor is on
 that board at all.
 
-`battlepod --rstub` decodes both records the moment a render command arrives.
-Nothing in the release sends one yet - a cockpit that has not started a game
-never renders - so `--selftest` walks a synthetic list instead, which is what
-keeps the decoder honest until a real one turns up.
+### The renderer reading the same list
+
+All of the above came off the 68020. The renderer's side of it is in R.BIN, and
+it agrees — which is the check, because the two were derived independently.
+
+The renderer's command dispatch is a **ten-entry table at `0xFE028460`**, one
+longword every 32 bits, and entry *i* serves opcode *i+1*: entry 0 jumps
+straight to the reset code, and entry 1 allocates and writes back three reply
+words — error, handle, address — which is exactly the 20-byte record the ROM
+builds for opcode 2. So **opcode 6 is `0xFE007630`**, which shifts its argument
+left by 3 (byte address to bit address) and calls the display-list walker at
+`0xFE009D80`:
+
+```
+FE009EE0  ADDI  #$0040, A0          ; past the list header
+FE009F00  MOVE  *A0+, A1, 1         ; record type
+FE009F10  JRN   $FE009FE0           ; negative terminates the list
+FE009F20  MOVE  *A0+, A2, 1         ; length, in longwords
+FE009F30  SLL   #5, A2              ; -> bits
+FE009F40  ADD   A0, A2              ; where the next record starts
+FE009F60  SLL   #5, A1              ; type * 32 bits
+FE009F70  ADDI  #$FE00A160, A1      ; -> the record dispatch table
+FE009FA0  MOVE  *A1, A1, 1
+FE009FB0  CALL  A1
+```
+
+That settles the header: **`[+4]` is the length of what follows the type and
+length words**, not of the whole record — which is why the emitter writes
+`7n + 33` for a record it advances the cursor 35 longwords past.
+
+The table at `0xFE00A160` has **nine entries, types 0 to 8**, and every handler
+is two instructions: they only *file* the record.
+
+| type | handler | what it does with the record |
+|---|---|---|
+| 0 | `0xFE009FC0` | nothing — returns into the walker |
+| 1 | `0xFE00A280` | appends to the object list at `0xFE0325C0` |
+| 2 | `0xFE00A2A0` | keeps it in A12 — the draw order |
+| 3, 4 | `0xFE00A2C0` | indexes by its first word into the table at `0xFE028A20` |
+| 5 | `0xFE00A320` | the same |
+| 6 | `0xFE00A380` | appends to `0xFE0327C0` |
+| 7 | `0xFE00A3A0` | appends to `0xFE0329C0` |
+| 8 | `0xFE00A3C0` | appends to the viewport list at `0xFE032BC0` |
+
+Then a second pass walks the type 2 record, which holds **1-based indices into
+the objects collected from the type 1 records** — the draw order, and the thing
+behind the firmware's `Render List Overflow`. For each one it calls
+`0xFE00A3E0`, which takes two pointers into the object: one at its start and
+one 0x24 bytes in. In the ROM's numbering that second one is `+0x2C`, the start
+of the fourth row of those twelve floats. **The renderer itself treats them as
+a 3x3 and a translation**, which is the confirmation that the shape is right.
+It also reads `+0x40` as a 1-based index into the viewport list, so that field
+is which viewport the object draws into.
+
+### The item stream
+
+After an object record's 35-longword header comes a stream of items, and their
+opcodes are **multiples of `0x20` because the renderer uses the opcode directly
+as a bit offset**:
+
+```
+FE022930  MOVE  *A7+, A0, 1
+FE022940  ADDI  #$FE0229E0, A0      ; opcode is already the offset, in bits
+FE022970  MOVE  *A0+, A0, 1
+FE022980  JUMP  A0
+```
+
+A threaded interpreter: each handler jumps back to `0xFE022930` for the next
+item. The table at `0xFE0229E0` has **twenty-five entries, `0x000` to `0x300`**,
+and the 68020 has an emitter for every one of them — 22 that write their opcode
+as an immediate, two that write a string, and one that appends a bare zero,
+which is the end marker the table's entry 0 handles. A second table with the
+same stride sits at `0xFE018A00`.
+
+Each emitter gives the item's length. Two of them, `0x1E0` and `0x200`, carry a
+C string copied a longword at a time **with the bytes reversed**, which is the
+same reversal the image upload does and is what makes them read correctly on a
+little-endian TI:
+
+| opcode | longwords | opcode | longwords |
+|---|---|---|---|
+| `0x000` | 1 (end) | `0x1A0` | 3 |
+| `0x020` | 1 | `0x1C0` | 2 |
+| `0x040` | 8 | `0x1E0` | 1 + string |
+| `0x060` | 2 | `0x200` | 1 + string |
+| `0x080` | 1 | `0x220` | 2 |
+| `0x0A0` | 1 | `0x240` | 2 |
+| `0x0C0` | 1 | `0x260` | 6 |
+| `0x0E0` | 1 | `0x280` | 1 |
+| `0x100` | 3 | `0x2A0` | 1 |
+| `0x120` | 3 | `0x2C0` | 11 |
+| `0x140` | 3 | `0x2E0` | 1 |
+| `0x160` | 4 | `0x300` | 1 |
+| `0x180` | 2 | | |
+
+`battlepod --rstub` decodes all of this the moment a render command arrives —
+records, matrix, item stream and the strings. Nothing in the release sends one
+yet, because a cockpit that has not started a game never renders, so
+`--selftest` walks a synthetic list instead. That is what keeps the decoder
+honest until a real one turns up.
 
 ### Reaching the diagnostic monitor without disabling the game
 

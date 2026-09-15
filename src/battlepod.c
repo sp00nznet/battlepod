@@ -525,6 +525,64 @@ static uint32_t dl_word(uint32_t ti_byte_addr, uint32_t i)
 	return g_dl_read(ti_byte_addr + TI_TO_68K + i * 4);
 }
 
+/* Inside an object record, after its 35-longword header, comes a stream of
+ * items. Their opcodes step by 0x20 because the renderer uses the opcode
+ * *directly* as a bit offset into its dispatch table at 0xFE0229E0 - one
+ * longword every 32 bits - and then JUMPs. Twenty-five entries there; the
+ * 68020 has an emitter for each. These lengths are the emitters' own, in
+ * longwords including the opcode. Zero means the item carries a string and
+ * runs until its terminator. */
+static const uint8_t g_item_len[25] = {
+	1, 1, 8, 2, 1, 1, 1, 1,		/* 0x000 .. 0x0E0 */
+	3, 3, 3, 4, 2, 3, 2, 0,		/* 0x100 .. 0x1E0 */
+	0, 2, 2, 6, 1, 1, 11, 1,	/* 0x200 .. 0x2E0 */
+	1				/* 0x300          */
+};
+
+/* Strings are copied into the list a longword at a time with the bytes
+ * reversed, which is what makes them read correctly on a little-endian TI. */
+static uint32_t dl_string(uint32_t ti_byte_addr, uint32_t at, uint32_t room,
+			  char *out, size_t cap)
+{
+	uint32_t n = 0, i;
+	size_t o = 0;
+	while (n < room) {
+		uint32_t v = dl_word(ti_byte_addr, at + n++);
+		for (i = 0; i < 4; i++) {
+			char c = (char)(v >> (i * 8));
+			if (!c) { out[o < cap ? o : cap - 1] = 0; return n; }
+			if (o + 1 < cap) out[o++] = c;
+		}
+	}
+	out[o < cap ? o : cap - 1] = 0;
+	return n;
+}
+
+static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
+{
+	int guard = 0;
+	while (room && guard++ < 128) {
+		uint32_t op = dl_word(ti_byte_addr, at), len;
+		if (op & 0x1F || op > 0x300) {
+			rslog("        item $%X unknown; stopping\n", op);
+			return;
+		}
+		len = g_item_len[op / 0x20];
+		if (len == 0) {
+			char text[128];
+			uint32_t used = dl_string(ti_byte_addr, at + 1, room - 1,
+						  text, sizeof text);
+			rslog("        item $%03X \"%s\"\n", op, text);
+			len = 1 + used;
+		} else {
+			rslog("        item $%03X, %u longwords\n", op, len);
+		}
+		if (op == 0 || len > room) return;
+		at += len;
+		room -= len;
+	}
+}
+
 static void rstub_dlist(uint32_t ti_byte_addr)
 {
 	uint32_t count = dl_word(ti_byte_addr, 0), at = 1;
@@ -536,10 +594,12 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 		return;
 	}
 	while (at < count + 1 && records < 64) {
-		uint32_t type = dl_word(ti_byte_addr, at), len;
+		uint32_t type = dl_word(ti_byte_addr, at);
+		/* The renderer's walker skips the type and length, then takes the
+		 * length in longwords as what follows - so a record is 2 + len. */
+		uint32_t len = 2 + dl_word(ti_byte_addr, at + 1);
 		records++;
 		if (type == 8) {
-			len = 12;
 			rslog("    viewport  (%d,%d)-(%d,%d)  %dx%d  centre (%d,%d)\n",
 			      (int)dl_word(ti_byte_addr, at + 2), (int)dl_word(ti_byte_addr, at + 3),
 			      (int)dl_word(ti_byte_addr, at + 4), (int)dl_word(ti_byte_addr, at + 5),
@@ -547,9 +607,9 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			      (int)dl_word(ti_byte_addr, at + 8), (int)dl_word(ti_byte_addr, at + 9));
 		} else if (type == 1) {
 			int r, c;
-			len = dl_word(ti_byte_addr, at + 1);
-			rslog("    object    %u items, %u longwords, screen %dx%d\n",
+			rslog("    object    %u items, %u longwords, viewport %u, screen %dx%d\n",
 			      dl_word(ti_byte_addr, at + 34), len,
+			      dl_word(ti_byte_addr, at + 16),
 			      (int)dl_word(ti_byte_addr, at + 19) + 1,
 			      (int)dl_word(ti_byte_addr, at + 20) + 1);
 			/* Twelve floats as four rows of three: a 3x3 rotation
@@ -561,8 +621,8 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 					rslog("%9.4f ", as_float(dl_word(ti_byte_addr, at + 2 + r * 3 + c)));
 				rslog("\n");
 			}
+			if (len > 35) dl_items(ti_byte_addr, at + 35, len - 35);
 		} else {
-			len = dl_word(ti_byte_addr, at + 1);
 			rslog("    type %u, %u longwords\n", type, len);
 		}
 		if (len == 0 || len > count + 1 - at) {
@@ -1057,17 +1117,22 @@ static void disasm_at(uint32_t pc, int count)
  * release exercises the decoder yet - a cockpit that has not started a game
  * never sends a render command - so this is what keeps it honest. */
 static const uint32_t g_dl_test[] = {
-	12 + 35,				/* longwords that follow        */
+	12 + 47,				/* longwords that follow        */
 	8, 10, 0, 0, 479, 359, 480, 360, 239, 179, 0, 0,
-	1, 35,
+	1, 45,					/* length is what follows these */
 	0x3F800000, 0, 0,			/* +0x08: the matrix, identity  */
 	0, 0x3F800000, 0,
 	0, 0, 0x3F800000,
 	0, 0, 0,				/* its translation row          */
-	0, 0x3F800000, 0, 0, 0,			/* +0x38 .. +0x48               */
+	0, 0x3F800000,				/* +0x38, +0x3C                 */
+	2,					/* +0x40: the viewport to use   */
+	0, 0,
 	479, 359,				/* +0x4C, +0x50: screen extent  */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	7,					/* +0x88: item count            */
+	0x040, 0, 0, 0, 0, 0, 0, 0,		/* an eight-longword item       */
+	0x1E0, 0x4C4C4548, 0x0000004F,		/* "HELLO", bytes reversed      */
+	0x000					/* end of the item stream       */
 };
 
 static uint32_t dl_test_read(uint32_t a)
@@ -1086,8 +1151,15 @@ static int selftest_dlist(void)
 		printf("FAIL: viewport record not decoded\n%s", g_rslog + mark);
 		return 1;
 	}
-	if (!strstr(g_rslog + mark, "object    7 items, 35 longwords, screen 480x360")) {
+	if (!strstr(g_rslog + mark,
+		    "object    7 items, 47 longwords, viewport 2, screen 480x360")) {
 		printf("FAIL: object record not decoded\n%s", g_rslog + mark);
+		return 1;
+	}
+	if (!strstr(g_rslog + mark, "item $040, 8 longwords") ||
+	    !strstr(g_rslog + mark, "item $1E0 \"HELLO\"") ||
+	    !strstr(g_rslog + mark, "item $000, 1 longwords")) {
+		printf("FAIL: item stream not decoded\n%s", g_rslog + mark);
 		return 1;
 	}
 	if (!strstr(g_rslog + mark, "   1.0000    0.0000    0.0000 \n"

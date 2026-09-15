@@ -15,7 +15,11 @@ All notable changes to this project are documented here. The format follows
   emitter, which is what identifies it. Record type 1 draws an object and
   carries twelve IEEE single-precision floats that read as the identity only
   as four rows of three: a 3x3 rotation and a translation row. So the 68020
-  sends a *matrix*, and the coprocessor does the transform.
+  sends a *matrix*, and the coprocessor does the transform. The renderer
+  confirms the shape: it takes two pointers into the object, one at the start
+  of the twelve and one at the start of the fourth row. Record `[+4]` is the
+  length of what follows the type and length words, which is why the emitter
+  writes `7n + 33` for a record 35 longwords long.
 - **The pod's screen resolution: 480 x 360.** The object record carries `479`
   and `359` as the screen extent, and running R.BIN leaves the renderer's own
   WEND register holding `$016701DF` - 359 by 479. Two sides of the machine,
@@ -25,9 +29,26 @@ All notable changes to this project are documented here. The format follows
   loads a palette. A request record is 12 bytes, not 8 - 20 for allocate.
   Rendering goes through `Async_Render` at `0x0214D302`, not through the
   opcode 6 wrapper, which is dead code.
+- **The renderer's side of the same list**, which agrees with it. Its command
+  dispatch is a ten-entry table at `0xFE028460` where entry *i* serves opcode
+  *i+1*, so opcode 6 is `0xFE007630`, which converts its argument from a byte
+  to a bit address and calls the walker at `0xFE009D80`. The record dispatch
+  table at `0xFE00A160` has **nine record types, 0 to 8**, and every handler
+  only files the record into a bucket; a second pass walks record type 2, which
+  is the **draw order** - 1-based indices into the objects - and is what the
+  firmware's `Render List Overflow` counts.
+- **The item stream and its 25 opcodes.** After an object record's 35-longword
+  header come items whose opcodes step by `0x20` because the renderer uses the
+  opcode *directly* as a bit offset into its table at `0xFE0229E0` and then
+  `JUMP`s - a threaded interpreter. Twenty-five entries there, and the 68020
+  has an emitter for every one, which is where each item's length comes from.
+  Two of them carry a C string copied with the bytes reversed per longword.
 - `battlepod --rstub` now decodes a display list when a render command posts
-  one, and `--selftest` walks a synthetic one - nothing in the release sends a
-  render command until a game starts, so that is what keeps the decoder honest.
+  one - records, matrix, item stream and strings - and `--selftest` walks a
+  synthetic one, since nothing in the release sends a render command until a
+  game starts.
+- `JUMP Rs` (`0x0160`), which the item interpreter uses and both tools were
+  missing.
 
 - The renderer's processor is identified: a **TMS34020**, not the TMS34010 it
   had been read as, driving a **TMS34082 floating-point coprocessor**. R.BIN

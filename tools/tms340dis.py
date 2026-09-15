@@ -72,7 +72,7 @@ NOARG = {
     0x0EFA: "TFILL  XY",
 }
 ONEREG = {
-    0x0020: "REV", 0x0120: "EXGPC", 0x0140: "GETPC", 0x0180: "GETST",
+    0x0020: "REV", 0x0120: "EXGPC", 0x0140: "GETPC", 0x0160: "JUMP", 0x0180: "GETST",
     0x01A0: "PUTST", 0x0380: "ABS", 0x03A0: "NEG", 0x03C0: "NEGB",
     0x03E0: "NOT", 0x1020: "INC", 0x1420: "DEC",
     0x0500: "SEXT", 0x0520: "ZEXT",        # field 0; field 1 adds 0x0200
