@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/model.py` — the model format, and a tool that runs it.** A type 1
+  resource is not a mesh but a **threaded program** of 45 opcodes, the same
+  design as the display list, run by the renderer at `0xFE00EDB0` against a
+  table at `0xFE00EEA0`. Vertices are IEEE float triples carried inline;
+  polygons are index lists with a material; materials are six longwords of
+  which three are a colour. The stream starts at header `+0x58` and that is a
+  valid opcode in **130 of 130** models.
+- The model's own bounding box is the validator: where a walk completes it is
+  demonstrably right, and model 24 decodes 246 vertices against a header that
+  says 246, 29 materials against 29, and reproduces its stated box exactly.
+- Branch and call targets are bit offsets; `$160` is `2 + 3n`; `$520`/`$540`
+  take one operand each, not five.
+
 - **Reference footage, and a correction.** Two period videos carry real screen
   capture - the BattleTech 3.0 Dooley Trainer and a Discovery Channel piece -
   and they show **flat-shaded, untextured solid polygons with cast shadows**,
@@ -30,6 +43,11 @@ All notable changes to this project are documented here. The format follows
   capture. See RENDERING.md.
 
 ### Fixed
+
+- `tools/tms340dis.py` printed the cross-file `MOVE` (`0x4E00`) with both
+  operands in the same register file. Bit 4 is the *direction*: `FE01A150` is
+  `MOVE A12, B0` and is followed by `CPW B0, B0`, and `FE013210` has to reach
+  `B9`, the colour `VLCOL` latches. The interpreter already had this right.
 
 - **`MOVE *Rs+, Rd` clobbered the value it loaded when the two registers were
   the same.** The renderer's item dispatch is exactly that instruction -

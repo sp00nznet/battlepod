@@ -219,7 +219,12 @@ def decode(s):
         m = TWOREG[op & 0xFE00]
         if m == "XOR" and rs == rd:
             return done("%-7s %s" % ("CLR", regname(f, rd)))
-        return done("%-7s %s, %s" % (m, regname(f, rs), regname(f, rd)))
+        # MOVE across the register files encodes as 0x4E00, and there bit 4 is
+        # the *direction*, not one file for both operands: 0 is A to B, 1 is B
+        # to A. `FE01A150 MOVE A12, B0` is followed straight away by
+        # `CPW B0, B0`, and FE013210 has to reach B9, the colour VLCOL latches.
+        df = 1 - f if (op & 0xFE00) == 0x4E00 else f
+        return done("%-7s %s, %s" % (m, regname(f, rs), regname(df, rd)))
     if op & 0xFFE0 in IMM_LONG:
         return done("%-7s #$%08X, %s" % (IMM_LONG[op & 0xFFE0], s.long(), regname(f, rd)))
     if op & 0xFFE0 in IMM_SHORT:

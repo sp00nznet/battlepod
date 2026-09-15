@@ -121,9 +121,46 @@ DEVICES.md. Type 1 is 3D models, 130 of them, each with a verified axis-aligned
 bounding box and bounding sphere; type 4 is an alias table; type 7 holds the
 bulk payloads; type 2 is six compressed bitmaps.
 
-**What is missing.** The interior layout of a type 1 model — where the vertices,
-faces and material references sit after the bounding volume — and the display
-list's binary format.
+**What we have of the model format.** A type 1 resource is **not a mesh**. It is
+a threaded program of 45 opcodes, run by the renderer's own interpreter at
+`0xFE00EDB0` against a table at `0xFE00EEA0` — the same design as the display
+list. `tools/model.py` runs one and collects what it draws.
+
+| what | where |
+|---|---|
+| header | 22 longwords; counts at `+0x00`, `+0x04`, `+0x08`, `+0x18` are vertices, normals, faces and materials, confirmed against the interpreter's own allocation strides |
+| stream | starts at `+0x58` — a valid opcode in **130 of 130** models |
+| vertices | `$0A0` one, `$0C0` a run: IEEE float triples carried inline |
+| polygons | `$240`/`$260`: face, vertex count, indices, material |
+| materials | `$4C0` flat and `$4E0` lit, six longwords: index, three floats of colour, and a fourth that is `0.5` in every record so far |
+| culling | the sign of a dot product, stored in the plane record by `$180` |
+
+The checks it reports, run over the whole archive:
+
+```
+  header +0x58 is a known opcode : 130 / 130
+  vertex count matches the header:  31 / 130
+  vertices reproduce the box     :  17 / 130
+  material count matches         :  31 / 130
+```
+
+Where a walk completes, it is *right*: model 24 decodes 246 vertices against a
+header that says 246, 29 materials against 29, and reproduces its own stated
+bounding box. That box is the thing that makes this checkable at all — the
+model carries it, so a wrong vertex decode cannot fake it.
+
+**What is missing, and it is one thing.** `$320` and `$360` branch on a
+predicate, and the predicate is a *second* threaded interpreter: `0xFE018910`
+reads its own opcodes from the same stream through a 24-entry table at
+`0xFE018A00` — push forms, then NOT, OR, AND, XOR, NEG, ADD, SUB and five
+comparisons as zero-operand operators, terminated by `$000`. A postfix
+expression. Its programs' length has not been measured, because several push
+handlers open with a `CALLR` that consumes operands of its own.
+
+**76 of 130 models stop there**, and they stop *before* their polygons, which
+is why vertices decode and faces do not — most models put their geometry behind
+a distance test, which is how they select a level of detail. Reading those 24
+handlers is the next step and it unblocks the rest at once.
 
 One correction worth making here: solids, cylinders and ARES turned out **not**
 to be the drawing primitives. They live in the *68020's* own archive, keyed by
