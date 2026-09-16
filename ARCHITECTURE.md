@@ -412,7 +412,11 @@ are now **one process with four windows**, which is what the target at the top
 of this file asks for:
 
 ```
-./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's30501'     --live out/madcat.rgb --steps 40000000
+./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's
+3
+05
+01
+'     --live out/madcat.rgb --steps 40000000
 ```
 
 `cockpit.exe` is `battlepod.c` compiled with `-DBATTLEPOD_SDL`. The emulator
@@ -431,9 +435,39 @@ The emulator outruns the cockpit by a wide margin - a budget that would be
 minutes of pod time goes by in seconds - so when the run ends the windows stay
 up with the panel in its final state until they are closed.
 
-The main view is still fed from a file of raw frames, because the rasteriser is
-`tools/render.py`. When it is C in this process the texture stays and only the
-source changes.
+### The main view draws itself now
+
+The rasteriser is C. `src/mesh.h` runs a model's own threaded program and
+`src/raster.h` draws the result, both inside the emulator's process:
+
+```
+./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000 --live --mesh 463 ...
+```
+
+There is no file in the path and no Python. The model archive is already in the
+emulator's memory - the load script puts `BattleTech_TI_Res` at `0x02B00000` -
+so `mesh.h` walks the archive in place with the parser `resmap.py` established,
+decodes the resource, and `raster.h` draws it at 480x360 with the same camera,
+shading, sky, ground and hard cast shadow the Python produces.
+
+**The two decoders check each other.** They are separate ports of one
+interpreter, so they have to come out with the same totals, and the harness
+holds both to the same floor:
+
+```
+models decoded in python : 130      models decoded in C : 130
+vertices decoded in python: 5578    vertices decoded in C: 5578
+polygons decoded in python: 2515    polygons decoded in C: 2515
+```
+
+A port that quietly dropped an opcode would fail there rather than turning up
+as a rendering bug much later - which is exactly what happened on the way:
+the first C version followed `$020` to its target and abandoned the
+continuation, where the Python hands the target to a work list and carries
+straight on. It decoded nine vertices and no polygons at all.
+
+`--live` without `--mesh` still plays a file of raw frames, which is how the
+Python renderer's output gets into the same window.
 
 ## Order of work
 

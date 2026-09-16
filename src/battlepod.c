@@ -19,6 +19,8 @@
 
 #include "m68k.h"
 #include "rio.h"
+#include "mesh.h"
+#include "raster.h"
 
 /* ---------------------------------------------------------------- memory */
 
@@ -294,6 +296,110 @@ static void tap_check(uint32_t pc)
 	}
 }
 
+/* ------------------------------------------------------------- geometry */
+
+/* The model archive is already in the emulator's memory - the load script puts
+ * BattleTech_TI_Res there - so the geometry needs no file of its own. This
+ * walks it in place with the parser resmap.py established: sixteen bytes of
+ * header, then the body unless the flag byte says it lives elsewhere. */
+
+static uint32_t mesh_be32(uint32_t a)
+{
+	return ((uint32_t)m68k_read_memory_8(a) << 24) |
+	       ((uint32_t)m68k_read_memory_8(a + 1) << 16) |
+	       ((uint32_t)m68k_read_memory_8(a + 2) << 8) |
+	       m68k_read_memory_8(a + 3);
+}
+
+/* Find a type 1 resource by id, copying its body out. Returns its length. */
+static uint32_t mesh_find(uint32_t base, uint32_t limit, uint32_t want,
+			  uint8_t *out, uint32_t cap)
+{
+	uint32_t at = base;
+
+	while (at + 16 <= base + limit) {
+		uint32_t rid = mesh_be32(at), rtype = mesh_be32(at + 4);
+		uint32_t flags = mesh_be32(at + 8), count = mesh_be32(at + 12);
+		uint32_t inline_len = ((flags & 0xFF) & 0x10) ? 0 : count * 4;
+		uint32_t i;
+
+		if (rid == 0xFFFFFFFFu) return 0;
+		if (rid == want && rtype == 1 && inline_len && inline_len <= cap) {
+			for (i = 0; i < inline_len; i++)
+				out[i] = (uint8_t)m68k_read_memory_8(at + 16 + i);
+			return inline_len;
+		}
+		at += 16 + inline_len;
+	}
+	return 0;
+}
+
+static uint8_t g_meshbuf[1 << 20];
+static struct mesh g_mesh;
+static uint32_t g_mesh_id;
+static int g_mesh_all;		/* which model to decode, 0 for none */
+static uint32_t g_mesh_base = 0x02B00000u;
+
+/* Decode one model and say what came out, in the same terms tools/model.py
+ * reports so the two can be compared straight across. */
+/* Every type 1 model, decoded, in the same terms tools/model.py reports for
+ * its "fall" walk. The two are separate ports of one interpreter and have to
+ * come out with the same totals; the harness checks both against the same
+ * floor, so a port that quietly drops an opcode fails here rather than looking
+ * like a rendering bug much later. */
+static void mesh_all(void)
+{
+	uint32_t at = g_mesh_base, limit = g_mesh_base + 0x200000u;
+	int models = 0;
+	long verts = 0, polys = 0, mats = 0;
+
+	while (at + 16 <= limit) {
+		uint32_t rid = mesh_be32(at), rtype = mesh_be32(at + 4);
+		uint32_t flags = mesh_be32(at + 8), count = mesh_be32(at + 12);
+		uint32_t inline_len = ((flags & 0xFF) & 0x10) ? 0 : count * 4;
+
+		if (rid == 0xFFFFFFFFu) break;
+		if (rtype == 1 && inline_len && inline_len <= sizeof g_meshbuf) {
+			uint32_t i;
+			for (i = 0; i < inline_len; i++)
+				g_meshbuf[i] = (uint8_t)m68k_read_memory_8(at + 16 + i);
+			mesh_run(&g_mesh, g_meshbuf, inline_len);
+			models++;
+			verts += g_mesh.nvert;
+			polys += g_mesh.npoly;
+			mats += g_mesh.nmat;
+		}
+		at += 16 + inline_len;
+	}
+	printf("\nmodels decoded in C : %d\n", models);
+	printf("vertices decoded in C: %ld\n", verts);
+	printf("polygons decoded in C: %ld\n", polys);
+	printf("materials decoded in C: %ld\n", mats);
+}
+
+static void mesh_report(void)
+{
+	uint32_t len = mesh_find(g_mesh_base, 0x200000u, g_mesh_id, g_meshbuf, sizeof g_meshbuf);
+
+	if (!len) {
+		printf("\nmodel %u: not found in the archive at %08X\n", g_mesh_id, g_mesh_base);
+		return;
+	}
+	mesh_run(&g_mesh, g_meshbuf, len);
+	printf("\nmodel %u: %d vertices, %d polygons, %d materials%s\n",
+	       g_mesh_id, g_mesh.nvert, g_mesh.npoly, g_mesh.nmat,
+	       g_mesh.stopped ? "" : "");
+	if (g_mesh.stopped)
+		printf("  the walk stopped: %s\n", g_mesh.stopped);
+	{
+		int k;
+		printf("  opcodes:");
+		for (k = 0; k < 0x600 / 0x20; k++)
+			if (g_mesh.seen_op[k]) printf(" $%03X x%u", k * 0x20, g_mesh.seen_op[k]);
+		printf("\n");
+	}
+}
+
 /* ------------------------------------------------------------ live windows */
 
 /* The cockpit with its panel lit, in one process, while the firmware runs.
@@ -311,6 +417,7 @@ static void tap_check(uint32_t pc)
 #define LIVE_EVERY 200000		/* instructions between pumps */
 
 static int g_live;
+static int g_mesh_ready;
 static SDL_Window *g_lw[NPANELS];
 static SDL_Renderer *g_lr[NPANELS];
 static SDL_Window *g_vw;
@@ -359,7 +466,7 @@ static int live_open(const char *frames)
 		}
 		fclose(f);
 	}
-	if (g_frames_n > 0) {
+	if (g_frames_n > 0 || g_mesh_id) {
 		g_vw = SDL_CreateWindow("battlepod - main view", SDL_WINDOWPOS_UNDEFINED,
 					SDL_WINDOWPOS_UNDEFINED, g_view_w * 2, g_view_h * 2,
 					SDL_WINDOW_RESIZABLE);
@@ -368,6 +475,16 @@ static int live_open(const char *frames)
 		SDL_RenderSetLogicalSize(g_vr, g_view_w, g_view_h);
 		g_vt = SDL_CreateTexture(g_vr, SDL_PIXELFORMAT_RGB24,
 					 SDL_TEXTUREACCESS_STREAMING, g_view_w, g_view_h);
+	}
+	if (g_mesh_id) {
+		uint32_t len = mesh_find(g_mesh_base, 0x200000u, g_mesh_id,
+					 g_meshbuf, sizeof g_meshbuf);
+		if (len) {
+			mesh_run(&g_mesh, g_meshbuf, len);
+			g_mesh_ready = g_mesh.npoly > 0;
+		}
+		if (!g_mesh_ready)
+			fprintf(stderr, "model %u has nothing to draw\n", g_mesh_id);
 	}
 	return 1;
 }
@@ -392,7 +509,23 @@ static void live_pump(uint64_t step)
 		PANELS[i].draw(g_lr[i], &g_panel);
 		SDL_RenderPresent(g_lr[i]);
 	}
-	if (g_vt) {
+	if (g_vt && g_mesh_ready) {
+		/* Drawn here and now, by src/raster.h, from geometry src/mesh.h took
+		 * out of the archive sitting in the emulator's own memory. Nothing
+		 * on disk, nothing from Python. */
+		static struct raster f;
+		struct ras_cam cam;
+		float floor;
+
+		ras_frame_on(&g_mesh, &cam, 3.4f, &floor);
+		cam.turn = (float)((step / (double)LIVE_EVERY) * 0.04);
+		cam.pitch = 0.10f;
+		ras_draw(&f, &g_mesh, &cam, floor, 1);
+		SDL_UpdateTexture(g_vt, NULL, f.px, RAS_W * 3);
+		SDL_RenderClear(g_vr);
+		SDL_RenderCopy(g_vr, g_vt, NULL, NULL);
+		SDL_RenderPresent(g_vr);
+	} else if (g_vt) {
 		long at = (long)((step / LIVE_EVERY) % (uint64_t)g_frames_n);
 		SDL_UpdateTexture(g_vt, NULL,
 				  g_frames_buf + at * (long)g_view_w * g_view_h * 3,
@@ -1530,6 +1663,9 @@ int main(int argc, char **argv)
 			set_val[nset++] = (*c == '=') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0;
 		}
 		else if (!strcmp(a, "--rio-dump") && i + 1 < argc) g_riodump = argv[++i];
+		else if (!strcmp(a, "--mesh") && i + 1 < argc)
+			g_mesh_id = (uint32_t)strtoul(argv[++i], NULL, 0);
+		else if (!strcmp(a, "--mesh-all")) g_mesh_all = 1;
 #ifdef BATTLEPOD_SDL
 		else if (!strcmp(a, "--live")) {
 			g_live = 1;
@@ -1722,6 +1858,9 @@ int main(int argc, char **argv)
 			}
 		if (!any) printf("  none\n");
 	}
+
+	if (g_mesh_all) mesh_all();
+	if (g_mesh_id) mesh_report();
 
 	if (g_rio_tx && g_riodump) rio_dump(g_riodump);
 

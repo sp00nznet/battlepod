@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The main view draws itself.** `src/mesh.h` runs a model's own threaded
+  program and `src/raster.h` draws the result, both in C inside the emulator's
+  process - `cockpit.exe --live --mesh 463` turns a Vulture torso with no file
+  in the path and no Python. The archive is already in the emulator's memory,
+  so `mesh.h` walks it in place at `0x02B00000` rather than loading anything.
+- **The two decoders check each other.** They are separate ports of one
+  interpreter, so the harness holds both to the same floor: **130 models, 5578
+  vertices, 2515 polygons, 1050 materials, identical either way**. Six new
+  checkpoints; the harness is at **61/61**.
+- That check earned its keep immediately. The first C version followed `$020`
+  to its target and abandoned the continuation, where the Python hands the
+  target to a work list and carries straight on - it came out with nine
+  vertices and **no polygons at all**. A second bug hid behind a stale object
+  file, because `mesh.h` was not in the Makefile's dependencies.
 - **The pod answers.** Say `IDENTIFY_YOURSELF` to the booted cockpit and it
   replies `20 01 00 20` followed by `GAME RUNNING 3228 600 2 GAME_NAME` -
   exactly the reply the operator console logged in 1995, from the other side of

@@ -313,6 +313,14 @@ python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
 `--check` decodes the three loadouts that a spreadsheet in the release also
 writes out in English, and compares them weapon for weapon.
 
+**Run the whole cockpit.** `make cockpit` builds the emulator with its windows
+- lamps, displays, bar graphs and the main view - in one process, drawing its
+own geometry in C as the firmware runs:
+
+```
+./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000 --live --mesh 463
+```
+
 **Watch the main view.** `make view` draws the pod's 480x360 in a window:
 
 ```

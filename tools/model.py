@@ -27,6 +27,7 @@ usage:
   model.py <resource file> --shape          symmetry and shoulder profile, each
   model.py <resource file> --nodes          the skeletons, as rest poses
   model.py <resource file> --zones [ROM]    which hit location $480 tags
+  model.py <resource file> --fall           totals for the single drawn path
   model.py <resource file> --id N           run one, describe what it drew
   model.py <resource file> --id N --obj F   write it out as a Wavefront OBJ
   model.py --selftest
@@ -649,6 +650,27 @@ def shapes(blob):
                  " ".join("%.2f" % v for v in s[1]), named(rid)))
 
 
+def fallstats(blob):
+    """Every model on the single fall-through path, which is what a picture
+    draws. src/mesh.h is a second port of this interpreter and has to come out
+    with the same totals; the harness holds both to the same floor."""
+    models = verts = polys = mats = 0
+    for rid, rtype, data in walk(blob):
+        if rtype != 1:
+            continue
+        m = Model(data, paths="fall")
+        m.run()
+        models += 1
+        verts += len(m.vert)
+        polys += len(m.poly)
+        mats += len(m.mat)
+    print("")
+    print("models decoded in python : %d" % models)
+    print("vertices decoded in python: %d" % verts)
+    print("polygons decoded in python: %d" % polys)
+    print("materials decoded in python: %d" % mats)
+
+
 def selftest():
     """A model built here, so the walker is not only ever tested on data we
     are still learning to read."""
@@ -703,6 +725,8 @@ def main(argv):
         return shapes(blob)
     if "--nodes" in argv:
         return skeletons(blob)
+    if "--fall" in argv:
+        return fallstats(blob)
     if "--zones" in argv:
         at = argv.index("--zones") + 1
         return zones(blob, argv[at] if at < len(argv) and argv[at][0] != "-" else None)

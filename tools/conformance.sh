@@ -181,6 +181,20 @@ if [ -f "$TI_RES" ]; then
         fi
     fi
 
+    # Two independent ports of one interpreter: tools/model.py and src/mesh.h.
+    # Both are held to the same floor, so a port that quietly drops an opcode
+    # fails here rather than turning up as a rendering bug much later.
+    echo
+    echo "== the two decoders agree =="
+    CHECKTEXT=$(python tools/model.py "$TI_RES" --fall 2>/dev/null
+                "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --mesh-all --steps 1 --top 0 2>/dev/null)
+    check_at_least "models decoded in python" 130
+    check_at_least "models decoded in C" 130
+    check_at_least "polygons decoded in python" 2515
+    check_at_least "polygons decoded in C" 2515
+    check_at_least "vertices decoded in python" 5578
+    check_at_least "vertices decoded in C" 5578
+
     echo
     echo "== whole mechs =="
     CHECKTEXT=$(python tools/render.py "$TI_RES" --mechs 2>/dev/null)
