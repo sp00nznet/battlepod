@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **ARCHITECTURE.md** - the long view. What the finished thing is (a pod in
+  SDL windows you can drag around, panels driven by the Remote I/O byte stream
+  so one could later be real hardware, ARCNET encapsulated in UDP with a small
+  centre server), what order to build it in, and which decisions evidence has
+  already settled. Its strategic call: **write the operator console rather than
+  emulate it** - everything it reads is plaintext in the release and its entire
+  message vocabulary was transcribed from a `Console Log` a real centre kept
+  for eight months of 1995 - because a game start is what unblocks the pose
+  data, and the pose data unblocks everything downstream.
+- It also answers how the thing plays, from the cockpit ROM's own strings:
+  `SHUTDOWN IN %d SECONDS`, `TWISTING TORSO LEFT`, `AMMO BAY FIRE`,
+  `Course %3.5f, Speed %3.5f`. **Real-time first-person, not turn-based** -
+  but keeping the whole tabletop data model, separate armour and internal
+  structure on each of 21 hit locations, heat as a float with a shutdown
+  countdown you can `MANUAL OVERRIDE`, ammunition counted per bay.
 - **`$480`'s tag is a hit location**, one-based, the same 21 the vehicle
   records list. Three things say so: **no tag anywhere in the archive falls
   outside 1 to 21** across the 27 models that use the opcode; a torso model

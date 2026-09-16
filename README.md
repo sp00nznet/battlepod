@@ -24,7 +24,11 @@ far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
 emit real Remote I/O packets, checksums and all. See
 [DEVICES.md](DEVICES.md) for the map, [RENDERING.md](RENDERING.md) for what it
 would take to reproduce all four of a cockpit's surfaces, and
-[ROADMAP.md](ROADMAP.md) for what's next.
+[ROADMAP.md](ROADMAP.md) for what's next, and
+[ARCHITECTURE.md](ARCHITECTURE.md) for what the finished thing should be - a
+pod in SDL windows you can arrange, an operator console written rather than
+emulated, and ARCNET over UDP so eight pods on a LAN is the same code as eight
+across the internet.
 
 It does not contain, and will never contain, any VWE code or data. You supply
 your own copy.
