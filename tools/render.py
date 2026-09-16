@@ -14,6 +14,8 @@ usage:
   render.py <resource file> --id N [--out FILE] [--size 480x360] [--turn DEG]
   render.py <resource file> --mech N   a whole mech, parts hung on skeleton N
   render.py <resource file> --mechs    assemble every chassis, report what stood
+  render.py <resource file> --mech N --raw out/mech.rgb --spin 120
+                                       raw frames for the view window
   render.py --selftest
 """
 import math
@@ -160,7 +162,7 @@ def extent(m):
 
 
 def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png", shadow=True,
-         zoom=2.4):
+         zoom=2.4, raw=None):
     w, h = size
     centre, radius, floor = extent(m)
     frame = Frame(w, h)
@@ -236,9 +238,16 @@ def draw(m, size=SCREEN, turn=0.6, pitch=0.18, out="out/model.png", shadow=True,
                         frame.px[i*3:i*3+3] = bytes(colour)
         lit += 1
 
+    if raw is not None:
+        # Straight RGB at the pod's own size, which is what src/view.c shows.
+        # A PNG is for looking at; this is for the window.
+        raw.write(bytes(frame.px))
+        return drawn, lit
+
     png(out, w, h, frame.px)
     print("%s: %dx%d, %d polygons and %d lights drawn"
           % (out, w, h, drawn, lit))
+    return drawn, lit
 
 
 def selftest():
@@ -456,6 +465,22 @@ def mechs(blob, lib):
     print("parts placed on skeletons  : %d" % total)
 
 
+def frames(subject, size, out, pitch, zoom, n):
+    """Write n frames of a turntable as raw RGB, for src/view.c to show.
+
+    One picture in a window is a picture in a window. Turning the subject is
+    what makes it a view, and it costs a loop: the renderer already takes the
+    camera angle as an argument.
+    """
+    w, h = size
+    with open(out, "wb") as fh:
+        for i in range(n):
+            turn = 2.0 * math.pi * i / n
+            drawn, lit = draw(subject, size, turn, pitch, None, zoom=zoom, raw=fh)
+    print("%s: %d frames of %dx%d, %d polygons and %d lights in the last one"
+          % (out, n, w, h, drawn, lit))
+
+
 def main(argv):
     if "--selftest" in argv:
         return selftest()
@@ -469,6 +494,8 @@ def main(argv):
         size = tuple(int(v) for v in argv[argv.index("--size") + 1].split("x"))
     turn = math.radians(float(argv[argv.index("--turn") + 1])) if "--turn" in argv else 0.6
     out = argv[argv.index("--out") + 1] if "--out" in argv else "out/model.png"
+    raw = argv[argv.index("--raw") + 1] if "--raw" in argv else None
+    spin = int(argv[argv.index("--spin") + 1]) if "--spin" in argv else 0
     if "--mechs" in argv:
         return mechs(blob, lib)
     if "--mech" in argv:
@@ -480,6 +507,8 @@ def main(argv):
             print("   node %2d  model %3d  at %6.2f %6.2f %6.2f" % (node, rid, at[0], at[1], at[2]))
         # a mech is far taller than it is wide, so it needs the camera
         # further back than a building does to keep its feet in frame
+        if raw:
+            return frames(a, size, raw, 0.10, 3.4, spin or 1)
         return draw(a, size, turn, 0.10, out, zoom=3.4)
     for rid, rtype, data in M.walk(blob):
         if rid != want or rtype != 1:
@@ -491,6 +520,8 @@ def main(argv):
         if not m.poly:
             print("nothing to draw - the walk stopped at %s" % m.stopped)
             return
+        if raw:
+            return frames(m, size, raw, 0.18, 2.4, spin or 1)
         return draw(m, size, turn, 0.18, out)
     print("no type 1 resource %d" % want)
 

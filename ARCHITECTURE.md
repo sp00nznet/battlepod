@@ -385,14 +385,35 @@ addressed is drawn as an empty outline rather than as dark, because unknown is
 not off.
 
 
+## Step 2, done: the main view
+
+`make view` builds `build/view.exe`, and `render.py --raw` feeds it:
+
+```
+python tools/render.py "$GF/Cockpit Software/battletech_ti_res"     --mech 452 --raw out/madcat.rgb --spin 60
+./build/view.exe out/madcat.rgb --fps 24
+```
+
+Sixty frames of a MadCat turning, at the 480x360 the display list says the pod
+ran, in a window that opens at double size and letterboxes rather than
+stretches when it is dragged to some other shape. Space plays and pauses, the
+arrows step, escape quits.
+
+The frames are **plain RGB with no container**, which is the same bargain the
+panel makes with the Remote I/O byte stream: the producer is Python today and
+will be C in the pod eventually, and the window does not care. A file that does
+not divide evenly into frames is reported as a size mismatch rather than shown
+sheared by a row.
+
 ## Order of work
 
 1. ~~**Controls and the panel windows.**~~ Done for output: `make panel`,
    three windows, driven from a capture of the wire. Inputs - stick, throttle,
    pedals back up the same link - are what is left of this step, and the
    manual's encoder ranges are above.
-2. **The main view in SDL.** Today `render.py` writes PNGs; the same geometry
-   into a window at the pod's 480x360, upscaled with the aspect kept.
+2. ~~**The main view in SDL.**~~ Done: `make view`, the pod's 480x360 in a
+   resizable window, letterboxed rather than stretched. `render.py --raw
+   --spin N` writes the frames.
 3. **The operator console**, speaking the recovered protocol to one local pod.
    This is the unlock: a real game start means real pose data, which finishes
    the standing mech and gives the renderer a display list that came from the

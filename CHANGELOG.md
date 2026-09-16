@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The main view, in a window.** `make view` builds `build/view.exe` and
+  `render.py --raw --spin N` feeds it: the pod's own 480x360, opened at double
+  size, letterboxed rather than stretched when the window is dragged. Space
+  plays and pauses, arrows step, escape quits. Sixty frames of a MadCat turning
+  is one command.
+- The frames are **plain RGB with no container** - the same bargain the panel
+  makes with the Remote I/O stream. The rasteriser is Python today and will be
+  C in the pod eventually; the window does not care, and swapping one for the
+  other changes nothing. A file that does not divide evenly into frames is
+  called out as a size mismatch rather than shown sheared by a row.
 - **The cockpit panel, in windows you can move around.** `make panel` builds
   `build/panel.exe`: lamps, soft-label displays and bar graphs in three
   resizable SDL windows, driven from a Remote I/O capture that

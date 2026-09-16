@@ -313,13 +313,24 @@ python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
 `--check` decodes the three loadouts that a spreadsheet in the release also
 writes out in English, and compares them weapon for weapon.
 
+**Watch the main view.** `make view` draws the pod's 480x360 in a window:
+
+```
+python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --mech 452 --raw out/madcat.rgb --spin 60
+./build/view.exe out/madcat.rgb --fps 24
+```
+
 **See the cockpit panel.** `make panel` needs SDL2; nothing else here does.
 It draws a Remote I/O capture - lamps, displays and bar graphs - in three
 windows you can drag anywhere, and left/right scrub the stream a frame at a
 time:
 
 ```
-./build/battlepod.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's30501' --rio-dump out/one.rio
+./build/battlepod.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's
+3
+05
+01
+' --rio-dump out/one.rio
 ./build/panel.exe out/one.rio
 ```
 

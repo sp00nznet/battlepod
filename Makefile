@@ -53,9 +53,10 @@ $(BUILD):
 deps:
 	@test -d $(MUSASHI) || git clone --depth 1 https://github.com/kstenerud/Musashi $(MUSASHI)
 
-test: $(BUILD)/battlepod.exe $(BUILD)/paneltest.exe
+test: $(BUILD)/battlepod.exe $(BUILD)/paneltest.exe $(BUILD)/viewtest.exe
 	./$(BUILD)/battlepod.exe --selftest
 	./$(BUILD)/paneltest.exe --selftest
+	./$(BUILD)/viewtest.exe --selftest
 
 # Replays the cockpit boot and counts milestones. Skips if no release present;
 # point VWE_GAME_FILES at the extracted "Console Files/Game Files" directory.
@@ -81,7 +82,16 @@ $(BUILD)/panel.exe: src/panel.c src/rio.h | $(BUILD)
 $(BUILD)/paneltest.exe: src/panel.c src/rio.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -DPANEL_NO_SDL -o $@ src/panel.c
 
+view: $(BUILD)/view.exe
+
+$(BUILD)/view.exe: src/view.c | $(BUILD)
+	@test -n "$(SDL_LIBS)" || { echo "view needs SDL2 (pkg-config --libs sdl2 found nothing)"; exit 1; }
+	$(CC) $(CFLAGS) -Isrc $(SDL_CFLAGS) -o $@ src/view.c -static $(SDL_LIBS)
+
+$(BUILD)/viewtest.exe: src/view.c | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc -DVIEW_NO_SDL -o $@ src/view.c
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean test deps conformance panel
+.PHONY: all clean test deps conformance panel view
