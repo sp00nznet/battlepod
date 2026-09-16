@@ -345,6 +345,8 @@ python tools/macres.py "$GF/../Console 1.5.12.a01.rsrc" CODE 1 out/code1.bin
 
 ```
 python tools/logproto.py "$GF/../Console Log"            # message vocabulary
+python tools/opscon.py "$GF/../../Console 1.5.12.a01.rsrc"   # and from the sender
+python tools/opscon.py "$GF/../../Console 1.5.12.a01.rsrc" --formats
 python tools/logproto.py "$GF/../Console Log" --sequence # one game start, in order
 ```
 

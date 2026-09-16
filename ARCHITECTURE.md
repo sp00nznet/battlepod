@@ -153,6 +153,47 @@ vehicle records carry — `LEFT LEG DISABLED`, `TOP SPEED REDUCED`,
 `RIGHT ARM GUNS DESTROYED`, `MISSILE PACK DESTROYED`, `TORSO ACTUATOR DAMAGED`,
 `AMMO BAY FIRE`.
 
+### What the panels are called, from the manual
+
+The *VWE System 3.0 User Guide and Technical Manual* is the right generation for
+this release and it names the panels as hardware, which is the decomposition
+worth building to. The card cage holds **CPU, Amiga, Sound Board/Intercom,
+Remote I/O, Weapons A, Weapons B, Keypad, Buttons, LCD**, and the manual's
+description of each:
+
+| panel | the manual's words |
+|---|---|
+| **Player Interface Device** | "Change the pilot mode from basic to standard to veteran to master... these also control crosshairs, fine/standard pedal control and VTV monitor configuration" |
+| **Weapons Displays** (A and B) | "On the left and right side of the Main Monitor. These display and control weapons configuration" |
+| **Advanced Function** | "Radar Zoom, infrared, Indirect Firing Control, Search Light Control, Mech Torso Centering" |
+| **Video Select Panel** | "Selects between Radar, Map and Indirect Firing Control in BT" |
+| **Key Pad** | "Used for cockpit maintenance and for overheat codes in BT" |
+| **Joystick / Throttle / Foot pedal** | vehicle control, speed, steering |
+
+Read that against the firmware table above and it is the same machine described
+twice. Player Interface Device is `BASIC`/`STANDARD`/`VETERAN`/`MASTER MODE`
+with `CROSSHAIR ON` and `FINE PEDALS`. Advanced Function is `ZOOM IN RADAR`,
+`INFRARED ACTIVE`, `INDIRECT FIRE MODE`, `SEARCH LIGHT ON`, `CENTERING THE
+TORSO` — five legends, five status lines, in the manual's own order. Video
+Select is the three `… DISPLAY SELECTED` lines.
+
+**So the panel windows fall out of the hardware**: Weapons A, Weapons B,
+Buttons (the interface/advanced/video-select group), Keypad, LCD, plus the two
+monitors. Not a layout we invented.
+
+The manual also gives the analog ranges, which the input path needs on day one.
+All are optical encoders read by the Remote I/O board:
+
+| control | released / centred | full |
+|---|---|---|
+| throttle | `$0000` (sometimes wrapping to `$FFF0`) | `$0340` |
+| foot pedals | `$0000` | `$0340` |
+| joystick, each axis | `$0000` centred | about ±`$80` |
+
+And a diagnostic worth having: keystroke `1` in the root menu lights **every LED
+segment in the cockpit**, which is a panel test we can run against our own
+renderer the moment it exists.
+
 ### What it looks like, from photographs
 
 Photographs of a surviving pod give the arrangement:

@@ -190,9 +190,23 @@ if [ -f "$ROM" ]; then
     check_at_least "loadouts matching in full" 2
 fi
 
+# The operator console is the sender. It logs every message it puts on the wire
+# by name and with its fields, so its own strings are a protocol specification -
+# checked here against tools/logproto.py, which recovers the same vocabulary
+# from a real centre's log.
+OPSCON="${VWE_GAME_FILES}/../../Console 1.5.12.a01.rsrc"
+if [ -f "$OPSCON" ]; then
+    echo
+    echo "== operator console =="
+    CHECKTEXT=$(python tools/opscon.py "$OPSCON" --check 2>/dev/null)
+    check_at_least "messages recovered from the console" 31
+    check_at_least "entity classes and wire messages" 25
+    check_at_least "file grammars recovered" 27
+fi
+
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

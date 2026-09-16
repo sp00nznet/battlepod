@@ -8,6 +8,40 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/opscon.py` - the console's protocol, read out of the console.** The
+  plan was to lift its 68k code; in the end no lifting was needed. The console
+  **logs every message it sends, by name and with its fields**, and those
+  `printf` formats sit in one region of its `DATA` resource - so a format
+  string is a field list written by the sender. **31 messages**, cross-checked
+  against `logproto.py`, which recovers the same vocabulary from a real
+  centre's 1995 log: the sender and its diary agree.
+- The entity taxonomy came with it and is wider than the vehicle list showed -
+  `VTV_CLASS`, `HOVER_CLASS`, `COPTER_CLASS`, `CAMERAMAN_CLASS`,
+  `ANIMATOR_CLASS`, `POD_CLASS`, `EXPLOSION_CLASS`, three of which this build
+  reports as unsupported - and so did the **packet header**: `ERROR: Orig. %d,
+  Pri. %d, Num. %ld, Time %ld` says a packet carries an origin, a priority, a
+  sequence number and a timestamp.
+- **The map file format, for free.** The console parses the release's data
+  files with `scanf` and those grammars are in the same region, each followed
+  by the log line naming what the parsed line becomes, so `--formats` labels
+  them: `GROUND_CLASS %d %d %f %f %f %f %f %d %d`, `DOOR_CLASS`, `LIGHT_CLASS`,
+  `CAMERA_POSITION` and the rest, plus `Net_Configuration` and `Game_Setup`.
+  Three new checkpoints; the harness is at **53/53**.
+- **The panel decomposition, from the System 3.0 manual** - the right
+  generation for this release. It names the panels as hardware: Weapons A,
+  Weapons B, Keypad, Buttons, LCD in the card cage, and describes Player
+  Interface Device, Advanced Function and Video Select Panel in words that
+  match the firmware's status lines one for one. So the SDL windows follow the
+  boards rather than a layout we invented. The manual also gives the analog
+  ranges the input path needs: throttle and pedals `$0000` to `$0340`, joystick
+  `$0000` centred and about ±`$80` at the stops, all optical encoders.
+
+### Still open
+
+- The message **byte layout on the wire**. Format strings give the fields and
+  their C types, not their order and width. That does need the code - but it is
+  now a narrow question about a few functions in `Start.c` and `Load.c` rather
+  than an open one about a 260 KB application.
 - **The cockpit's whole switch inventory, from the firmware.** The ROM prints a
   status line every time a control is thrown, so the panel is recoverable
   without seeing a pod: torso twist and centring, visible/infrared/searchlight,

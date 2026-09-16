@@ -768,6 +768,89 @@ resources: code and data relocations applied at load time. The operands on disk
 are placeholders. Reading the sender means implementing those relocation tables
 first — a reverse-engineering job in its own right, on an undocumented format.
 
+### The console as its own specification
+
+The plan was to lift the operator console's code to read what it puts on the
+wire. In the end no lifting was needed: **the console logs every message it
+sends, by name and with its fields**, and those `printf` format strings sit in
+its `DATA` resource in one contiguous region, `0x7572`-`0x93C0`. A format
+string is a field list written by the program that sends it.
+
+`tools/opscon.py` reads them out — 31 messages, and it is checked against
+`tools/logproto.py`, which recovers the same vocabulary from the other end: the
+`Console Log` a real centre kept through 1995. The sender and its diary agree.
+
+```
+COCKPIT_CONFIG_MSG   node int, forward int, name string
+PLAYER_CONFIG        node int, cockpit string, name string
+PLAYER_LINK          node long, name string
+IDENTIFY_YOURSELF    node long
+SHADOW_ROM           node int
+MECH_CLASS           thing long, class long, x float, y float, z float
+CREATE_THING         node long, name string
+FINAL_LAUNCH_MSG     to net long, node long, cockpitsRunning long
+NET_CONFIG_SEND_MSG      to net long, node long
+GAME_SETUP_SEND_MSG      to net long, node long
+CONSOLE_CHAT_MSG         to net long, node long, msg string
+CONSOLE_CONTROL_MSG      to net long, node long, type long
+ROUTER_MODEM_COMMAND_MSG node long, command string, function long, timeout long
+ROUTER_STATUS_MSG        from node long, status string, status code long
+SITELINK_NAME_MSG        to net long, node long, site long, name string
+```
+
+The entity taxonomy comes with it, and it is wider than the vehicle list
+suggested. Alongside `MECH_CLASS` there are `VTV_CLASS`, `HOVER_CLASS`,
+`COPTER_CLASS`, `CAMERAMAN_CLASS`, `ANIMATOR_CLASS`, `POD_CLASS` and
+`EXPLOSION_CLASS` — three of which the console will tell you are *unsupported*
+by this build, which is itself worth knowing.
+
+Some other things fell out of the same region:
+
+```
+ERROR: Orig. %d, Pri. %d, Num. %ld, Time %ld, String:
+Packet_Check: *Unknown type* Orig. %ld, Type %ld
+Source %d, Destination %d, Count %d
+```
+
+so a packet carries an **origin, a priority, a sequence number and a
+timestamp** — the header this project has been guessing at from the receiving
+side.
+
+### The map file format, for free
+
+The console reads the release's own data files with `scanf`, and those grammars
+are in the same region, each followed by the log line naming what the parsed
+line becomes. `opscon.py --formats`:
+
+```
+GROUND_CLASS      %d %d %f %f %f %f %f %d %d
+TERRAIN_CLASS     %d %d %f %f %f %f %f %d
+ICON_CLASS        %d %d %f %f %f %f %f %d
+SWITCH_CLASS      %d %d %f %f %f %f %f %d %d %d %d %d
+DOOR_CLASS        %d %d %f %f %f %f %f %d %d %f %f %d %d
+LIGHT_CLASS       %d %d %f %f %f %f %f %d %d %d %f %f %f %f %f %f %f %f %f
+CAMERA_POSITION   %d %d %f %f %f %f %f %d "%[^"]" %d %d %d %f %f
+VTV_CLASS         %d %f %f %f %f %d %d
+MECH_CLASS        %d %f %f %f %f %d %d
+```
+
+with the log lines reading the first fields back as `thing`, `class`, `shape`,
+`x`, `y`, `z`. The setup files come with them —
+`Reading Net_Configuration` takes `%d %d %d %d %d %d %d %s %s "%[^"]"`, which
+is exactly the ten columns `Net_Configuration` documents in its own comments,
+and `Game_Setup` takes `%d %d %d %d %d %d %d "%[^"]"` followed by a scenario
+file, a time, an environment and a haze setting.
+
+### What is still missing
+
+The fields and their C types, not their **order and width on the wire**. A
+`long` in a log line is a `long` in the program, but whether it goes out as
+four bytes, two, or ASCII is not something a format string can tell us. That
+does need the code — and now it is a narrow question about a handful of
+functions in `Start.c` and `Load.c` rather than an open one about a 260 KB
+application.
+
+
 ## Renderer command 6
 
 With the renderer's memory mapped as real RAM (the firmware reads a fixed error
