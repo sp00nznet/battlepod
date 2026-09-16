@@ -295,6 +295,20 @@ python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --id 24 --obj out
 model carries a bounding box its vertices have to reproduce, which is what
 makes a wrong decode fail loudly instead of quietly.
 
+**Read the roster.** The cockpit ROM carries 38 vehicle records — the skeleton
+each one is drawn on, its 21 hit locations with armour and sub-part ids, and
+its twelve weapon bays — plus a table of 20 weapons:
+
+```
+python tools/vehicles.py "$GF/Cockpit Software/ROM3_0"
+python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --id 8
+python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --weapons
+python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
+```
+
+`--check` decodes the three loadouts that a spreadsheet in the release also
+writes out in English, and compares them weapon for weapon.
+
 **Draw one:**
 
 ```

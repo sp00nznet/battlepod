@@ -292,6 +292,88 @@ The same two columns over the skeletons are worth a look on their own: five of
 the six place their 19 nodes symmetrically and `456`, the Avatar, does not
 (0.0169) — so chassis asymmetry can live in the frame as well as in the load.
 
+### What a BattleMech is to this game
+
+The chassis names came out of the cockpit ROM, and they came out of a record
+that has a great deal more in it. `ROM3_0` carries 38 vehicle records of 958
+bytes at `0x70582` — the same 38 `Vehicle_List` numbers — and each one is a
+complete statement of a machine:
+
+```
++0x00  name, 40 bytes
++0x28  u16  the skeleton's resource id in the TI archive
++0x32  u16  hit locations to follow, 21 on every vehicle in the release
++0x34  f32 x 12, the first of which is top speed in kph
++0x64  the hit locations, 34 bytes each
+         +0x00 name, 24 bytes   +0x18 armour   +0x1a structure
+         +0x1c two sub-part ids
+       then twelve weapon slots of 12 bytes, ending exactly at the record end
+         +0x00 index into the weapon table, 0xFFFF for an empty bay
+         +0x04 rounds carried, 0xFFFF for an energy weapon
+```
+
+`100 + 21 x 34 + 12 x 12` is 958 to the byte, which is what says the record is
+read right rather than merely read plausibly.
+
+Every vehicle has the **same 21 hit locations**, in the same order, with the
+same sub-part ids; only the armour and structure numbers change between
+chassis:
+
+```
+Left/Right Foot        Left/Right Arm          Left/Center/Right Torso
+Left/Right Lower Leg   Left/Right Weapon Pod   Lower Torso
+Left/Right Upper Leg   Missile Pack            Rear Center/Lower/Left/Right Torso
+Hips                   Searchlight
+```
+
+That is the mech, part by part, and the two ids on each line are the pair the
+renderer's **pick query** hands back when a shot lands on it — the query whose
+seven-longword groups this project spent a while calling geometry. They run
+from 10 to 51 in consecutive pairs, so ids 0-9 belong to something else.
+
+### The weapon table
+
+Twenty weapons of 60 bytes at `0x7D018`, `--weapons` prints them:
+
+```
++0x00 name, 24 bytes   +0x24 damage   +0x30 f32 heat
++0x18 short HUD name   +0x28 range in metres   +0x38 1 direct fire, 2 missiles
+```
+
+Ranges come out as round numbers in metres — 150 for machine guns, 6000 for
+every LRM — and the ER variants sit one class above their base weapon in
+damage and heat while sharing its effect id, which is what an extended-range
+laser is.
+
+### Checked against the release's own spreadsheet
+
+A decode that is wrong but self-consistent passes every test you build out of
+the same bytes. So the vehicle table is checked against a spreadsheet that
+shipped in the release. `New mechs and VTV` writes out three loadouts in
+English — MadCat V4, MadCat V5 and Thor V7 — and decoding those three records
+has to reproduce them.
+
+It does. All three come out with the right weapons, the right number of each,
+and the rounds to match:
+
+```
+MadCat V4    7 weapons, names match, rounds match
+Madcat V5    6 weapons, names match, rounds match
+THOR V7     11 weapons, names match, rounds differ
+     rom says Short Range Missile 4 pk (25)    the spreadsheet says 24
+```
+
+One round of SRM ammunition on one configuration, out of 24 weapons and
+fourteen ammunition counts across the three. That is a design document and a
+shipped build disagreeing, not a decode that is wrong — the spreadsheet is
+dated before the release it describes. The harness guards all of it:
+`tools/vehicles.py --check`, five checkpoints.
+
+The loadouts also read correctly as BattleTech. Loki V2 carries twin ER PPCs
+and nothing else but lasers, which is the Hellbringer Prime; MadCat Prime
+carries a PPC, two LRM 15 racks and four lasers. Nobody could have got those
+by accident from a wrong table.
+
 ### Checking against something outside the project
 
 BattleTech's mechs are among the most drawn machines in science fiction, which

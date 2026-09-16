@@ -85,6 +85,13 @@ transforms that place them come from a table the 68020 fills in per frame. Two
 independent lines of evidence agree on this — the parts' bounding boxes, and
 the instruction stream. Getting a pose means running the game.
 
+The cockpit ROM has since given up half of what is needed: its vehicle records
+name the **21 parts a mech is made of**, the same 21 on every chassis, each
+with the two sub-part ids the pick query returns. What is still missing is the
+mapping from a sub-part id to a model resource, and the transforms — and the
+part ids do not occur anywhere in the cockpit software, so both come from the
+game server.
+
 **Starting a game.** Still the oldest blocker. The firmware consumes packets
 and the opcode dispatch is mapped, but the byte encoding of each message is
 not, and the sender — the Macintosh console — is behind THINK C's `CREL`/`DREL`

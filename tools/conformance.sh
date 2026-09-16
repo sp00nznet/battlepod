@@ -133,9 +133,9 @@ TI_RES="${VWE_GAME_FILES}/Cockpit Software/battletech_ti_res"
 if [ -f "$TI_RES" ]; then
     echo
     echo "== model archive =="
-    MODELS=$(python tools/model.py "$TI_RES" --stats 2>/dev/null)
+    CHECKTEXT=$(python tools/model.py "$TI_RES" --stats 2>/dev/null)
     check_at_least() {
-        got=$(echo "$MODELS" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
+        got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
         total=$((total + 1))
         if [ -n "$got" ] && [ "$got" -ge "$2" ]; then
             pass=$((pass + 1))
@@ -152,9 +152,24 @@ if [ -f "$TI_RES" ]; then
     check_at_least "material count matches"          56
 fi
 
+# The cockpit ROM's vehicle table is checked against something the ROM does not
+# control: a spreadsheet in the release writes out three loadouts in words, and
+# decoding those three records has to produce them.
+ROM="${VWE_GAME_FILES}/Cockpit Software/ROM3_0"
+if [ -f "$ROM" ]; then
+    echo
+    echo "== vehicle table =="
+    CHECKTEXT=$(python tools/vehicles.py "$ROM" --check 2>/dev/null)
+    check_at_least "vehicle records that decode" 38
+    check_at_least "chassis in the vehicle table" 6
+    check_at_least "weapons named" 20
+    check_at_least "loadouts matching by name" 3
+    check_at_least "loadouts matching in full" 2
+fi
+
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/vehicles.py` - the cockpit ROM's vehicle and weapon tables.** Each
+  of the 38 records at `0x70582` is a complete statement of a BattleMech: the
+  skeleton's resource id, twelve floats of which the first is top speed, **21
+  hit locations** by name with armour, structure and the two sub-part ids the
+  pick query returns, and **twelve weapon bays**. `100 + 21 x 34 + 12 x 12` is
+  958 to the byte. Every vehicle in the release has the same 21 locations in
+  the same order - Left/Right Foot, Lower Leg, Upper Leg, Hips, Arm, Weapon
+  Pod, the five torso zones and their rear faces, Missile Pack, Searchlight -
+  so that list is the mech, part by part, and the sub-part ids run 10 to 51.
+- **A weapon table of 20 entries at `0x7D018`**: name, HUD abbreviation,
+  damage, range in metres, heat as a float, and direct fire against missile.
+- **Checked against something the ROM does not control.** `New mechs and VTV`,
+  a spreadsheet in the release, writes out three loadouts in English. Decoding
+  those three records reproduces all three: **24 weapons, right names, right
+  counts**, and every ammunition figure but one - Thor V7's SRM 4 carries 25
+  rounds in the shipped ROM against the spreadsheet's 24, a design document
+  predating its build rather than a bad decode. Five new checkpoints guard it
+  and the harness is at **45/45**.
 - **The six chassis, named from the release rather than guessed.** `Game
   Files/Vehicle_List` lists 38 vehicles over six chassis - MadCat, Vulture,
   Loki, Thor, Sunder, Avatar - plus a Drone and the Director camera. `ROM3_0`
