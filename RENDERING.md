@@ -292,6 +292,81 @@ The same two columns over the skeletons are worth a look on their own: five of
 the six place their 19 nodes symmetrically and `456`, the Avatar, does not
 (0.0169) — so chassis asymmetry can live in the frame as well as in the load.
 
+### The skeletons are a rest pose, and it stands up
+
+`$040` was on the measured-but-not-interpreted list for a long time: six
+operands, one of which was obviously a float. It is a **node composition**, and
+the six operands are a node, its parent, a transform slot, and **three floats
+that are the node's offset from its parent**. A skeleton is a chain of them and
+nothing else, so running the chain gives positions. `model.py --nodes` does:
+
+```
+451 Loki
+   node  1 <-  0  slot  1  offset   0.00  -0.80   0.00   stands at   0.00  -0.80   0.00
+   node  2 <-  1  slot  2  offset   0.00   1.50   0.00   stands at   0.00   0.70   0.00
+   node  3 <-  1  slot  7  offset  -1.18   1.00  -0.20   stands at  -1.18   0.20  -0.20
+   node  4 <-  3  slot  8  offset   0.08  -2.75   0.26   stands at  -1.10  -2.55   0.06
+   node  5 <-  4  slot  9  offset   0.00  -2.00   0.02   stands at  -1.10  -4.55   0.08
+   node  9 <-  2  slot  5  offset   1.49   2.20  -0.50   stands at   1.49   2.90  -0.50
+```
+
+Hips, torso, a hip/knee/foot down each side, a shoulder out each way, mirrored
+to the third decimal. Feet at y −4.55 and shoulders at +2.90 inside a stated
+box of −5.00 to +4.00. **That is a BattleMech standing up**, and the check that
+says so is not ours: every node has to land inside the bounding box the model
+states for itself, and across the six chassis the worst node pokes out by 5.6%
+of the model size with three of them at zero.
+
+There are exactly **two leg designs** in the release. Loki, Thor and Sunder put
+the knee straight under the hip. MadCat, Vulture and Avatar throw it 2.15 units
+backwards and bring the foot forward again — a reverse-jointed, digitigrade
+leg, which is what a Clan OmniMech looks like and what makes a Mad Cat
+recognisable at a glance.
+
+### Hanging the parts on it
+
+Parts are authored **in the space of the node they hang on**, reaching from
+that node down to the next one. Model 471's box runs y −2.75 to +0.24 and the
+Loki's hip-to-knee offset is −2.75 exactly. So the part that belongs on a node
+is the one whose own bounding box *contains the offset of that node's child*,
+and where several do, the smallest. Nothing is placed by hand.
+
+Left and right are separate resources holding the same geometry reflected in
+x — 471 and 474 are vertex-for-vertex mirrors — so the side is settled by which
+way a part's own vertices lean against which way the node does.
+
+Two nodes get their part another way, and both say so in the code. The **torso**
+always hangs on node 2: on a chassis with no shoulder nodes at all there is no
+child offset to match against, and where there is one, several parts contain it
+and the smallest is not the torso — so it comes from the part block ten ids
+above the skeleton. A **foot** hangs on a node with nothing below it, so again
+there is no offset; it is whatever is left unused in the seven-id block the
+rest of that leg came from.
+
+`render.py --mechs` runs it over the archive:
+
+```
+ 451  Loki     8 parts,  206 polygons: 461 470 474 475 471 472 476 473
+ 452  MadCat   8 parts,  224 polygons: 462 490 491 492 494 495 496 493
+ 453  Vulture  8 parts,  242 polygons: 463 490 491 492 494 495 496 493
+ 454  Thor     8 parts,  211 polygons: 464 470 474 475 471 472 476 473
+ 455  Sunder   8 parts,  189 polygons: 465 470 474 475 471 472 476 473
+ 456  Avatar   8 parts,  219 polygons: 466 490 491 492 494 495 496 493
+```
+
+Six for six, and the leg families fall out on their own along exactly the split
+the node geometry already drew: `470`-`476` for the straight-legged three,
+`490`-`496` for the reverse-jointed three. `render.py --mech 452` draws one.
+
+**What is still missing is the arms.** The vehicle records list a Left and
+Right Arm and a Left and Right Weapon Pod among their 21 hit locations, and the
+archive holds candidates — `477`-`480`, and `516`/`517`, which are a left/right
+pair whose x signs match the shoulder nodes. But the MadCat skeleton has no
+shoulder nodes at all, which it plainly needs, so at least one arm mount is
+supplied rather than stored. That is the same boundary everything else runs
+into: the pose beyond the rest pose, and the choice of what to hang, come from
+the game server.
+
 ### What a BattleMech is to this game
 
 The chassis names came out of the cockpit ROM, and they came out of a record

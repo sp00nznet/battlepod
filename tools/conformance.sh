@@ -150,6 +150,12 @@ if [ -f "$TI_RES" ]; then
     check_at_least "vertices reproduce the box"      84
     check_at_least "box within 2% of the model size" 105
     check_at_least "material count matches"          56
+
+    echo
+    echo "== whole mechs =="
+    CHECKTEXT=$(python tools/render.py "$TI_RES" --mechs 2>/dev/null)
+    check_at_least "chassis that assemble whole" 6
+    check_at_least "parts placed on skeletons" 48
 fi
 
 # The cockpit ROM's vehicle table is checked against something the ROM does not

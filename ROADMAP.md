@@ -79,18 +79,19 @@ alongside the strict one, and the harness guards the 2% number.
 
 ## Blocked, and on what
 
-**A standing mech.** The archive holds **rigs, not poses**: `$460` says which
-sub-models make up an object and `$040` says how their nodes compose, but the
-transforms that place them come from a table the 68020 fills in per frame. Two
-independent lines of evidence agree on this — the parts' bounding boxes, and
-the instruction stream. Getting a pose means running the game.
+**A standing mech — done, and this section was wrong about why it could not
+be.** The claim here was that the archive holds rigs and no poses at all.
+`$040` turned out to carry three floats of offset, so a skeleton *is* a rest
+pose; running the chain gives hips, torso and two jointed legs that land inside
+the model's own stated bounding box. `render.py --mech` hangs the parts on it
+by matching each part's box against the node offsets, and all six chassis
+assemble to eight parts and draw.
 
-The cockpit ROM has since given up half of what is needed: its vehicle records
-name the **21 parts a mech is made of**, the same 21 on every chassis, each
-with the two sub-part ids the pick query returns. What is still missing is the
-mapping from a sub-part id to a model resource, and the transforms — and the
-part ids do not occur anywhere in the cockpit software, so both come from the
-game server.
+What genuinely is not in the archive is the **arms**. The vehicle records list
+a Left and Right Arm and Weapon Pod among their 21 hit locations, and there are
+candidate resources, but the MadCat skeleton has no shoulder nodes at all —
+which it visibly needs — so at least one mount is supplied rather than stored.
+Animation beyond the rest pose is likewise per-frame from the 68020.
 
 **Starting a game.** Still the oldest blocker. The firmware consumes packets
 and the opcode dispatch is mapped, but the byte encoding of each message is

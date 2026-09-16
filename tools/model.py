@@ -25,6 +25,7 @@ one.
 usage:
   model.py <resource file> --stats          run all of them, report the checks
   model.py <resource file> --shape          symmetry and shoulder profile, each
+  model.py <resource file> --nodes          the skeletons, as rest poses
   model.py <resource file> --id N           run one, describe what it drew
   model.py <resource file> --id N --obj F   write it out as a Wavefront OBJ
   model.py --selftest
@@ -91,6 +92,8 @@ class Model:
         self.written = []       # every value ever written to a slot
         self.poly = []          # (face, [vertex indices], material)
         self.mat = {}           # index -> (kind, p0, p1, p2, p3)
+        self.node = {0: (0.0, 0.0, 0.0)}   # $040's node tree, in model space
+        self.arm = {}           # node -> (parent, transform slot, offset)
         self.parts = []         # sub-part tags pushed by $480
         self.bitmaps = []       # bitmap resource ids blitted by $560/$580
         self.seen = {}          # opcode -> count
@@ -221,6 +224,16 @@ class Model:
                         self.points.append((self.w[at], f32(self.w[at + 1]),
                                             self.w[at + 2]))
                         at += 3
+                    elif op == 0x040:
+                        # node, parent, transform slot, then three floats:
+                        # the node's offset from its parent. On a skeleton
+                        # this is the rest pose - see joint().
+                        o = self.w[at:at + 6]
+                        d = (f32(o[3]), f32(o[4]), f32(o[5]))
+                        p = self.node.get(o[1], (0.0, 0.0, 0.0))
+                        self.node[o[0]] = tuple(p[i] + d[i] for i in range(3))
+                        self.arm[o[0]] = (o[1], o[2], d)
+                        at += 6
                     elif op == 0x460:           # draw another model here
                         self.submodel(self.w[at + 2])
                         at += 3
@@ -502,6 +515,46 @@ def named(rid):
     return CHASSIS.get(rid) or CHASSIS.get(rid - 10, "")
 
 
+def joint(m):
+    """Where a skeleton's nodes sit, and whether that is a mech standing up.
+
+    `$040` composes one node onto another with a constant offset, and a
+    skeleton is nothing but a chain of them. Running the chain gives a rest
+    pose: hips, torso, a hip/knee/foot down each side and a shoulder out each
+    way. Nothing here is a guess - the offsets are IEEE floats in the stream,
+    and the positions they produce have to land inside the bounding box the
+    model states for itself, which is the same check every other decode in
+    this project answers to.
+    """
+    if len(m.node) < 2:
+        return None
+    lo = [min(p[i] for p in m.node.values()) for i in range(3)]
+    hi = [max(p[i] for p in m.node.values()) for i in range(3)]
+    box = m.box
+    span = max(box[1] - box[0], box[3] - box[2], box[5] - box[4]) or 1.0
+    out = max(max(box[0] - lo[0], lo[0] * 0 + box[2] - lo[1], box[4] - lo[2]),
+              max(hi[0] - box[1], hi[1] - box[3], hi[2] - box[5]))
+    return len(m.node) - 1, max(0.0, out) / span
+
+
+def skeletons(blob):
+    print("  id  chassis  nodes  worst node outside the stated box")
+    for rid, rtype, data in walk(blob):
+        if rtype != 1:
+            continue
+        m = Model(data)
+        m.run()
+        j = joint(m)
+        if j is None or m.poly:
+            continue
+        print("%5d  %-8s %4d   %.1f%% of the model size" % (rid, named(rid), j[0], 100 * j[1]))
+        for k in sorted(m.arm):
+            par, slot, d = m.arm[k]
+            print("        node %2d <- %2d  slot %2d  offset %6.2f %6.2f %6.2f   stands at %6.2f %6.2f %6.2f"
+                  % (k, par, slot, d[0], d[1], d[2],
+                     m.node[k][0], m.node[k][1], m.node[k][2]))
+
+
 def shape(m, bins=5):
     """How symmetric a part is, and how tall it is across its width.
 
@@ -604,6 +657,8 @@ def main(argv):
     blob = open(argv[1], "rb").read()
     if "--shape" in argv:
         return shapes(blob)
+    if "--nodes" in argv:
+        return skeletons(blob)
     if "--id" not in argv:
         return stats(blob)
 

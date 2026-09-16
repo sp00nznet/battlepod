@@ -309,6 +309,14 @@ python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
 `--check` decodes the three loadouts that a spreadsheet in the release also
 writes out in English, and compares them weapon for weapon.
 
+**Stand a mech up.** The skeletons carry a rest pose and the parts hang on it:
+
+```
+python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --mech 452 --out out/madcat.png
+python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --mechs
+python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --nodes
+```
+
 **Draw one:**
 
 ```

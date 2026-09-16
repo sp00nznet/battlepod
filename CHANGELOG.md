@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mech stands up.** `$040` turned out to be a node composition - node,
+  parent, transform slot, and **three floats that are the offset from the
+  parent** - so a skeleton is a chain of them and running the chain is a rest
+  pose. It comes out as hips, torso, a hip/knee/foot down each side and a
+  shoulder out each way, mirrored to the third decimal, feet at y -4.55 inside
+  a stated box of -5.00. The check is the model's own: **every node has to land
+  inside the bounding box the model states**, and across the six chassis the
+  worst pokes out by 5.6% with three at zero. `model.py --nodes`.
+- Exactly **two leg designs** in the release: Loki, Thor and Sunder put the
+  knee under the hip; MadCat, Vulture and Avatar throw it 2.15 units back and
+  bring the foot forward again, which is a reverse-jointed Clan OmniMech.
+- **`render.py --mech N` assembles a whole one, placing nothing by hand.**
+  Parts are authored in the space of the node they hang on - model 471 spans
+  y -2.75 and the Loki's hip-to-knee offset is -2.75 exactly - so a part
+  belongs on the node whose *child offset its own bounding box contains*, the
+  smallest such part winning. Left and right are vertex-for-vertex mirrors,
+  settled by which way each leans. The torso and the feet have no child offset
+  to match and are placed by the id-block rules instead, which the code says
+  out loud. All **six chassis assemble to eight parts**, and the two leg
+  families fall out on their own along the same split the node geometry drew.
+  Two new checkpoints; the harness is at **47/47**.
 - **`tools/vehicles.py` - the cockpit ROM's vehicle and weapon tables.** Each
   of the 38 records at `0x70582` is a complete statement of a BattleMech: the
   skeleton's resource id, twelve floats of which the first is top speed, **21
