@@ -24,6 +24,8 @@ echo "== self-check =="
 # without SDL so it runs anywhere.
 [ -x ./build/paneltest.exe ] && ./build/paneltest.exe --selftest
 [ -x ./build/viewtest.exe ] && ./build/viewtest.exe --selftest
+# The same emulator built with SDL, hosting the windows itself.
+[ -x ./build/cockpit.exe ] && ./build/cockpit.exe --selftest
 
 if [ -z "${VWE_GAME_FILES:-}" ] || [ ! -f "${VWE_GAME_FILES}/Full_Load_3_0" ]; then
     cat >&2 <<EOF

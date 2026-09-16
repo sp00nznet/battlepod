@@ -82,6 +82,20 @@ $(BUILD)/panel.exe: src/panel.c src/rio.h | $(BUILD)
 $(BUILD)/paneltest.exe: src/panel.c src/rio.h | $(BUILD)
 	$(CC) $(CFLAGS) -Isrc -DPANEL_NO_SDL -o $@ src/panel.c
 
+# The same emulator, built with SDL, hosting the cockpit's windows in its own
+# process while the firmware runs. battlepod.exe stays SDL-free so the harness
+# and the batch tooling do not grow a dependency.
+cockpit: $(BUILD)/cockpit.exe
+
+COCKPIT_OBJS := $(BUILD)/cockpit.o $(BUILD)/m68kcpu.o $(BUILD)/m68kdasm.o                 $(BUILD)/softfloat.o $(BUILD)/m68kops.o
+
+$(BUILD)/cockpit.exe: $(COCKPIT_OBJS)
+	@test -n "$(SDL_LIBS)" || { echo "cockpit needs SDL2"; exit 1; }
+	$(CC) $(CFLAGS) -o $@ $(COCKPIT_OBJS) -static $(SDL_LIBS) -lm
+
+$(BUILD)/cockpit.o: src/battlepod.c src/rio.h src/paneldraw.h $(BUILD)/m68kops.h | $(BUILD)
+	$(CC) $(CFLAGS) $(INC) $(SDL_CFLAGS) -DBATTLEPOD_SDL -c -o $@ $<
+
 view: $(BUILD)/view.exe
 
 $(BUILD)/view.exe: src/view.c | $(BUILD)
@@ -94,4 +108,4 @@ $(BUILD)/viewtest.exe: src/view.c | $(BUILD)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean test deps conformance panel view
+.PHONY: all clean test deps conformance panel view cockpit

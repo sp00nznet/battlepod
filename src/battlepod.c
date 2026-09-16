@@ -215,6 +215,7 @@ static char *unescape(const char *s)
 
 static struct rio_panel g_panel;
 static const char *g_riodump;
+static const char *g_liveframes;
 
 static void rio_report(void)
 {
@@ -292,6 +293,152 @@ static void tap_check(uint32_t pc)
 		}
 	}
 }
+
+/* ------------------------------------------------------------ live windows */
+
+/* The cockpit with its panel lit, in one process, while the firmware runs.
+ *
+ * Built only into `cockpit.exe`; `battlepod.exe` is the same source without
+ * SDL, so the batch tool and the harness stay free of it. The windows draw the
+ * same `struct rio_panel` the batch decoder fills, from the same byte stream
+ * the firmware puts on DUART channel A - the emulator does not know it is
+ * being watched, and the drawing does not know where the bytes came from.
+ */
+#ifdef BATTLEPOD_SDL
+
+#include "paneldraw.h"
+
+#define LIVE_EVERY 200000		/* instructions between pumps */
+
+static int g_live;
+static SDL_Window *g_lw[NPANELS];
+static SDL_Renderer *g_lr[NPANELS];
+static SDL_Window *g_vw;
+static SDL_Renderer *g_vr;
+static SDL_Texture *g_vt;
+static uint8_t *g_frames_buf;
+static long g_frames_n;
+static int g_view_w = 480, g_view_h = 360;
+static uint32_t g_live_at;		/* how far the panel has been walked */
+static int g_quit;
+
+static int live_open(const char *frames)
+{
+	int i;
+
+	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+		fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+		return 0;
+	}
+	for (i = 0; i < NPANELS; i++) {
+		g_lw[i] = SDL_CreateWindow(PANELS[i].title, SDL_WINDOWPOS_UNDEFINED,
+					   SDL_WINDOWPOS_UNDEFINED, PANELS[i].w,
+					   PANELS[i].h, SDL_WINDOW_RESIZABLE);
+		if (!g_lw[i]) { fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return 0; }
+		g_lr[i] = SDL_CreateRenderer(g_lw[i], -1, SDL_RENDERER_ACCELERATED);
+		if (!g_lr[i]) g_lr[i] = SDL_CreateRenderer(g_lw[i], -1, 0);
+		SDL_RenderSetLogicalSize(g_lr[i], PANELS[i].w, PANELS[i].h);
+	}
+
+	/* The main view is fed from a file of raw frames for now, because the
+	 * rasteriser is still tools/render.py. When it is C in this process the
+	 * texture stays and only the source changes. */
+	if (frames) {
+		FILE *f = fopen(frames, "rb");
+		long n, one = (long)g_view_w * g_view_h * 3;
+		if (!f) { fprintf(stderr, "cannot open %s\n", frames); return 1; }
+		fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+		g_frames_n = one > 0 ? n / one : 0;
+		if (g_frames_n > 0) {
+			g_frames_buf = malloc((size_t)n);
+			if (!g_frames_buf || fread(g_frames_buf, 1, (size_t)n, f) != (size_t)n) {
+				free(g_frames_buf);
+				g_frames_buf = NULL;
+				g_frames_n = 0;
+			}
+		}
+		fclose(f);
+	}
+	if (g_frames_n > 0) {
+		g_vw = SDL_CreateWindow("battlepod - main view", SDL_WINDOWPOS_UNDEFINED,
+					SDL_WINDOWPOS_UNDEFINED, g_view_w * 2, g_view_h * 2,
+					SDL_WINDOW_RESIZABLE);
+		g_vr = SDL_CreateRenderer(g_vw, -1, SDL_RENDERER_ACCELERATED);
+		if (!g_vr) g_vr = SDL_CreateRenderer(g_vw, -1, 0);
+		SDL_RenderSetLogicalSize(g_vr, g_view_w, g_view_h);
+		g_vt = SDL_CreateTexture(g_vr, SDL_PIXELFORMAT_RGB24,
+					 SDL_TEXTUREACCESS_STREAMING, g_view_w, g_view_h);
+	}
+	return 1;
+}
+
+/* Called from the run loop. Walks whatever new Remote I/O bytes the firmware
+ * has put on the wire since last time, redraws, and pumps events. */
+static void live_pump(uint64_t step)
+{
+	uint32_t have = g_rio_tx < RIOCAP ? g_rio_tx : RIOCAP;
+	SDL_Event e;
+	int i;
+
+	if (have > g_live_at)
+		g_live_at += rio_walk(&g_panel, g_riobuf + g_live_at, have - g_live_at);
+
+	while (SDL_PollEvent(&e)) {
+		if (e.type == SDL_QUIT) g_quit = 1;
+		if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) g_quit = 1;
+	}
+
+	for (i = 0; i < NPANELS; i++) {
+		PANELS[i].draw(g_lr[i], &g_panel);
+		SDL_RenderPresent(g_lr[i]);
+	}
+	if (g_vt) {
+		long at = (long)((step / LIVE_EVERY) % (uint64_t)g_frames_n);
+		SDL_UpdateTexture(g_vt, NULL,
+				  g_frames_buf + at * (long)g_view_w * g_view_h * 3,
+				  g_view_w * 3);
+		SDL_RenderClear(g_vr);
+		SDL_RenderCopy(g_vr, g_vt, NULL, NULL);
+		SDL_RenderPresent(g_vr);
+	}
+	{
+		char t[96];
+		snprintf(t, sizeof t, "%s  -  %u frames, %llu instructions",
+			 PANELS[0].title, g_panel.frames, (unsigned long long)step);
+		SDL_SetWindowTitle(g_lw[0], t);
+	}
+}
+
+/* The emulator outruns the cockpit by a wide margin - a budget that would be
+ * minutes of pod time goes by in seconds - so when the run ends the windows
+ * stay up with the panel in its final state until they are closed. */
+static void live_hold(uint64_t step)
+{
+	uint64_t spin = step;
+
+	while (!g_quit) {
+		live_pump(spin);
+		spin += LIVE_EVERY;
+		SDL_Delay(33);
+	}
+}
+
+static void live_close(void)
+{
+	int i;
+
+	for (i = 0; i < NPANELS; i++) {
+		if (g_lr[i]) SDL_DestroyRenderer(g_lr[i]);
+		if (g_lw[i]) SDL_DestroyWindow(g_lw[i]);
+	}
+	if (g_vt) SDL_DestroyTexture(g_vt);
+	if (g_vr) SDL_DestroyRenderer(g_vr);
+	if (g_vw) SDL_DestroyWindow(g_vw);
+	free(g_frames_buf);
+	SDL_Quit();
+}
+
+#endif /* BATTLEPOD_SDL */
 
 /* ---------------------------------------------------- boot monitor stub */
 
@@ -1383,6 +1530,12 @@ int main(int argc, char **argv)
 			set_val[nset++] = (*c == '=') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0;
 		}
 		else if (!strcmp(a, "--rio-dump") && i + 1 < argc) g_riodump = argv[++i];
+#ifdef BATTLEPOD_SDL
+		else if (!strcmp(a, "--live")) {
+			g_live = 1;
+			if (i + 1 < argc && argv[i + 1][0] != '-') g_liveframes = argv[++i];
+		}
+#endif
 		else if (!strcmp(a, "--tap") && i + 1 < argc && g_taps < TAPS)
 			g_tap[g_taps++] = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--tap-dump") && i + 2 < argc) {
@@ -1482,6 +1635,9 @@ int main(int argc, char **argv)
 	       g_entry, sp, vbr, sr, g_openbus);
 	printf("budget %llu instructions, duart irq level %d\n",
 	       (unsigned long long)budget, irq_level);
+#ifdef BATTLEPOD_SDL
+	if (g_live && !live_open(g_liveframes)) return 1;
+#endif
 	printf("running...\n\n");
 
 	for (step = 0; step < budget; step++) {
@@ -1497,6 +1653,13 @@ int main(int argc, char **argv)
 		}
 
 		if (g_taps) tap_check(pc);
+
+#ifdef BATTLEPOD_SDL
+		if (g_live && step % LIVE_EVERY == 0) {
+			live_pump(step);
+			if (g_quit) { stop = "window closed"; break; }
+		}
+#endif
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }
@@ -1534,6 +1697,9 @@ int main(int argc, char **argv)
 		}
 	}
 
+#ifdef BATTLEPOD_SDL
+	if (g_live) { live_hold(step); live_close(); }
+#endif
 	printf("\nstopped after %llu instructions: %s\n", (unsigned long long)step, stop);
 	printf("pc %08X  sp %08X  sr %04X\n",
 	       m68k_get_reg(NULL, M68K_REG_PC), m68k_get_reg(NULL, M68K_REG_SP),

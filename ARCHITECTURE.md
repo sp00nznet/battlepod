@@ -405,6 +405,36 @@ will be C in the pod eventually, and the window does not care. A file that does
 not divide evenly into frames is reported as a size mismatch rather than shown
 sheared by a row.
 
+## The pieces together: `make cockpit`
+
+The panel and the main view started as separate programs reading files. They
+are now **one process with four windows**, which is what the target at the top
+of this file asks for:
+
+```
+./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's30501'     --live out/madcat.rgb --steps 40000000
+```
+
+`cockpit.exe` is `battlepod.c` compiled with `-DBATTLEPOD_SDL`. The emulator
+runs the firmware, and every 200,000 instructions it walks whatever new Remote
+I/O bytes have appeared on DUART channel A into the panel state and redraws.
+**The panel lights up as the firmware drives it**, rather than after the fact
+from a capture.
+
+`battlepod.exe` is the same source without SDL, so the batch tool and the
+harness never grow the dependency, and `panel.exe` and `view.exe` still run
+standalone from files. The drawing is shared through `src/paneldraw.h`; the
+emulator does not know it is being watched and the drawing does not know where
+the bytes came from.
+
+The emulator outruns the cockpit by a wide margin - a budget that would be
+minutes of pod time goes by in seconds - so when the run ends the windows stay
+up with the panel in its final state until they are closed.
+
+The main view is still fed from a file of raw frames, because the rasteriser is
+`tools/render.py`. When it is C in this process the texture stays and only the
+source changes.
+
 ## Order of work
 
 1. ~~**Controls and the panel windows.**~~ Done for output: `make panel`,
