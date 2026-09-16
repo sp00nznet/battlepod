@@ -336,14 +336,21 @@ from 10 to 51 in consecutive pairs, so ids 0-9 belong to something else.
 Twenty weapons of 60 bytes at `0x7D018`, `--weapons` prints them:
 
 ```
-+0x00 name, 24 bytes   +0x24 damage   +0x30 f32 heat
-+0x18 short HUD name   +0x28 range in metres   +0x38 1 direct fire, 2 missiles
++0    name, 24 bytes   +34  damage        +46  f32 heat
++25   short HUD name   +38  range, metres +56  1 direct fire, 2 missiles
 ```
 
-Ranges come out as round numbers in metres — 150 for machine guns, 6000 for
-every LRM — and the ER variants sit one class above their base weapon in
-damage and heat while sharing its effect id, which is what an extended-range
-laser is.
+The numeric fields are not longword aligned, which the 68020 does not mind and
+which cost an hour of reading them two bytes early.
+
+What says they are right is that the table is internally consistent in a way a
+wrong offset could not fake. Ranges are round numbers in metres — 150 for
+machine guns, 6000 for every LRM regardless of rack size. Heat runs from 0.0
+for a machine gun to 16.0 for an ER PPC, with the Gauss rifle down at 4.0
+where a mass driver belongs. And **every ER laser out-ranges its base weapon
+at identical damage for more heat** — 350 to 500 metres and 2.0 to 3.5 heat
+from Medium to ER Medium — which is exactly, and only, what extended range
+means.
 
 ### Checked against the release's own spreadsheet
 

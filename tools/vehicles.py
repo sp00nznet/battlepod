@@ -32,9 +32,10 @@ keeps it that way.
                             each other and the last tracks the ammo type
 
   weapon record, 60 bytes, 20 of them at 0x7D018
-    +0x00  name, 24 bytes          +0x28  u32  range in metres
-    +0x18  short name for the HUD  +0x30  f32  heat
-    +0x24  u32  damage             +0x38  u32  1 direct fire, 2 missiles
+    +0x00  name, 24 bytes          +38  u32  range in metres
+    +25    short name for the HUD  +46  f32  heat
+    +34    u32  damage             +56  u32  1 direct fire, 2 missiles
+  The numeric fields are not longword aligned, which the 68020 does not mind.
 
 usage:
   vehicles.py <ROM3_0>              the roster, one line each
@@ -61,10 +62,10 @@ def weapons(rom):
     for i in range(NWEAPONS):
         r = rom[WEAPONS + i * WSTRIDE:WEAPONS + (i + 1) * WSTRIDE]
         out.append((text(r[:24]), text(r[25:36]),
-                    struct.unpack_from(">I", r, 0x24)[0],
-                    struct.unpack_from(">I", r, 0x28)[0],
-                    struct.unpack_from(">f", r, 0x30)[0],
-                    struct.unpack_from(">I", r, 0x38)[0]))
+                    struct.unpack_from(">I", r, 34)[0],
+                    struct.unpack_from(">I", r, 38)[0],
+                    struct.unpack_from(">f", r, 46)[0],
+                    struct.unpack_from(">I", r, 56)[0]))
     return out
 
 
