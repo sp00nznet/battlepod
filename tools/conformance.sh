@@ -177,6 +177,7 @@ if [ -f "$TI_RES" ]; then
     CHECKTEXT=$(python tools/render.py "$TI_RES" --mechs 2>/dev/null)
     check_at_least "chassis that assemble whole" 6
     check_at_least "parts placed on skeletons" 48
+    check_at_least "limb joints that meet" 42
 fi
 
 # The cockpit ROM's vehicle table is checked against something the ROM does not

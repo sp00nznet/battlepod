@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The legs were hanging in the air beside the hips, and now they are not.**
+  Which way round a mirrored pair goes was settled by which way a part's own
+  vertices lean against which way the node does. That is wrong: the Loki's
+  thigh straddles its own origin and the MadCat's sits entirely to one side of
+  it, so the rule got one family right and the other visibly wrong.
+- The rule that holds for both is **adjacency** - of the two orientations,
+  exactly one lands the thigh's inner edge *on* the pelvis's outer edge, and it
+  lands there to the hundredth. `Loki 474 -> -2.30..-0.90` against hips ending
+  at `-0.90`; `MadCat 494 -> -1.87..-1.00` against hips ending at `-1.00`; the
+  other way round overlaps by 2.22 or leaves a 1.03 gap. Across the six chassis
+  **all 42 limb joints now meet**, the worst by 0.004 units on a machine nine
+  units tall. A new checkpoint guards it; the harness is at **54/54**.
+- **The feet stay open, and are now recorded as open.** A foot hangs on a node
+  with nothing below it, so the adjacency rule has nothing to work against, and
+  both orientations score identically. The reverse-jointed chassis come out
+  7.50 units wide against the 4.00 their own rig declares, because `493`/`496`
+  are 3.60 across and hang at ankles 3.90 apart - so either those are not the
+  feet or they do not hang at the ankle.
 - **The main view, in a window.** `make view` builds `build/view.exe` and
   `render.py --raw --spin N` feeds it: the pod's own 480x360, opened at double
   size, letterboxed rather than stretched when the window is dragged. Space

@@ -332,8 +332,29 @@ is the one whose own bounding box *contains the offset of that node's child*,
 and where several do, the smallest. Nothing is placed by hand.
 
 Left and right are separate resources holding the same geometry reflected in
-x — 471 and 474 are vertex-for-vertex mirrors — so the side is settled by which
-way a part's own vertices lean against which way the node does.
+x — 471 and 474 are vertex-for-vertex mirrors — and **which way round they go
+is settled by making the part touch what it hangs from**. An earlier version of
+this settled it by which way a part's own vertices lean against which way the
+node does, and that was wrong: the Loki's thigh straddles its own origin while
+the MadCat's sits entirely to one side of it, so a rule about leaning gets one
+family right and the other wrong, and the MadCat came out with its legs hanging
+in the air beside its hips.
+
+What holds for both is adjacency. Of the two orientations, exactly one lands
+the thigh's inner edge **on** the pelvis's outer edge:
+
+```
+Loki    hips 470 spans x -0.90..0.90
+        node 3 at x -1.18   part 474 -> -2.30..-0.90   gap 0.00  overlap 0.00
+                            part 471 -> -1.46..-0.06   gap 0.00  overlap 2.22
+MadCat  hips 490 spans x -1.00..1.00
+        node 3 at x -1.95   part 494 -> -1.87..-1.00   gap 0.00  overlap 0.00
+                            part 491 -> -2.90..-2.03   gap 1.03  overlap 0.00
+```
+
+Across the six chassis **all 42 limb joints meet**, the worst by 0.004 units on
+a machine nine units tall, which is float noise in the authoring rather than a
+gap. The harness guards the count.
 
 Two nodes get their part another way, and both say so in the code. The **torso**
 always hangs on node 2: on a chassis with no shoulder nodes at all there is no
@@ -357,6 +378,16 @@ rest of that leg came from.
 Six for six, and the leg families fall out on their own along exactly the split
 the node geometry already drew: `470`-`476` for the straight-legged three,
 `490`-`496` for the reverse-jointed three. `render.py --mech 452` draws one.
+
+**The feet are not settled.** The rule that decides every other joint cannot
+decide these: a foot hangs on a node with nothing below it, and both
+orientations of the pair score identically — gap 0.00, overlap 0.42 either way.
+Worse, the reverse-jointed chassis come out **7.50 units wide** against the
+4.00 their own rig declares, because `493`/`496` are 3.60 across and hang at
+ankles 3.90 apart. Either those are not the feet or they do not hang at the
+ankle; the parts left in that block fit no better, so this is recorded as open
+rather than guessed at. The straight-legged three come out 4.60 wide, which is
+close enough to 4.00 to be the same kind of rounding everything else here has.
 
 **What is still missing is the arms.** The vehicle records list a Left and
 Right Arm and a Left and Right Weapon Pod among their 21 hit locations, and the

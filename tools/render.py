@@ -327,6 +327,32 @@ def side(m):
     return sum(v[0] for v in vs) / max(len(vs), 1)
 
 
+def world_box(m, at):
+    """A part's own extent, moved to where it hangs."""
+    vs = list(m.vert.values())
+    return [(min(v[i] for v in vs) + at[i], max(v[i] for v in vs) + at[i])
+            for i in range(3)]
+
+
+def joins(a, b):
+    """How well two placed parts meet: the gap between them, and how much they
+    run through each other. Both zero means they touch.
+
+    This is what decides which way round a mirrored pair goes. The side a
+    part's geometry leans is not enough - the Loki's thigh straddles its own
+    origin and the MadCat's sits entirely to one side of it, so a rule about
+    which way they lean gets one of them right and the other wrong. What holds
+    for both is that a limb **touches what it hangs from**: exactly one of the
+    two orientations lands the thigh's inner edge on the pelvis's outer edge,
+    and it lands there to the hundredth.
+    """
+    gap, overlap = 0.0, 1.0
+    for i in range(3):
+        gap = max(gap, a[i][0] - b[i][1], b[i][0] - a[i][1])
+        overlap *= max(0.0, min(a[i][1], b[i][1]) - max(a[i][0], b[i][0]))
+    return max(0.0, gap), overlap
+
+
 def mirror_of(rid, pool):
     """The same part for the other side: the same vertices reflected in x."""
     a = pool[rid].vert
@@ -362,6 +388,7 @@ class Assembly(object):
 
     def __init__(self, blob, lib, skel):
         self.parts = []                 # (node, resource id, where it went)
+        self.box_at = {}                # node -> the placed part's world extent
         self.vert, self.poly, self.mat, self.points = {}, [], {}, []
         pool, rig = {}, None
         for rid, rtype, data in M.walk(blob):
@@ -423,10 +450,22 @@ class Assembly(object):
 
     def place(self, pool, rig, node, pick, used):
         twin = mirror_of(pick, pool)
-        if twin is not None and side(pool[pick]) * rig.node[node][0] < 0:
-            pick, twin = twin, pick
+        at = rig.node[node]
+        free = [r for r in (pick, twin) if r is not None and r not in used] or [pick]
+        if len(free) > 1:
+            parent = self.box_at.get(rig.arm[node][0]) if node in rig.arm else None
+            if parent is not None:
+                # Whichever way round makes this part touch what it hangs from.
+                pick = min((joins(world_box(pool[r], at), parent), r) for r in free)[1]
+            elif side(pool[free[0]]) * at[0] < 0:
+                pick = free[1]
+            else:
+                pick = free[0]
+        else:
+            pick = free[0]
         used.add(pick)
-        self.add(pool[pick], rig.node[node], node, pick)
+        self.box_at[node] = world_box(pool[pick], at)
+        self.add(pool[pick], at, node, pick)
 
     def add(self, part, at, node, rid):
         vbase = (max(self.vert) + 1) if self.vert else 0
@@ -447,6 +486,7 @@ def mechs(blob, lib):
     """Assemble every skeleton in the archive and say how much of each stood up."""
     total = 0
     whole = 0
+    met = joints = 0
     for rid, rtype, data in M.walk(blob):
         if rtype != 1:
             continue
@@ -457,12 +497,23 @@ def mechs(blob, lib):
         a = Assembly(blob, lib, rid)
         total += len(a.parts)
         whole += len(a.parts) >= 8
+        for node, _rid, _at in a.parts:
+            if node not in a.rig.arm:
+                continue
+            parent = a.box_at.get(a.rig.arm[node][0])
+            if parent is None:
+                continue
+            joints += 1
+            # A tenth of a percent of a nine-unit mech. The parts meet at
+            # 0.000 to 0.004, which is authoring noise in a float, not a gap.
+            met += joins(a.box_at[node], parent)[0] <= 0.01
         print("%4d  %-8s %d parts, %4d polygons: %s"
               % (rid, M.named(rid), len(a.parts), len(a.poly),
                  " ".join(str(r) for _n, r, _at in a.parts)))
     print("")
     print("chassis that assemble whole: %d" % whole)
     print("parts placed on skeletons  : %d" % total)
+    print("limb joints that meet      : %d of %d" % (met, joints))
 
 
 def frames(subject, size, out, pitch, zoom, n):
