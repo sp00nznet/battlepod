@@ -87,11 +87,14 @@ the model's own stated bounding box. `render.py --mech` hangs the parts on it
 by matching each part's box against the node offsets, and all six chassis
 assemble to eight parts and draw.
 
-What genuinely is not in the archive is the **arms**. The vehicle records list
-a Left and Right Arm and Weapon Pod among their 21 hit locations, and there are
-candidate resources, but the MadCat skeleton has no shoulder nodes at all —
-which it visibly needs — so at least one mount is supplied rather than stored.
-Animation beyond the rest pose is likewise per-frame from the 68020.
+What genuinely is not in the archive is where the **arms** go. `$480`'s tags
+identify them — `516` is the right arm and weapon pod, `517` the left, five
+alternative loadouts each — but hung on the shoulder nodes they reach well
+outside the mech's own bounding box and run six units along z on a machine four
+deep, which reads as an arm authored along an axis and rotated per frame. The
+MadCat skeleton has no shoulder nodes at all, which it visibly needs, so at
+least one mount is supplied rather than stored. Animation beyond the rest pose
+is likewise per-frame from the 68020.
 
 **Starting a game.** Still the oldest blocker. The firmware consumes packets
 and the opcode dispatch is mapped, but the byte encoding of each message is

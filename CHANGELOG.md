@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`$480`'s tag is a hit location**, one-based, the same 21 the vehicle
+  records list. Three things say so: **no tag anywhere in the archive falls
+  outside 1 to 21** across the 27 models that use the opcode; a torso model
+  tags exactly the ten torso locations and nothing else; and the assembly at
+  `516`, whose vertices all sit at positive x, tags **Right** Arm and **Right**
+  Weapon Pod while its mirror `517` tags the left pair - decided twice over,
+  by geometry and by the ROM, agreeing. `model.py --zones` prints it, named
+  against the record when given the ROM.
+- That completes the chain from a pixel to a damaged component on paper: the
+  pick query returns a sub-part id, the vehicle record turns it into a named
+  location with its own armour and structure, and `$480` says which polygons
+  are that location. Two new checkpoints, harness at **49/49**.
+- It also identifies the arms - `516` right, `517` left, five alternative
+  sub-models each - without placing them. Hung on the shoulder nodes they
+  reach well outside the mech's own bounding box and run six units along z on
+  a machine four deep, which reads as an arm authored along an axis and
+  rotated per frame. Terrain and buildings use `$480` too, tagging 1 and 2;
+  that is a zone number and nothing to do with anyone's left foot, so only
+  mech parts get their tags named.
 - **A mech stands up.** `$040` turned out to be a node composition - node,
   parent, transform slot, and **three floats that are the offset from the
   parent** - so a skeleton is a chain of them and running the chain is a rest

@@ -315,6 +315,7 @@ writes out in English, and compares them weapon for weapon.
 python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --mech 452 --out out/madcat.png
 python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --mechs
 python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --nodes
+python tools/model.py "$GF/Cockpit Software/battletech_ti_res" --zones "$GF/Cockpit Software/ROM3_0"
 ```
 
 **Draw one:**

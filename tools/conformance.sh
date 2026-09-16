@@ -151,6 +151,23 @@ if [ -f "$TI_RES" ]; then
     check_at_least "box within 2% of the model size" 105
     check_at_least "material count matches"          56
 
+    ROM3="${VWE_GAME_FILES}/Cockpit Software/ROM3_0"
+    if [ -f "$ROM3" ]; then
+        echo
+        echo "== hit locations =="
+        CHECKTEXT=$(python tools/model.py "$TI_RES" --zones "$ROM3" 2>/dev/null)
+        check_at_least "models tagging hit locations" 27
+        got=$(echo "$CHECKTEXT" | grep -F "tags outside 1 to 21" | cut -d: -f2 | awk '{print $1}')
+        total=$((total + 1))
+        if [ "${got:-1}" = "0" ]; then
+            pass=$((pass + 1)); printf '  ok    %-32s %s
+' "tags outside 1 to 21" "$got"
+        else
+            printf '  FAIL  %-32s %s
+' "tags outside 1 to 21" "${got:-?}"
+        fi
+    fi
+
     echo
     echo "== whole mechs =="
     CHECKTEXT=$(python tools/render.py "$TI_RES" --mechs 2>/dev/null)

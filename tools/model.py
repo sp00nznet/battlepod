@@ -26,6 +26,7 @@ usage:
   model.py <resource file> --stats          run all of them, report the checks
   model.py <resource file> --shape          symmetry and shoulder profile, each
   model.py <resource file> --nodes          the skeletons, as rest poses
+  model.py <resource file> --zones [ROM]    which hit location $480 tags
   model.py <resource file> --id N           run one, describe what it drew
   model.py <resource file> --id N --obj F   write it out as a Wavefront OBJ
   model.py --selftest
@@ -515,6 +516,49 @@ def named(rid):
     return CHASSIS.get(rid) or CHASSIS.get(rid - 10, "")
 
 
+def zones(blob, rom=None):
+    """What `$480` tags a run of polygons with.
+
+    On a mech part the tag is a **hit location, one-based**: the cockpit ROM's
+    vehicle records list 21 of them and no tag anywhere in the archive falls
+    outside 1 to 21. Terrain and buildings use the same opcode to group their
+    polygons and tag them 1 and 2, which is a zone number and nothing more.
+    What settles it is which models use which. A torso model tags exactly the
+    ten torso locations and nothing else; the assembly at 516, whose geometry
+    all sits at positive x, tags Right Arm and Right Weapon Pod, and 517 at
+    negative x tags the left pair. So this is how a shot that lands on a
+    polygon becomes a hit on a named part of a named mech.
+    """
+    names = None
+    if rom:
+        sys.path.insert(0, __file__.rsplit("model.py", 1)[0] or ".")
+        import vehicles
+        names = [l[0] for l in vehicles.roster(open(rom, "rb").read())[0].loc]
+    lib = archive(blob)
+    seen, out = set(), []
+    for rid, rtype, data in walk(blob):
+        if rtype != 1:
+            continue
+        m = Model(data, archive=lib)
+        m.run()
+        if not m.parts:
+            continue
+        tags = sorted(set(m.parts))
+        seen.update(tags)
+        out.append((rid, tags))
+        # Only a mech part's tag is a hit location. Terrain and buildings use
+        # the same opcode to group their polygons and tag them 1 and 2, which
+        # is a zone number and nothing to do with anyone's left foot.
+        mech = 440 <= rid <= 560
+        print("%4d %-8s %s" % (rid, named(rid),
+              ", ".join("%d %s" % (t, names[t - 1]) if mech and names and t <= len(names)
+                        else str(t) for t in tags)))
+    bad = [t for t in seen if not 1 <= t <= 21]
+    print("")
+    print("models tagging hit locations: %d" % len(out))
+    print("tags outside 1 to 21        : %d" % len(bad))
+
+
 def joint(m):
     """Where a skeleton's nodes sit, and whether that is a mech standing up.
 
@@ -659,6 +703,9 @@ def main(argv):
         return shapes(blob)
     if "--nodes" in argv:
         return skeletons(blob)
+    if "--zones" in argv:
+        at = argv.index("--zones") + 1
+        return zones(blob, argv[at] if at < len(argv) and argv[at][0] != "-" else None)
     if "--id" not in argv:
         return stats(blob)
 

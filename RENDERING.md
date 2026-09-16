@@ -406,6 +406,56 @@ renderer's **pick query** hands back when a shot lands on it — the query whose
 seven-longword groups this project spent a while calling geometry. They run
 from 10 to 51 in consecutive pairs, so ids 0-9 belong to something else.
 
+### Where a shot lands
+
+`$480` pushes a tag over a run of polygons. On a mech part that tag is a **hit
+location, one-based** — the same 21 the vehicle records list, in the same
+order. Three things say so and none of them is the tag itself.
+
+**Nothing anywhere exceeds 21.** Twenty-seven models in the archive use `$480`
+and every tag in all of them falls in 1 to 21, which an arbitrary tag space
+would not do.
+
+**A torso tags exactly the torso.** The ten torso hit locations are Left,
+Centre, Right, Lower, Rear Centre, Rear Lower, Rear Left, Rear Right, plus the
+Missile Pack and Searchlight. Models 461 and 462 tag all ten and nothing else;
+the other four tag nine or seven of them, dropping the Missile Pack and, on the
+Thor, the rear quarters.
+
+**And the sides agree with the geometry.** The assembly at `516`, whose
+vertices all sit at positive x, tags Right Arm and Right Weapon Pod. `517`, its
+mirror at negative x, tags the left pair. That is decided twice over — by which
+way the model leans and by what the ROM calls the location — and the two agree.
+
+```
+ 461 Loki     12 Left Torso, 13 Center Torso, 14 Right Torso, 15 Lower Torso,
+              16 Rear Center Torso, 17 Missile Pack, 18 Searchlight,
+              19 Rear Lower Torso, 20 Rear Left Torso, 21 Rear Right Torso
+ 501          9 Right Arm, 11 Right Weapon Pod
+ 511          8 Left Arm, 10 Left Weapon Pod
+```
+
+So the chain from a pixel to a damaged component is now complete on paper: the
+renderer's pick query returns a sub-part id for whatever is under a point, the
+vehicle record turns that into a named location with its own armour and
+structure, and `$480` is where the geometry says which polygons are that
+location. `model.py --zones` prints it.
+
+Terrain and buildings use the same opcode to group their polygons and tag them
+1 and 2. That is a zone number and nothing to do with anybody's left foot, so
+only mech parts get their tags named.
+
+**This is also what settles the arms.** `516` and `517` are the two arm
+assemblies, each drawing five alternative sub-models — five loadouts, one
+chosen at draw time. What is not settled is where they go. Hung on the shoulder
+nodes they reach far outside the mech's own bounding box, and their geometry
+runs six units along z where the whole machine is four deep, which reads as an
+arm authored along an axis and rotated into place per frame. That would fit:
+the parts that hold still between frames are authored where they sit, and the
+ones that aim are not. The MadCat skeleton has no shoulder nodes at all, so at
+least one arm mount is supplied rather than stored — the same boundary
+everything else here runs into.
+
 ### The weapon table
 
 Twenty weapons of 60 bytes at `0x7D018`, `--weapons` prints them:
