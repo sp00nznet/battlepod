@@ -222,47 +222,75 @@ at a regular stride of seven longwords. That stride is also the independent
 confirmation that `$040` takes six operands, which had only been settled by
 sweeping it against the archive's checks.
 
-**So there were six chassis.** The 3.0 data supplement documents four —
-MadCat, Vulture, Loki and Thor — with several configurations each, plus a
-drone.
+**So there were six chassis**, and the release says which. `Game Files/
+Vehicle_List` is 568 bytes of plain text listing 38 vehicles:
+
+```
+0 MP-MadCat Prime    4 VP-Vulture Prime   8 LP-Loki Prime
+12 TP-Thor Prime     24 Drone             30 SP-Sunder Prime
+34 AP-Avatar Prime   170 Director
+```
+
+Four Clan OmniMechs, two Inner Sphere ones, a drone and the referee's camera.
+Six chassis against six skeletons is not a coincidence, and the cockpit ROM
+closes it: `ROM3_0` holds those same 38 vehicles as records of **958 bytes at
+`0x70582`**, the name in ASCII at `+0` and a halfword at `+0x28` that is the
+only field in the whole 958 bytes landing anywhere near a model id. It
+partitions all 38 configurations into exactly six groups:
+
+| id | chassis | configurations |
+|---|---|---|
+| `451` | **Loki** | Prime, V1-V6, plus the **Drone**, which rides the Loki rig |
+| `452` | **MadCat** | Prime, V1-V5 |
+| `453` | **Vulture** | Prime, V1-V5, and an "Explo Vulture" |
+| `454` | **Thor** | Prime, V1-V7 |
+| `455` | **Sunder** | Prime, V1-V3 |
+| `456` | **Avatar** | Prime, V1-V3 |
+
+`model.py` labels them, so the tools stop talking in bare numbers.
 
 ### Telling them apart
 
-Two things about a torso can be measured rather than eyeballed. Mirroring the
-vertices in x and taking the mean distance to the nearest original vertex gives
-how symmetric it is; binning the vertices across the width and taking the
-highest point in each bin gives the shoulder profile.
+Two things about a part can be measured rather than eyeballed. Mirroring the
+vertices and taking the mean distance to the nearest original vertex gives how
+symmetric it is; binning them across the width and taking the highest point in
+each bin gives the shoulder profile. `model.py --shape` prints both for every
+model in the archive.
 
-| id | symmetry error | height profile across the width | reading |
-|---|---|---|---|
-| `461` | **0.037** | `0.94 0.94 0.90 1.00 1.00` | asymmetric, shoulders barely raised |
-| `462` | **0.055** | `1.00 1.00 0.58 0.84 0.84` | asymmetric, a deep notch between shoulders |
-| `463` | 0.006 | `1.00 1.00 0.81 1.00 1.00` | symmetric, raised shoulders |
-| `464` | 0.008 | `1.00 1.00 0.84 1.00 1.00` | symmetric, raised shoulders |
-| `465` | 0.005 | `0.96 1.00 0.99 1.00 0.96` | symmetric, flat across |
-| `466` | 0.004 | `0.75 1.00 1.00 1.00 0.75` | symmetric, centre highest |
+Which axis to mirror in is itself a measurement, not an assumption — over
+`461`-`466` the x plane gives 0.004-0.055 and the y and z planes 0.085-0.18, so
+x is the left-right axis and the box centre sits on the origin there.
 
-`model.py --shape` prints both columns for every model in the archive.
+| id | chassis | symmetry error | height profile across the width | polygons |
+|---|---|---|---|---|
+| `461` | Loki | **0.037** | `0.94 0.94 0.90 1.00 1.00` | 282 |
+| `462` | MadCat | **0.055** | `1.00 1.00 0.58 0.84 0.84` | 248 |
+| `463` | Vulture | 0.006 | `1.00 1.00 0.81 1.00 1.00` | 386 |
+| `464` | Thor | 0.008 | `1.00 1.00 0.84 1.00 1.00` | 331 |
+| `465` | Sunder | 0.005 | `0.96 1.00 0.99 1.00 0.96` | 71 |
+| `466` | Avatar | 0.004 | `0.75 1.00 1.00 1.00 0.75` | 66 |
 
-`461` and `462` are asymmetric by an order of magnitude over the other four.
-Among the four documented chassis the asymmetric one is **Thor**, which carries
-a missile pod on one shoulder and a cannon on the other arm, and `462`'s deep
-one-sided notch fits that better than `461`'s nearly level profile — so `461`
-reads as Loki, the humanoid one. `463` and `464` are the symmetric raised-
-shoulder pair, which is where MadCat and Vulture belong.
+The names on this second table are **inherited**, not measured: `461`-`466`
+is a block of six ten ids above a block of six, so it is read as the same six
+chassis in the same order. What corroborates it is the polygon counts — the
+four Clan chassis come in at 248-386 and the two Inner Sphere ones at 71 and
+66, and that split falls exactly where the ROM puts the Clan/Inner Sphere
+boundary, at `455`. There is no part table anywhere in the cockpit software to
+confirm it outright: `461`, `463`, `465` and `501` do not occur in `ROM3_0` at
+all, in either width. Parts are bound by whoever builds the display list, which
+is the game server, which is the standing blocker.
 
-**That last paragraph is inference, not measurement, and should be read as
-such.** The measurements are solid; attaching names to them needs reference art
-this project does not have in a usable form — the scanned operations manual's
-OCR does not survive well enough to give a roster, and the line art in the data
-supplement is drawn at three-quarter view rather than the front and side these
-profiles describe.
+An earlier draft of this section guessed `462` was the Thor from its deep
+one-sided notch. That was wrong, and wrong in an instructive way. **Thor's
+torso is symmetric (0.008).** Its famous one-shoulder missile pod is not part
+of the torso mesh at all — it hangs off the rig as a separate part, which is
+the same thing the bounding boxes and the instruction stream already said:
+the archive holds rigs, not poses, and a configuration is a choice of what to
+hang on one.
 
 The same two columns over the skeletons are worth a look on their own: five of
-the six place their 19 nodes perfectly symmetrically and `456` does not
-(0.0169). One asymmetric rig against two asymmetric torsos means torso
-asymmetry is not simply inherited from the skeleton — a chassis can hang an
-uneven load off an even frame.
+the six place their 19 nodes symmetrically and `456`, the Avatar, does not
+(0.0169) — so chassis asymmetry can live in the frame as well as in the load.
 
 ### Checking against something outside the project
 

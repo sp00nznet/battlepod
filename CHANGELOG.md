@@ -8,24 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- **Six chassis, and a way to tell them apart that is not eyeballing.** The
-  mech ids are blocked: `451`-`456` are six **skeletons** - 32 nodes each, box
-  `4.00 x 9.00 x 4.00` to the float, and not one polygon between them -
-  `461`-`466` the six torsos, `470`-`480` limbs in mirrored pairs, `490`-`496`
-  a leg set, `501`-`505`/`511`-`515` two five-part limbs assembled by `516` and
-  `517`. Model 451's stream is `$040`s carrying inline floats at a stride of
-  seven longwords, which is also an independent confirmation that `$040` takes
-  six operands.
-- Mirroring a torso's vertices in x and taking the mean nearest-neighbour
-  distance separates `461` (**0.037**) and `462` (**0.055**) from the other four
-  (0.004-0.008) by an order of magnitude - two asymmetric chassis and four
-  symmetric ones. Binning vertices across the width and taking the highest point
-  per bin gives shoulder profiles: `462` has a deep one-sided notch
-  (`1.00 1.00 0.58 0.84 0.84`), `465` is flat across, `466` peaks at the centre.
-  Attaching the names MadCat, Vulture, Loki and Thor to specific ids is **not
-  evidenced** - the scanned operations manual does not OCR well enough for a
-  roster and the data supplement's line art is three-quarter view - so the
-  measurements are recorded and the naming is not.
+- **The six chassis, named from the release rather than guessed.** `Game
+  Files/Vehicle_List` lists 38 vehicles over six chassis - MadCat, Vulture,
+  Loki, Thor, Sunder, Avatar - plus a Drone and the Director camera. `ROM3_0`
+  holds the same 38 as records of **958 bytes at `0x70582`**, name at `+0`, and
+  the halfword at `+0x28` is the skeleton's resource id: it partitions all 38
+  into exactly six groups. **451 Loki, 452 MadCat, 453 Vulture, 454 Thor, 455
+  Sunder, 456 Avatar**, and the Drone rides the Loki rig. Six chassis against
+  six skeletons confirms the structural read rather than assuming it.
+- **The id blocks.** `451`-`456` are skeletons - 32 nodes, box
+  `4.00 x 9.00 x 4.00` to the float, and not one polygon - `461`-`466` torsos,
+  `470`-`480` limbs in mirrored pairs, `490`-`496` a leg set,
+  `501`-`505`/`511`-`515` two five-part limbs assembled by `516`/`517`. Model
+  451's stream is `$040`s carrying inline floats at a stride of seven
+  longwords, which independently confirms `$040` takes six operands.
+- **`model.py --shape`**: mirror a model and measure how far the mirrored
+  vertices land from the originals, and bin them across the width for a
+  shoulder profile. The mirror axis is measured too - over the torsos x gives
+  0.004-0.055 against 0.085-0.18 for y and z.
+- **Thor's torso is symmetric (0.008), and an earlier guess here said it was
+  not.** This file previously read `462`'s deep one-sided notch as the Thor's
+  shoulder pod. The ROM says `462` is the MadCat and the Thor is `464`. The pod
+  is not in the torso mesh at all - it hangs off the rig as a separate part,
+  which is the third independent line of evidence that the archive holds rigs,
+  not poses.
+- The `461`-`466` naming is inherited from the `+10` block alignment, not
+  measured, and is corroborated by polygon count: the four Clan chassis come in
+  at 248-386 and the two Inner Sphere ones at 71 and 66, splitting exactly
+  where the ROM puts the boundary. No part table exists in the cockpit software
+  to settle it outright - `461`, `463`, `465` and `501` do not occur in `ROM3_0`
+  in either width, so parts are bound by the game server.
 
 - **Material `kind` decoded: 0 is emissive, 1 is a lit surface.** Across the
   archive, `kind 0` materials average twice the luminance of `kind 1` (0.655

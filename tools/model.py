@@ -490,6 +490,18 @@ def stats(blob):
             print("   after %-6s hit $%-9X x%d" % (a, b, v))
 
 
+# The cockpit ROM names its own chassis. ROM3_0 holds 38 vehicle records of 958
+# bytes at 0x70582 - the name in ASCII at +0, the skeleton's resource id as a
+# halfword at +0x28 - and that id partitions all 38 into exactly six groups.
+CHASSIS = {451: "Loki", 452: "MadCat", 453: "Vulture",
+           454: "Thor", 455: "Sunder", 456: "Avatar"}
+
+
+def named(rid):
+    """A skeleton, or the part block ten ids above it, gets its chassis name."""
+    return CHASSIS.get(rid) or CHASSIS.get(rid - 10, "")
+
+
 def shape(m, bins=5):
     """How symmetric a part is, and how tall it is across its width.
 
@@ -526,7 +538,7 @@ def shape(m, bins=5):
 
 
 def shapes(blob):
-    print("  id  verts  polys  symmetry  height across the width")
+    print("  id  verts  polys  symmetry  height across the width  chassis")
     for rid, rtype, data in walk(blob):
         if rtype != 1:
             continue
@@ -535,9 +547,9 @@ def shapes(blob):
         s = shape(m)
         if s is None:
             continue
-        print("%5d %6d %6d    %6.4f  %s"
+        print("%5d %6d %6d    %6.4f  %-24s %s"
               % (rid, len(m.vert), len(m.poly), s[0],
-                 " ".join("%.2f" % v for v in s[1])))
+                 " ".join("%.2f" % v for v in s[1]), named(rid)))
 
 
 def selftest():
@@ -579,6 +591,8 @@ def selftest():
     assert sym < 1e-9, sym
     assert prof == [0.0, 0.0, 1.0, 0.0, 0.0], prof   # empty bins read 0
     assert shape(m)[0] > 0.05, shape(m)      # the test triangle is lopsided
+    assert named(454) == "Thor" and named(464) == "Thor", "part block is +10"
+    assert named(999) == ""
     print("selftest: ok")
 
 
@@ -600,7 +614,8 @@ def main(argv):
             continue
         m = Model(data, archive=lib)
         m.run()
-        print("model %d: %d longwords" % (rid, len(m.w)))
+        print("model %d%s: %d longwords"
+              % (rid, " (%s)" % named(rid) if named(rid) else "", len(m.w)))
         print("  header says %d vertices, %d normals, %d faces, %d nodes, %d materials"
               % (m.nvert, m.nnorm, m.nface, m.nnode, m.nmat))
         print("  box x %.2f..%.2f  y %.2f..%.2f  z %.2f..%.2f  radius %.3f"
