@@ -250,6 +250,49 @@ static void rio_dump(const char *path)
 	printf("remote i/o: %u bytes written to %s\n", n, path);
 }
 
+/* Stop and look when the firmware reaches an address.
+ *
+ * --watch says what touched a region of memory; this says what the registers
+ * held when execution arrived somewhere. That is what reading a routine's
+ * arguments needs: the packet sender takes its buffer as a stack argument, so
+ * the only way to see a packet the pod is about to transmit is to be standing
+ * at the door when it goes out. */
+
+#define TAPS 8
+static uint32_t g_tap[TAPS];
+static uint32_t g_taphit[TAPS];
+static int g_taps;
+static uint32_t g_tapdump;		/* bytes to dump at (A6 + g_tapoff) */
+static int32_t  g_tapoff;
+
+static void tap_check(uint32_t pc)
+{
+	int i;
+
+	for (i = 0; i < g_taps; i++) {
+		if (pc != g_tap[i]) continue;
+		g_taphit[i]++;
+		if (g_taphit[i] > 16) return;		/* enough to read */
+		printf("tap %08X hit %u\n", pc, g_taphit[i]);
+		printf("   d0 %08X d1 %08X d2 %08X d3 %08X\n",
+		       m68k_get_reg(NULL, M68K_REG_D0), m68k_get_reg(NULL, M68K_REG_D1),
+		       m68k_get_reg(NULL, M68K_REG_D2), m68k_get_reg(NULL, M68K_REG_D3));
+		printf("   a0 %08X a1 %08X a6 %08X a7 %08X\n",
+		       m68k_get_reg(NULL, M68K_REG_A0), m68k_get_reg(NULL, M68K_REG_A1),
+		       m68k_get_reg(NULL, M68K_REG_A6), m68k_get_reg(NULL, M68K_REG_A7));
+		if (g_tapdump) {
+			uint32_t base = m68k_get_reg(NULL, M68K_REG_A6) + (uint32_t)g_tapoff;
+			uint32_t j;
+			printf("   at a6%+d (%08X):", (int)g_tapoff, base);
+			for (j = 0; j < g_tapdump; j++) {
+				if (j % 16 == 0) printf("\n     %04X ", j);
+				printf(" %02X", (unsigned)m68k_read_memory_8(base + j));
+			}
+			printf("\n");
+		}
+	}
+}
+
 /* ---------------------------------------------------- boot monitor stub */
 
 /* The pod's boot ROM is not in the release, but the firmware calls it. Six
@@ -1340,6 +1383,12 @@ int main(int argc, char **argv)
 			set_val[nset++] = (*c == '=') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0;
 		}
 		else if (!strcmp(a, "--rio-dump") && i + 1 < argc) g_riodump = argv[++i];
+		else if (!strcmp(a, "--tap") && i + 1 < argc && g_taps < TAPS)
+			g_tap[g_taps++] = (uint32_t)strtoul(argv[++i], NULL, 16);
+		else if (!strcmp(a, "--tap-dump") && i + 2 < argc) {
+			g_tapoff = (int32_t)strtol(argv[++i], NULL, 0);
+			g_tapdump = (uint32_t)strtoul(argv[++i], NULL, 0);
+		}
 		else if (!strcmp(a, "--rstub") && i + 1 < argc) {
 			g_rstub = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
@@ -1446,6 +1495,8 @@ int main(int argc, char **argv)
 			g_moncall[slot]++;
 			if (slot == MON_SLOT_RECV) mon_recv_polled();
 		}
+
+		if (g_taps) tap_check(pc);
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }

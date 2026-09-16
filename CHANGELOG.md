@@ -8,6 +8,30 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod answers.** Say `IDENTIFY_YOURSELF` to the booted cockpit and it
+  replies `20 01 00 20` followed by `GAME RUNNING 3228 600 2 GAME_NAME` -
+  exactly the reply the operator console logged in 1995, from the other side of
+  the same wire. **The first message exchanged with the pod in either
+  direction**, and the feedback loop step 3 of the plan needs. A new checkpoint
+  guards it; the harness is at **55/55**.
+- **`--tap ADDR`**, with `--tap-dump OFF N`. `--watch` says what touched a
+  region of memory; a tap says what the registers held when execution arrived
+  somewhere, and dumps N bytes at `A6+OFF`. The reply never reaches a device we
+  model - it is a stack argument to the packet sender - so the only way to read
+  it was to stand at the sender's door as it went out.
+- **The packet handlers read from the pod rather than the Mac.** The plan was
+  to lift the console's 68k code for the byte layouts; the pod's side is easier,
+  already in the emulator, and a decoder specifies a format as well as an
+  encoder does. The dispatch at `0x02122FBC`, the identity handler's four-byte
+  header and `sprintf`, and the sender at `0x021468A4` writing a constant
+  eight-byte header of opcode, priority and three `(net, node)` addresses drawn
+  from the destination argument, our own address at `0x0218AEB0` and the game
+  identity at `0x02179D32`.
+- Worth knowing before building on it: **opcodes 1-7, 0x20 and 0x21 are thrown
+  away** in this state - the handler releases the packet and returns to the main
+  loop without looking at it. So whatever configures and starts a game is
+  handled by something that is not running yet, and finding it is the next
+  question rather than an assumption that this dispatch is the whole story.
 - **The legs were hanging in the air beside the hips, and now they are not.**
   Which way round a mirrored pair goes was settled by which way a part's own
   vertices lean against which way the node does. That is wrong: the Loki's

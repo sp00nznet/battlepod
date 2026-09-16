@@ -691,6 +691,92 @@ packet must match at `body[2]` and `body[3]`.
 
 Whatever starts a game is therefore among the low opcodes.
 
+### The pod answers
+
+Say `IDENTIFY_YOURSELF` to the booted cockpit and it replies. This is the first
+message exchanged with the pod in either direction, and it is what step 3 of
+the plan needs as a feedback loop.
+
+```
+--packet '00 00 00 08 00 01 00 00 00 00 00 00'
+--tap 021468A4 --tap-dump -0xD2 64
+
+  0000  20 01 00 20 47 41 4D 45 20 52 55 4E 4E 49 4E 47
+  0010  20 33 32 32 38 20 36 30 30 20 32 20 47 41 4D 45
+  0020  5F 4E 41 4D 45 00 ...
+
+  = 20 01 00 20  "GAME RUNNING 3228 600 2 GAME_NAME"
+```
+
+which is exactly the reply the operator console logged in 1995, from the other
+side of the same wire.
+
+`--tap ADDR` is new and is what made it visible. `--watch` says what touched a
+region of memory; a tap says what the registers held when execution arrived
+somewhere, and `--tap-dump OFF N` adds N bytes at `A6+OFF`. The reply never
+reaches a device we model - it is a stack argument to the packet sender - so
+the only way to read it is to stand at the sender's door as it goes out.
+
+### Reading the packet handlers, which is easier than reading the Mac
+
+The plan was to lift the operator console's 68k code for the byte layouts. The
+pod's side is easier: it is already in the emulator, and a decoder is as good a
+specification as an encoder.
+
+The dispatch at `0x02122FBC` is a chain of `subq`/`beq` rather than a table:
+
+| opcode | handler | what it does |
+|---|---|---|
+| `0x00` | `0x02122ED0` | builds the identity reply above and sends it |
+| `0x01`-`0x07`, `0x20`, `0x21` | `0x02122F32` | **discarded** in this state |
+| `0xC7` | `0x02122F78` | replies with `0xC7` |
+| `0xE4` | `0x02122F3C` | reads or sets the timebase at `0x02000808` |
+| anything else | `0x02145E90` | the inter-centre router |
+
+Worth knowing: **the low opcodes are thrown away here.** `0x02122F32` releases
+the packet and returns to the main loop without looking at it. So the messages
+that configure and start a game are handled by something else that is not
+running yet, and finding that is the next question rather than an assumption
+that this dispatch is the whole story.
+
+The identity handler writes its reply as four bytes and a `sprintf`:
+
+```
+buf[0] = 0x20        the reply's own opcode
+buf[1] = 0x01
+buf[2] = 0x00
+buf[3] = 0x20
+buf[4..] = sprintf("GAME RUNNING %d %d %d GAME_NAME", timebase, ..., ...)
+send(dest_word, 0xCC, buf, 5)        length 204, priority 5
+```
+
+### The header the sender writes
+
+`0x021468A4` takes `(dest word, length, buffer, priority)` and fills a header
+over the front of the buffer. Which fields it writes depends on the route -
+local net, remote net, or through the router - but the shape is constant:
+
+```
+buf[0]    the opcode, already there from the caller
+buf[1]    priority >> 24
+buf[2..3] one 2-byte (net, node) address
+buf[4..5] another
+buf[6..7] another
+```
+
+drawn from three places: the destination argument, our own address at
+`0x0218AEB0`, and the game identity at `0x02179D32`. Those are the same two
+locations DEVICES.md already found the router filtering on, and the same fields
+the console names in every one of its messages - `to net %ld, node %ld`. The
+console's error string names the rest of what a packet carries:
+
+```
+ERROR: Orig. %d, Pri. %d, Num. %ld, Time %ld, String:
+```
+
+an origin, a priority, a sequence number and a timestamp.
+
+
 ### The protocol, from the operator console's own log
 
 The release carries a `Console Log` from a working BattleTech Center, running

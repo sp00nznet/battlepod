@@ -109,7 +109,14 @@ Lamp number in hex (00 - 3b, 50 - 53 and 60)
 01 00 01 01 D5 D5
   lamp 05 brightness 01
   bargraph 80 bars 5
-  display 80 \"BATTLTEC\""
+  display 80 \"BATTLTEC\"
+20 01 00 20 47 41 4D 45 20 52 55 4E 4E 49 4E 47"
+
+# Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
+# to send back. The tap stands at the door of the packet sender and dumps the
+# caller's buffer, because the reply is a stack argument and never reaches a
+# device we model.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --packet '00 00 00 08 00 01 00 00 00 00 00 00'     --tap 021468A4 --tap-dump -0xD2 64     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
 
 pass=0
 total=0
