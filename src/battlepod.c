@@ -1939,6 +1939,27 @@ int main(int argc, char **argv)
 			g_in[1] = unescape(argv[++i]);
 			g_inlen[1] = strlen(g_in[1]);
 		}
+		/* The other direction on the Remote I/O link: what the panel board
+		 * sends the CPU. The stick, throttle and pedals arrive this way, and
+		 * nothing has ever driven this receiver before, so the bytes are
+		 * given as hex - a control value is not text. */
+		else if (!strcmp(a, "--rio-in") && i + 1 < argc) {
+			static char buf[8192];
+			const char *h = argv[++i];
+			size_t n = 0;
+			while (*h && n < sizeof buf) {
+				char *e;
+				long b;
+				while (*h == ' ' || *h == ',') h++;
+				if (!*h) break;
+				b = strtol(h, &e, 16);
+				if (e == h) break;
+				buf[n++] = (char)b;
+				h = e;
+			}
+			g_in[0] = buf;
+			g_inlen[0] = (uint32_t)n;
+		}
 		else if (!strcmp(a, "--dis") && i + 1 < argc) {
 			char *c;
 			dis_at = (uint32_t)strtoul(argv[++i], &c, 16);

@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The Remote I/O link works in both directions now.** `--rio-in` drives the
+  receiver nothing had ever driven, and the firmware confirms it without us
+  interpreting anything: feed `01 00 03 03 D3 05 01 D9` and its own "display
+  hex data from remote I/O" prints `[d3] [05] [01]` - the payload, with the
+  header and checksum stripped by its own protocol handler. So inbound framing
+  matches outbound and the transport for stick, throttle and pedals is done.
+  Two new checkpoints; the harness is at **67/67**.
+- What an input report *says* is still open. The receive interrupt at
+  `0x0215B6CC` takes up to four bytes at a time and hands each to a state
+  machine through a function pointer at `0x0217FBE4`, so the panel board's
+  opcodes are a dig through those states - **feeding all 256 opcodes past the
+  firmware's decoder produced nothing**, which is worth recording as a negative
+  result rather than repeating.
+- Also checked and worth writing down: **the display list a boot posts is
+  empty.** It decodes as one type 0 record and then a `0xFFFFFFFF` terminator.
+  There is nothing to draw until a game runs, so wiring the display list to the
+  rasteriser cannot be tested against real content yet.
 - **Whole mechs in C.** `src/rig.h` is `render.py`'s Assembly ported: eight
   parts hung on a skeleton's rest pose by the same rules - containment for the
   limbs, touch-the-parent for which way a mirrored pair goes, the id block for

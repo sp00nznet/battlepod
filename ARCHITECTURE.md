@@ -235,6 +235,35 @@ by. It needs the input path wired first, which is step 1 of the order of work
 anyway.
 
 
+### The other direction on the Remote I/O link
+
+The panel is output; the stick, throttle and pedals come back the same way, and
+nothing had ever driven that receiver. `battlepod --rio-in` now does, and the
+firmware confirms it end to end without us interpreting anything:
+
+```
+--duart-in 'g'  --rio-in '01 00 03 03 D3 05 01 D9'
+
+  Hex data from remote I/O is displayed below, press any key to exit.
+  [d3]
+  [05]
+  [01]
+```
+
+Three bytes in, three bytes out: the **payload**, with the `01 00 03 03` header
+and the `D9` checksum stripped by the firmware's own protocol handler. So
+inbound framing is the same as outbound, and the transport is done.
+
+What is not done is **what an input report says**. The receive interrupt at
+`0x0215B6CC` takes up to four bytes a time and hands each to a state machine
+through a function pointer at `0x0217FBE4`, so the opcodes the panel board
+sends are a dig through those states rather than something a sweep will find -
+feeding all 256 opcodes past the firmware's decoder produced nothing.
+
+The manual does give what the values will be when they arrive, which is what
+the input path needs on the far side: throttle and pedals `$0000` to `$0340`,
+joystick `$0000` centred and about plus or minus `$80` at the stops.
+
 ## Networking
 
 The pods were an **ARCNET** token ring (SMC COM90C66), with the operator
@@ -478,10 +507,10 @@ Python renderer's output gets into the same window.
 
 ## Order of work
 
-1. ~~**Controls and the panel windows.**~~ Done for output: `make panel`,
-   three windows, driven from a capture of the wire. Inputs - stick, throttle,
-   pedals back up the same link - are what is left of this step, and the
-   manual's encoder ranges are above.
+1. ~~**Controls and the panel windows.**~~ Output done, and the input
+   **transport** proven: `--rio-in` drives the receiver nothing had ever driven,
+   and the firmware's own "display hex data from remote I/O" echoes the payload
+   back with the framing stripped. What the payload *means* is open - see below.
 2. ~~**The main view in SDL.**~~ Done: `make view`, the pod's 480x360 in a
    resizable window, letterboxed rather than stretched. `render.py --raw
    --spin N` writes the frames.

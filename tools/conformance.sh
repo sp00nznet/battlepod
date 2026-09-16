@@ -112,7 +112,16 @@ Lamp number in hex (00 - 3b, 50 - 53 and 60)
   lamp 05 brightness 01
   bargraph 80 bars 5
   display 80 \"BATTLTEC\"
-20 01 00 20 47 41 4D 45 20 52 55 4E 4E 49 4E 47"
+20 01 00 20 47 41 4D 45 20 52 55 4E 4E 49 4E 47
+Hex data from remote I/O is displayed below
+[d3]"
+
+# Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
+# driven that receiver, and the stick, throttle and pedals arrive on it. The
+# firmware's own "display hex data from remote I/O" shows the payload of a frame
+# fed in, with the framing stripped - which is the whole transport, proven by
+# the firmware rather than by us.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --set 2138A64=4E754E75 --duart-in 'g'     --rio-in '01 00 03 03 D3 05 01 D9'     --steps 40000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
