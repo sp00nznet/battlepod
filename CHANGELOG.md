@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Six chassis, and a way to tell them apart that is not eyeballing.** The
+  mech ids are blocked: `451`-`456` are six **skeletons** - 32 nodes each, box
+  `4.00 x 9.00 x 4.00` to the float, and not one polygon between them -
+  `461`-`466` the six torsos, `470`-`480` limbs in mirrored pairs, `490`-`496`
+  a leg set, `501`-`505`/`511`-`515` two five-part limbs assembled by `516` and
+  `517`. Model 451's stream is `$040`s carrying inline floats at a stride of
+  seven longwords, which is also an independent confirmation that `$040` takes
+  six operands.
+- Mirroring a torso's vertices in x and taking the mean nearest-neighbour
+  distance separates `461` (**0.037**) and `462` (**0.055**) from the other four
+  (0.004-0.008) by an order of magnitude - two asymmetric chassis and four
+  symmetric ones. Binning vertices across the width and taking the highest point
+  per bin gives shoulder profiles: `462` has a deep one-sided notch
+  (`1.00 1.00 0.58 0.84 0.84`), `465` is flat across, `466` peaks at the centre.
+  Attaching the names MadCat, Vulture, Loki and Thor to specific ids is **not
+  evidenced** - the scanned operations manual does not OCR well enough for a
+  roster and the data supplement's line art is three-quarter view - so the
+  measurements are recorded and the naming is not.
+
 - **Material `kind` decoded: 0 is emissive, 1 is a lit surface.** Across the
   archive, `kind 0` materials average twice the luminance of `kind 1` (0.655
   against 0.368), and **every one of the 212 lights and markers points at a

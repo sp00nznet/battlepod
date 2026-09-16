@@ -196,6 +196,74 @@ little *larger* than what we decode, `-7.80..10.50` against a header of
 opcode whose operands we skip without reading. `$200`, `$220`, `$280` and
 `$2A0` are measured but never interpreted, and they are the obvious suspects.
 
+### Six chassis
+
+The mech ids are not a jumble. They fall into blocks, and the blocks say what
+they are:
+
+| ids | what |
+|---|---|
+| `451`–`456` | six **skeletons** — 32 nodes each, box `4.00 x 9.00 x 4.00` to the float, no polygons at all |
+| `461`–`466` | six **torsos**, one per skeleton |
+| `470`–`480` | limbs, in mirrored pairs — `471`/`474`, `472`/`475`, `473`/`476`, `477`/`478`, `479`/`480` |
+| `490`–`496` | a leg set: a centre piece and three mirrored pairs |
+| `501`–`505`, `511`–`515` | two five-part limbs, assembled by `516` and `517` |
+
+A skeleton is nothing but structure. Model 451 is ten `$040`s, eight
+`$060`/`$080` push and pop pairs, nineteen single vertices and nine plane
+records — and not one polygon or material between them. Its stream opens
+
+```
+$40  1 0 1 0 $BF4CCCCD 0    $40  2 1 2 0 $3FC00000 0    $40  3 ...
+```
+
+which is a chain of node compositions carrying inline floats — `-0.8`, `1.5` —
+at a regular stride of seven longwords. That stride is also the independent
+confirmation that `$040` takes six operands, which had only been settled by
+sweeping it against the archive's checks.
+
+**So there were six chassis.** The 3.0 data supplement documents four —
+MadCat, Vulture, Loki and Thor — with several configurations each, plus a
+drone.
+
+### Telling them apart
+
+Two things about a torso can be measured rather than eyeballed. Mirroring the
+vertices in x and taking the mean distance to the nearest original vertex gives
+how symmetric it is; binning the vertices across the width and taking the
+highest point in each bin gives the shoulder profile.
+
+| id | symmetry error | height profile across the width | reading |
+|---|---|---|---|
+| `461` | **0.037** | `0.94 0.94 0.90 1.00 1.00` | asymmetric, shoulders barely raised |
+| `462` | **0.055** | `1.00 1.00 0.58 0.84 0.84` | asymmetric, a deep notch between shoulders |
+| `463` | 0.006 | `1.00 1.00 0.81 1.00 1.00` | symmetric, raised shoulders |
+| `464` | 0.008 | `1.00 1.00 0.84 1.00 1.00` | symmetric, raised shoulders |
+| `465` | 0.005 | `0.96 1.00 0.99 1.00 0.96` | symmetric, flat across |
+| `466` | 0.004 | `0.75 1.00 1.00 1.00 0.75` | symmetric, centre highest |
+
+`model.py --shape` prints both columns for every model in the archive.
+
+`461` and `462` are asymmetric by an order of magnitude over the other four.
+Among the four documented chassis the asymmetric one is **Thor**, which carries
+a missile pod on one shoulder and a cannon on the other arm, and `462`'s deep
+one-sided notch fits that better than `461`'s nearly level profile — so `461`
+reads as Loki, the humanoid one. `463` and `464` are the symmetric raised-
+shoulder pair, which is where MadCat and Vulture belong.
+
+**That last paragraph is inference, not measurement, and should be read as
+such.** The measurements are solid; attaching names to them needs reference art
+this project does not have in a usable form — the scanned operations manual's
+OCR does not survive well enough to give a roster, and the line art in the data
+supplement is drawn at three-quarter view rather than the front and side these
+profiles describe.
+
+The same two columns over the skeletons are worth a look on their own: five of
+the six place their 19 nodes perfectly symmetrically and `456` does not
+(0.0169). One asymmetric rig against two asymmetric torsos means torso
+asymmetry is not simply inherited from the skeleton — a chassis can hang an
+uneven load off an even frame.
+
 ### Checking against something outside the project
 
 BattleTech's mechs are among the most drawn machines in science fiction, which

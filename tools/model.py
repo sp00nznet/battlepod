@@ -24,10 +24,12 @@ one.
 
 usage:
   model.py <resource file> --stats          run all of them, report the checks
+  model.py <resource file> --shape          symmetry and shoulder profile, each
   model.py <resource file> --id N           run one, describe what it drew
   model.py <resource file> --id N --obj F   write it out as a Wavefront OBJ
   model.py --selftest
 """
+import math
 import struct
 import sys
 
@@ -488,6 +490,56 @@ def stats(blob):
             print("   after %-6s hit $%-9X x%d" % (a, b, v))
 
 
+def shape(m, bins=5):
+    """How symmetric a part is, and how tall it is across its width.
+
+    Both fall out of the vertices alone, which is the point: a chassis that
+    carries a missile pod on one shoulder does not survive being mirrored in x,
+    and the highest point in each column across the width is a shoulder
+    profile. Distances are reported against the model's own size so parts of
+    different scales compare.
+    """
+    pts = list(m.vert.values())
+    if len(pts) < 2:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    zs = [p[2] for p in pts]
+    span = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)) or 1.0
+
+    # ponytail: O(n^2) nearest neighbour. The biggest part here is 182 vertices.
+    cx = (max(xs) + min(xs)) / 2.0
+    err = 0.0
+    for p in pts:
+        q = (2.0 * cx - p[0], p[1], p[2])
+        err += min(math.dist(q, r) for r in pts)
+    sym = err / len(pts) / span
+
+    lo, hi = min(xs), max(xs)
+    top = [None] * bins
+    for p in pts:
+        k = min(bins - 1, int((p[0] - lo) / (hi - lo) * bins)) if hi > lo else 0
+        if top[k] is None or p[1] > top[k]:
+            top[k] = p[1]
+    base, height = min(ys), (max(ys) - min(ys)) or 1.0
+    return sym, [0.0 if t is None else (t - base) / height for t in top]
+
+
+def shapes(blob):
+    print("  id  verts  polys  symmetry  height across the width")
+    for rid, rtype, data in walk(blob):
+        if rtype != 1:
+            continue
+        m = Model(data)
+        m.run()
+        s = shape(m)
+        if s is None:
+            continue
+        print("%5d %6d %6d    %6.4f  %s"
+              % (rid, len(m.vert), len(m.poly), s[0],
+                 " ".join("%.2f" % v for v in s[1])))
+
+
 def selftest():
     """A model built here, so the walker is not only ever tested on data we
     are still learning to read."""
@@ -519,6 +571,14 @@ def selftest():
     bad = Model(struct.pack(">%dI" % (len(h) + 2), *(h + [0x5A0, 0])))
     bad.run()
     assert bad.stopped and "$5A0" in bad.stopped, bad.stopped
+
+    import types
+    flat = types.SimpleNamespace(vert={0: (-1.0, 0.0, 0.0), 1: (1.0, 0.0, 0.0),
+                                       2: (0.0, 2.0, 0.0), 3: (0.0, 1.0, 0.0)})
+    sym, prof = shape(flat)
+    assert sym < 1e-9, sym
+    assert prof == [0.0, 0.0, 1.0, 0.0, 0.0], prof   # empty bins read 0
+    assert shape(m)[0] > 0.05, shape(m)      # the test triangle is lopsided
     print("selftest: ok")
 
 
@@ -528,6 +588,8 @@ def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
     blob = open(argv[1], "rb").read()
+    if "--shape" in argv:
+        return shapes(blob)
     if "--id" not in argv:
         return stats(blob)
 
