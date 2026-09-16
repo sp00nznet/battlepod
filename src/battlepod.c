@@ -21,6 +21,7 @@
 #include "rio.h"
 #include "mesh.h"
 #include "raster.h"
+#include "rig.h"
 
 /* ---------------------------------------------------------------- memory */
 
@@ -337,7 +338,9 @@ static uint32_t mesh_find(uint32_t base, uint32_t limit, uint32_t want,
 static uint8_t g_meshbuf[1 << 20];
 static struct mesh g_mesh;
 static uint32_t g_mesh_id;
-static int g_mesh_all;		/* which model to decode, 0 for none */
+static int g_mesh_all;
+static uint32_t g_rig_id;
+static int g_rig_all;		/* which model to decode, 0 for none */
 static uint32_t g_mesh_base = 0x02B00000u;
 
 /* Decode one model and say what came out, in the same terms tools/model.py
@@ -400,6 +403,235 @@ static void mesh_report(void)
 	}
 }
 
+/* ------------------------------------------------------- whole mechs in C */
+
+static struct rig_part g_pool[RIG_PARTS];
+static struct mesh g_rig, g_part;
+static struct rig_place g_placed[16];
+static int g_nplaced;
+static float g_pbox[MESH_NODES][6];	/* where the part on each node ended up */
+static uint8_t g_pboxset[MESH_NODES];
+
+/* Decode one part into g_part. Returns zero if it is not there or draws
+ * nothing, which is how the pool skips the skeletons themselves. */
+static int rig_load(uint32_t id)
+{
+	uint32_t len = mesh_find(g_mesh_base, 0x200000u, id, g_meshbuf, sizeof g_meshbuf);
+
+	if (!len) return 0;
+	mesh_run(&g_part, g_meshbuf, len);
+	return g_part.npoly > 0;
+}
+
+static void rig_summarise(void)
+{
+	uint32_t id;
+
+	memset(g_pool, 0, sizeof g_pool);
+	for (id = RIG_LO; id <= RIG_HI; id++) {
+		struct rig_part *p = &g_pool[id - RIG_LO];
+		int i, a, any = 0;
+
+		if (!rig_load(id)) continue;
+		for (a = 0; a < 3; a++) { p->lo[a] = 1e30f; p->hi[a] = -1e30f; }
+		for (i = 0; i < g_part.top; i++) {
+			float v[3];
+			if (!g_part.vset[i]) continue;
+			v[0] = g_part.vx[i]; v[1] = g_part.vy[i]; v[2] = g_part.vz[i];
+			for (a = 0; a < 3; a++) {
+				if (v[a] < p->lo[a]) p->lo[a] = v[a];
+				if (v[a] > p->hi[a]) p->hi[a] = v[a];
+			}
+			any = 1;
+		}
+		if (!any) continue;
+		memcpy(p->box, g_part.box, sizeof p->box);
+		p->have = 1;
+		p->nvert = g_part.nvert;
+		p->npoly = g_part.npoly;
+		p->self = rig_hash(&g_part, 0);
+		p->mirror = rig_hash(&g_part, 1);
+	}
+}
+
+/* The same part for the other side: its vertices reflected in x. */
+static int rig_twin(uint32_t id)
+{
+	const struct rig_part *a = &g_pool[id - RIG_LO];
+	uint32_t o;
+
+	if (!a->have) return -1;
+	for (o = RIG_LO; o <= RIG_HI; o++) {
+		const struct rig_part *b = &g_pool[o - RIG_LO];
+		if (o == id || !b->have || b->nvert != a->nvert) continue;
+		if (a->mirror == b->self) return (int)o;
+	}
+	return -1;
+}
+
+static void rig_world(uint32_t id, const float *at, float *lo, float *hi)
+{
+	const struct rig_part *p = &g_pool[id - RIG_LO];
+	int a;
+
+	for (a = 0; a < 3; a++) { lo[a] = p->lo[a] + at[a]; hi[a] = p->hi[a] + at[a]; }
+}
+
+/* Place a part on a node, choosing between it and its mirror by which way
+ * round touches the part already on the parent node. */
+static void rig_place_on(uint32_t id, int node, const uint8_t *used_in, uint8_t *used)
+{
+	int twin = rig_twin(id);
+	float at[3], lo[3], hi[3];
+	uint32_t pick = id;
+	int parent = g_rig.parent[node];
+
+	at[0] = g_rig.nx[node]; at[1] = g_rig.ny[node]; at[2] = g_rig.nz[node];
+
+	if (twin >= 0 && !used[twin - RIG_LO]) {
+		if (used[id - RIG_LO]) {
+			pick = (uint32_t)twin;
+		} else if (parent >= 0 && parent < MESH_NODES && g_pboxset[parent]) {
+			float alo[3], ahi[3], g1, o1, g2, o2;
+			rig_world(id, at, alo, ahi);
+			rig_joins(alo, ahi, &g_pbox[parent][0], &g_pbox[parent][3], &g1, &o1);
+			rig_world((uint32_t)twin, at, alo, ahi);
+			rig_joins(alo, ahi, &g_pbox[parent][0], &g_pbox[parent][3], &g2, &o2);
+			if (g2 < g1 || (g2 == g1 && o2 < o1)) pick = (uint32_t)twin;
+		}
+	}
+	if (!g_pool[pick - RIG_LO].have) return;
+
+	rig_world(pick, at, lo, hi);
+	memcpy(&g_pbox[node][0], lo, sizeof lo);
+	memcpy(&g_pbox[node][3], hi, sizeof hi);
+	g_pboxset[node] = 1;
+	used[pick - RIG_LO] = 1;
+
+	if (rig_load(pick)) rig_add(&g_rig, &g_part, at);
+	if (g_nplaced < 16) {
+		g_placed[g_nplaced].node = node;
+		g_placed[g_nplaced].id = pick;
+		memcpy(g_placed[g_nplaced].at, at, sizeof at);
+		g_nplaced++;
+	}
+	(void)used_in;
+}
+
+/* Build a whole mech on skeleton `skel`. Returns how many parts went on. */
+static int rig_assemble(uint32_t skel)
+{
+	uint8_t used[RIG_PARTS];
+	float kid[MESH_NODES][3];
+	uint8_t haskid[MESH_NODES];
+	uint32_t len;
+	int node, legs_lo = 0;
+
+	memset(&g_rig, 0, sizeof g_rig);
+	memset(used, 0, sizeof used);
+	memset(haskid, 0, sizeof haskid);
+	memset(g_pboxset, 0, sizeof g_pboxset);
+	g_nplaced = 0;
+
+	len = mesh_find(g_mesh_base, 0x200000u, skel, g_meshbuf, sizeof g_meshbuf);
+	if (!len) return 0;
+	{
+		static struct mesh rig;
+		mesh_run(&rig, g_meshbuf, len);
+		if (!rig.nnode) return 0;
+		/* Keep the skeleton's pose; the assembly's own geometry starts empty. */
+		memcpy(g_rig.nx, rig.nx, sizeof rig.nx);
+		memcpy(g_rig.ny, rig.ny, sizeof rig.ny);
+		memcpy(g_rig.nz, rig.nz, sizeof rig.nz);
+		memcpy(g_rig.parent, rig.parent, sizeof rig.parent);
+		memcpy(g_rig.nset, rig.nset, sizeof rig.nset);
+		g_rig.nnode = rig.nnode;
+		for (node = 0; node < MESH_NODES; node++) {
+			int par;
+			if (!rig.nset[node]) continue;
+			par = rig.parent[node];
+			if (par < 0 || par >= MESH_NODES || haskid[par]) continue;
+			kid[par][0] = rig.ox[node];
+			kid[par][1] = rig.oy[node];
+			kid[par][2] = rig.oz[node];
+			haskid[par] = 1;
+		}
+	}
+
+	rig_summarise();
+
+	/* The torso always hangs on node 2: on a chassis with no shoulder nodes
+	 * there is no child offset to match against, and where there is one,
+	 * several parts contain it and the smallest is not the torso. */
+	if (skel + 10 >= RIG_LO && skel + 10 <= RIG_HI && g_pool[skel + 10 - RIG_LO].have)
+		rig_place_on(skel + 10, 2, used, used);
+
+	for (node = 0; node < MESH_NODES; node++) {
+		uint32_t id, best = 0;
+		float bestvol = 1e30f;
+
+		if (node == 2 || !g_rig.nset[node] || !haskid[node]) continue;
+		for (id = RIG_LO; id <= RIG_HI; id++) {
+			struct rig_part *p = &g_pool[id - RIG_LO];
+			float v;
+			if (!p->have || used[id - RIG_LO]) continue;
+			if (!rig_inside(p, kid[node])) continue;
+			v = rig_volume(p);
+			if (v < bestvol) { bestvol = v; best = id; }
+		}
+		if (best) rig_place_on(best, node, used, used);
+	}
+
+	/* Feet. The leg parts all came out of one contiguous block of seven ids;
+	 * whatever of that block is still unused is the pair of feet. A foot node
+	 * has nothing below it, so there is no offset to match. */
+	{
+		int i;
+		for (i = 0; i < g_nplaced; i++)
+			if (g_placed[i].node != 2 &&
+			    (!legs_lo || (int)g_placed[i].id < legs_lo))
+				legs_lo = (int)g_placed[i].id;
+	}
+	if (legs_lo) {
+		for (node = 0; node < MESH_NODES; node++) {
+			uint32_t id, best = 0;
+			float bestvol = 1e30f;
+
+			if (node == 2 || !g_rig.nset[node] || haskid[node]) continue;
+			for (id = (uint32_t)legs_lo; id < (uint32_t)legs_lo + 7 && id <= RIG_HI; id++) {
+				struct rig_part *p = &g_pool[id - RIG_LO];
+				float v;
+				if (!p->have || used[id - RIG_LO]) continue;
+				v = rig_volume(p);
+				if (v < bestvol) { bestvol = v; best = id; }
+			}
+			if (best) rig_place_on(best, node, used, used);
+		}
+	}
+	return g_nplaced;
+}
+
+/* Every chassis assembled, to sit beside tools/render.py --mechs. The two
+ * are separate ports of one set of placement rules and have to agree. */
+static void rig_all(void)
+{
+	uint32_t skel;
+	int whole = 0, parts = 0;
+	long polys = 0;
+
+	for (skel = 451; skel <= 456; skel++) {
+		int n = rig_assemble(skel);
+		if (!n) continue;
+		parts += n;
+		polys += g_rig.npoly;
+		whole += n >= 8;
+	}
+	printf("\nchassis assembled whole in C: %d\n", whole);
+	printf("parts placed in C           : %d\n", parts);
+	printf("mech polygons in C          : %ld\n", polys);
+}
+
+
 /* ------------------------------------------------------------ live windows */
 
 /* The cockpit with its panel lit, in one process, while the firmware runs.
@@ -418,6 +650,7 @@ static void mesh_report(void)
 
 static int g_live;
 static int g_mesh_ready;
+static struct mesh *g_draw;
 static SDL_Window *g_lw[NPANELS];
 static SDL_Renderer *g_lr[NPANELS];
 static SDL_Window *g_vw;
@@ -466,7 +699,7 @@ static int live_open(const char *frames)
 		}
 		fclose(f);
 	}
-	if (g_frames_n > 0 || g_mesh_id) {
+	if (g_frames_n > 0 || g_mesh_id || g_rig_id) {
 		g_vw = SDL_CreateWindow("battlepod - main view", SDL_WINDOWPOS_UNDEFINED,
 					SDL_WINDOWPOS_UNDEFINED, g_view_w * 2, g_view_h * 2,
 					SDL_WINDOW_RESIZABLE);
@@ -476,11 +709,16 @@ static int live_open(const char *frames)
 		g_vt = SDL_CreateTexture(g_vr, SDL_PIXELFORMAT_RGB24,
 					 SDL_TEXTUREACCESS_STREAMING, g_view_w, g_view_h);
 	}
-	if (g_mesh_id) {
+	if (g_rig_id) {
+		rig_assemble(g_rig_id);
+		g_draw = &g_rig;
+		g_mesh_ready = g_rig.npoly > 0;
+	} else if (g_mesh_id) {
 		uint32_t len = mesh_find(g_mesh_base, 0x200000u, g_mesh_id,
 					 g_meshbuf, sizeof g_meshbuf);
 		if (len) {
 			mesh_run(&g_mesh, g_meshbuf, len);
+			g_draw = &g_mesh;
 			g_mesh_ready = g_mesh.npoly > 0;
 		}
 		if (!g_mesh_ready)
@@ -517,10 +755,10 @@ static void live_pump(uint64_t step)
 		struct ras_cam cam;
 		float floor;
 
-		ras_frame_on(&g_mesh, &cam, 3.4f, &floor);
+		ras_frame_on(g_draw, &cam, 3.4f, &floor);
 		cam.turn = (float)((step / (double)LIVE_EVERY) * 0.04);
 		cam.pitch = 0.10f;
-		ras_draw(&f, &g_mesh, &cam, floor, 1);
+		ras_draw(&f, g_draw, &cam, floor, 1);
 		SDL_UpdateTexture(g_vt, NULL, f.px, RAS_W * 3);
 		SDL_RenderClear(g_vr);
 		SDL_RenderCopy(g_vr, g_vt, NULL, NULL);
@@ -1666,6 +1904,9 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--mesh") && i + 1 < argc)
 			g_mesh_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 		else if (!strcmp(a, "--mesh-all")) g_mesh_all = 1;
+		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
+		else if (!strcmp(a, "--rig") && i + 1 < argc)
+			g_rig_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 #ifdef BATTLEPOD_SDL
 		else if (!strcmp(a, "--live")) {
 			g_live = 1;
@@ -1859,6 +2100,17 @@ int main(int argc, char **argv)
 		if (!any) printf("  none\n");
 	}
 
+	if (g_rig_id) {
+		int n = rig_assemble(g_rig_id), i;
+		printf("\nskeleton %u: %d parts, %d vertices, %d polygons\n",
+		       g_rig_id, n, g_rig.nvert, g_rig.npoly);
+		for (i = 0; i < n; i++)
+			printf("   node %2d  model %3u  at %6.2f %6.2f %6.2f\n",
+			       g_placed[i].node, g_placed[i].id, g_placed[i].at[0],
+			       g_placed[i].at[1], g_placed[i].at[2]);
+	}
+
+	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();
 

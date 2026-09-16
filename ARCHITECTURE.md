@@ -450,6 +450,11 @@ so `mesh.h` walks the archive in place with the parser `resmap.py` established,
 decodes the resource, and `raster.h` draws it at 480x360 with the same camera,
 shading, sky, ground and hard cast shadow the Python produces.
 
+`--rig 452` draws a whole mech instead of one part: `src/rig.h` is
+`render.py`'s Assembly ported, hanging eight parts on the skeleton's rest pose
+by the same rules - containment for the limbs, touch-the-parent for which way a
+mirrored pair goes, the id block for the feet.
+
 **The two decoders check each other.** They are separate ports of one
 interpreter, so they have to come out with the same totals, and the harness
 holds both to the same floor:
@@ -458,6 +463,8 @@ holds both to the same floor:
 models decoded in python : 130      models decoded in C : 130
 vertices decoded in python: 5578    vertices decoded in C: 5578
 polygons decoded in python: 2515    polygons decoded in C: 2515
+parts placed on skeletons : 48      parts placed in C   : 48
+mech polygons in python   : 1291    mech polygons in C  : 1291
 ```
 
 A port that quietly dropped an opcode would fail there rather than turning up

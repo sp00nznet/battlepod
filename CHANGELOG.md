@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Whole mechs in C.** `src/rig.h` is `render.py`'s Assembly ported: eight
+  parts hung on a skeleton's rest pose by the same rules - containment for the
+  limbs, touch-the-parent for which way a mirrored pair goes, the id block for
+  the feet. `cockpit.exe --live --rig 452` turns a whole MadCat, and
+  `--rig-all` totals the six. `$040`'s node tree is now captured by `mesh.h`,
+  which had been skipping it by length.
+- **The two assemblers check each other too**, on the same numbers: **6 chassis
+  whole, 48 parts placed, 1291 mech polygons**, identical either way, and every
+  node, model and position matching across all six. Three new checkpoints; the
+  harness is at **65/65**.
+- One bug the comparison caught, worth recording because it is a trap the
+  Python sets: a part has **two extents and they are not the same**. The box a
+  model states for itself decides which node it belongs on; where its vertices
+  actually are decides whether two placed parts touch. The C used the vertex
+  extent for both, and the MadCat came out with six parts instead of eight -
+  no thighs at all, and the shins hung on the ankles.
 - **The main view draws itself.** `src/mesh.h` runs a model's own threaded
   program and `src/raster.h` draws the result, both in C inside the emulator's
   process - `cockpit.exe --live --mesh 463` turns a Vulture torso with no file

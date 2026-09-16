@@ -201,6 +201,14 @@ if [ -f "$TI_RES" ]; then
     check_at_least "chassis that assemble whole" 6
     check_at_least "parts placed on skeletons" 48
     check_at_least "limb joints that meet" 42
+    check_at_least "mech polygons in python" 1291
+
+    # The same placement rules, ported to src/rig.h, assembling from the
+    # archive in the emulator's own memory. Both are held to the same numbers.
+    CHECKTEXT=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --rig-all --steps 1 --top 0 2>/dev/null)
+    check_at_least "chassis assembled whole in C" 6
+    check_at_least "parts placed in C" 48
+    check_at_least "mech polygons in C" 1291
 fi
 
 # The cockpit ROM's vehicle table is checked against something the ROM does not

@@ -28,6 +28,7 @@
 #define MESH_POLYS    4096
 #define MESH_MATS     256
 #define MESH_PIDX     16		/* vertices we keep per polygon */
+#define MESH_NODES    64
 
 struct mesh_poly {
 	int n;
@@ -45,7 +46,16 @@ struct mesh {
 	float mr[MESH_MATS], mg[MESH_MATS], mb[MESH_MATS];
 	uint8_t mkind[MESH_MATS], mset[MESH_MATS];
 	int nmat;
+	int nmat_top;				/* highest material index, plus one */
 	float box[7];				/* the model's own stated extent */
+	/* $040's node tree. On a skeleton this is the rest pose: each node is a
+	 * constant offset from its parent, so running the chain stands the mech
+	 * up. See RENDERING.md. */
+	float nx[MESH_NODES], ny[MESH_NODES], nz[MESH_NODES];
+	int16_t parent[MESH_NODES];
+	float ox[MESH_NODES], oy[MESH_NODES], oz[MESH_NODES];
+	uint8_t nset[MESH_NODES];
+	int nnode;
 	const char *stopped;			/* NULL if it ran to a return */
 	uint16_t seen_op[0x600 / 0x20];		/* opcode histogram, for comparing ports */
 };
@@ -225,6 +235,7 @@ static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
 					m->mb[idx] = mesh_f32(w[at + 3]);
 					if (!m->mset[idx]) m->nmat++;
 					m->mset[idx] = 1;
+					if ((int)idx + 1 > m->nmat_top) m->nmat_top = (int)idx + 1;
 				}
 				at += 5;
 				continue;
@@ -248,6 +259,25 @@ static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
 				continue;
 			default:
 				break;
+			}
+
+			if (op == 0x040) {		/* compose a node onto its parent */
+				uint32_t nd = w[at], par = w[at + 1];
+				if (at + 6 > n) { m->stopped = "short node"; goto done; }
+				if (nd < MESH_NODES && par < MESH_NODES) {
+					float dx = mesh_f32(w[at + 3]);
+					float dy = mesh_f32(w[at + 4]);
+					float dz = mesh_f32(w[at + 5]);
+					m->parent[nd] = (int16_t)par;
+					m->ox[nd] = dx; m->oy[nd] = dy; m->oz[nd] = dz;
+					m->nx[nd] = m->nx[par] + dx;
+					m->ny[nd] = m->ny[par] + dy;
+					m->nz[nd] = m->nz[par] + dz;
+					if (!m->nset[nd]) m->nnode++;
+					m->nset[nd] = 1;
+				}
+				at += 6;
+				continue;
 			}
 
 			len = mesh_fixed(op);

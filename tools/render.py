@@ -487,6 +487,7 @@ def mechs(blob, lib):
     total = 0
     whole = 0
     met = joints = 0
+    polytotal = 0
     for rid, rtype, data in M.walk(blob):
         if rtype != 1:
             continue
@@ -496,6 +497,7 @@ def mechs(blob, lib):
             continue
         a = Assembly(blob, lib, rid)
         total += len(a.parts)
+        polytotal += len(a.poly)
         whole += len(a.parts) >= 8
         for node, _rid, _at in a.parts:
             if node not in a.rig.arm:
@@ -514,6 +516,7 @@ def mechs(blob, lib):
     print("chassis that assemble whole: %d" % whole)
     print("parts placed on skeletons  : %d" % total)
     print("limb joints that meet      : %d of %d" % (met, joints))
+    print("mech polygons in python   : %d" % polytotal)
 
 
 def frames(subject, size, out, pitch, zoom, n):
