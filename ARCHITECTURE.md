@@ -329,10 +329,68 @@ enough that running the original is cheaper than reimplementing it. The
 10,524 bytes of data fixups, needed before a string pointer in `DATA` resolves
 to the string it names.
 
+## Step 1, done: the panel in windows
+
+`make panel` builds `build/panel.exe`. It takes a Remote I/O capture and draws
+it in three windows you can drag anywhere:
+
+```
+./build/battlepod.exe "$GF/Full_Load_3_0" --duart 11000 \
+    --set 2138A64=4E754E75 --duart-in 's\r3\r05\r01\r' --rio-dump out/one.rio
+./build/panel.exe out/panel.rio
+```
+
+Left and right scrub a frame at a time, home and end jump to either end, and
+the frame number is in the title bar.
+
+**It takes the wire, not an API.** `battlepod --rio-dump` writes the byte
+stream the cockpit sent on DUART channel A, and the panel reads that file.
+`src/rio.h` holds the frame walker and the panel state and is the only thing
+the two share - the emulator does not know the panel exists. Three consequences
+fall out for free: the panel runs with no emulator present, it is testable
+against captured bytes, and the same stream could one day go to a serial port
+with a salvaged cockpit on the end.
+
+The capture that drives it is **real firmware output**, not a mock. Each frame
+came out of a separate run of the pod's own diagnostic monitor, driven over the
+modelled serial port and concatenated:
+
+```
+01 00 03 03 D3 05 01 D9        lamp 05 to brightness 01
+01 00 03 03 D2 80 05 57        bar graph 80 to 5 bars
+01 00 0A 0A D1 80 42 41 54 ... display 80 reads BATTLTEC
+```
+
+Worth recording: **a boot emits one frame and no more.** The firmware sends a
+single `D5` during startup and then nothing, because it does not light the
+panel until a game is running - which is still blocked. So until the operator
+console exists, a rich capture has to be assembled a command at a time. That is
+not a limitation of the panel; it is the same blocker as everywhere else,
+showing up in a new place.
+
+### Windows by device, not by cockpit panel - for now
+
+The three windows are lamps, displays and bar graphs. That is a grouping by
+device class, and the real cockpit is not built that way: the System 3.0 manual
+names the boards as Weapons A, Weapons B, Buttons, Keypad and LCD.
+
+Grouping by board is what should happen, and it needs one thing we do not have
+- which lamp id sits on which board. **Scrubbing is how that gets answered**:
+step a frame at a time and watch which id changes against what the firmware
+says it just did. The panel was built with that in mind rather than as a
+viewer, which is why it scrubs at all.
+
+Until then it draws what is known and marks what is not: a lamp nobody has ever
+addressed is drawn as an empty outline rather than as dark, because unknown is
+not off.
+
+
 ## Order of work
 
-1. **Controls and the panel windows.** The RIO stream already carries verified
-   packets; give it somewhere to go. Least risk, most immediately visible.
+1. ~~**Controls and the panel windows.**~~ Done for output: `make panel`,
+   three windows, driven from a capture of the wire. Inputs - stick, throttle,
+   pedals back up the same link - are what is left of this step, and the
+   manual's encoder ranges are above.
 2. **The main view in SDL.** Today `render.py` writes PNGs; the same geometry
    into a window at the pod's 480x360, upscaled with the aspect kept.
 3. **The operator console**, speaking the recovered protocol to one local pod.

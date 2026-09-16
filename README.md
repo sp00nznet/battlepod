@@ -313,6 +313,16 @@ python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
 `--check` decodes the three loadouts that a spreadsheet in the release also
 writes out in English, and compares them weapon for weapon.
 
+**See the cockpit panel.** `make panel` needs SDL2; nothing else here does.
+It draws a Remote I/O capture - lamps, displays and bar graphs - in three
+windows you can drag anywhere, and left/right scrub the stream a frame at a
+time:
+
+```
+./build/battlepod.exe "$GF/Full_Load_3_0" --duart 11000     --set 2138A64=4E754E75 --duart-in 's30501' --rio-dump out/one.rio
+./build/panel.exe out/one.rio
+```
+
 **Stand a mech up.** The skeletons carry a rest pose and the parts hang on it:
 
 ```

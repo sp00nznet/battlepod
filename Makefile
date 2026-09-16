@@ -53,8 +53,9 @@ $(BUILD):
 deps:
 	@test -d $(MUSASHI) || git clone --depth 1 https://github.com/kstenerud/Musashi $(MUSASHI)
 
-test: $(BUILD)/battlepod.exe
+test: $(BUILD)/battlepod.exe $(BUILD)/paneltest.exe
 	./$(BUILD)/battlepod.exe --selftest
+	./$(BUILD)/paneltest.exe --selftest
 
 # Replays the cockpit boot and counts milestones. Skips if no release present;
 # point VWE_GAME_FILES at the extracted "Console Files/Game Files" directory.
@@ -64,7 +65,23 @@ VWE_GAME_FILES ?=
 conformance: $(BUILD)/battlepod.exe
 	VWE_GAME_FILES="$(VWE_GAME_FILES)" sh tools/conformance.sh
 
+# The panel renderer is optional: it needs SDL2, and nothing else here does.
+# It reads the Remote I/O byte stream `battlepod --rio-dump` writes, so it runs
+# with no emulator present.
+SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
+SDL_LIBS   := $(shell pkg-config --static --libs sdl2 2>/dev/null)
+
+panel: $(BUILD)/panel.exe
+
+$(BUILD)/panel.exe: src/panel.c src/rio.h | $(BUILD)
+	@test -n "$(SDL_LIBS)" || { echo "panel needs SDL2 (pkg-config --libs sdl2 found nothing)"; exit 1; }
+	$(CC) $(CFLAGS) -Isrc $(SDL_CFLAGS) -o $@ src/panel.c -static $(SDL_LIBS)
+
+# Built without SDL so the self-check runs anywhere, including in CI.
+$(BUILD)/paneltest.exe: src/panel.c src/rio.h | $(BUILD)
+	$(CC) $(CFLAGS) -Isrc -DPANEL_NO_SDL -o $@ src/panel.c
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean test deps conformance
+.PHONY: all clean test deps conformance panel

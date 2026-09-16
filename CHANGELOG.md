@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The cockpit panel, in windows you can move around.** `make panel` builds
+  `build/panel.exe`: lamps, soft-label displays and bar graphs in three
+  resizable SDL windows, driven from a Remote I/O capture that
+  `battlepod --rio-dump` writes. Left and right scrub a frame at a time, which
+  is the point - that is how which-lamp-is-which gets answered, by watching an
+  id change against what the firmware says it just did.
+- **The seam is the wire.** `src/rio.h` holds the frame walker and panel state
+  and is all the emulator and the renderer share; the emulator does not know
+  the panel exists. So the panel runs with no emulator present, is testable
+  against captured bytes, and could one day drive a serial port with a
+  salvaged cockpit on the end of it.
+- The capture driving it is **real firmware output** - each frame from a
+  separate run of the pod's own diagnostic monitor over the modelled serial
+  port. Statically linked, so `panel.exe` needs no DLLs beside it, and its
+  self-check builds without SDL at all so the harness runs it anywhere.
+- Worth recording: **a boot emits exactly one Remote I/O frame.** The firmware
+  sends a single `D5` at startup and nothing after, because it does not light
+  the panel until a game runs. Until the operator console exists a rich capture
+  has to be assembled a command at a time - the same blocker as everywhere
+  else, showing up somewhere new.
 - **`tools/opscon.py` - the console's protocol, read out of the console.** The
   plan was to lift its 68k code; in the end no lifting was needed. The console
   **logs every message it sends, by name and with its fields**, and those

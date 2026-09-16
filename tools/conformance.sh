@@ -20,6 +20,9 @@ fi
 
 echo "== self-check =="
 "$BIN" --selftest
+# The panel renderer shares the Remote I/O decoder; its self-check is built
+# without SDL so it runs anywhere.
+[ -x ./build/paneltest.exe ] && ./build/paneltest.exe --selftest
 
 if [ -z "${VWE_GAME_FILES:-}" ] || [ ! -f "${VWE_GAME_FILES}/Full_Load_3_0" ]; then
     cat >&2 <<EOF
