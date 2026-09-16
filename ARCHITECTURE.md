@@ -52,7 +52,7 @@ protocols we have decoded rather than interfaces we would be inventing.
 | the release calls it | what it is | where we are |
 |---|---|---|
 | **Cockpit Software** | the pod: 68020, TMS34020 renderer, Amiga secondary display, audio DSP, Remote I/O panel | boots, renders, panel talks |
-| **Ops Con** | the operator's Macintosh: picks the map, the teams and the mechs, and starts the game | not started — and should be **written, not emulated** |
+| **Ops Con** | the operator's Macintosh: picks the map, the teams and the mechs, and starts the game | not started — **lift it to read it, write it to run it** |
 | **Mission Review / Camera Ship** | the spectator view and the after-action report | out of scope for now |
 
 ## The target
@@ -114,10 +114,85 @@ Inputs go back the same way: the stick, throttle and pedals are analog values
 arriving on the same wire, so a keyboard, a gamepad or a real HOTAS all land in
 the same place.
 
-The one thing this does not settle is **which lamp is which**. We have 64 lamp
-ids and 18 display ids from the firmware's own diagnostic menu, but not their
-legends. Those come from photographs of a cockpit and from watching which ids
-light when — a labelling job, not a decoding one.
+What this does not settle is **which lamp is which**: we have 64 lamp ids and
+18 display ids from the firmware's own diagnostic menu, but not their legends.
+See "The panel" below — it is a labelling job, and it turns out not to need a
+photograph.
+
+## The panel
+
+Three sources, and they agree, which is the only reason any of this is worth
+writing down.
+
+### What the controls do, from the firmware
+
+The cockpit ROM prints a status line every time a switch is thrown, so the
+switch inventory is recoverable without ever seeing a cockpit. From `ROM3_0`
+around `0x0329A2`-`0x032BB5`, `0x02B613`-`0x02B695` and `0x055392`-`0x055415`:
+
+| what it is | the ROM's own words |
+|---|---|
+| torso twist | `TWISTING TORSO LEFT` / `RIGHT`, `CENTERING THE TORSO`, `TORSO ACTUATOR DISABLED` |
+| view | `MOVING VIEW UP` / `DOWN` |
+| vision mode | `VISIBLE LIGHT ACTIVE`, `INFRARED ACTIVE`, `SEARCH LIGHT ON` / `OFF` |
+| secondary display | `RADAR DISPLAY SELECTED`, `MAP DISPLAY SELECTED`, `DAMAGE DISPLAY SELECTED`, `MAP GRID ON` |
+| radar | `ZOOM IN RADAR`, `ZOOM OUT RADAR`, `RADAR AT 2 KM RANGE` |
+| targeting | `TARGET SELECT`, `INDIRECT FIRE MODE`, `FORWARD OBSERVER ON` / `OFF`, `FO SELECT` |
+| stick mode | `STICK STEERS`, `STICK TURNS / TIPS TORSO`, `STICK MOVES CROSSHAIRS` |
+| pedals | `PEDALS STEER`, `FINE PEDALS`, `REGULAR PEDALS` |
+| handling | `STOPS WITH INERTIA`, `STOPS INSTANTLY`, `DIRECTION STABILIZATION IS ON` |
+| reactor | `SHUTDOWN IN %d SECONDS`, `SHUTDOWN AVOIDED`, `MANUAL OVERRIDE`, `REACTOR RESTARTING` |
+| pilot mode | `BASIC MODE`, `STANDARD MODE`, `VETERAN MODE`, `MASTER MODE`, `PANEL TRAINING MODE`, `CROSSHAIR ON` / `OFF` |
+
+That last row is a difficulty ladder built into the cockpit: a novice gets a
+crosshair, instant stops and coarse pedals; a master gets none of it. There is
+even a `PANEL TRAINING MODE` for teaching the switches themselves.
+
+And the damage messages line up one-for-one with the 21 hit locations the
+vehicle records carry — `LEFT LEG DISABLED`, `TOP SPEED REDUCED`,
+`RIGHT ARM GUNS DESTROYED`, `MISSILE PACK DESTROYED`, `TORSO ACTUATOR DAMAGED`,
+`AMMO BAY FIRE`.
+
+### What it looks like, from photographs
+
+Photographs of a surviving pod give the arrangement:
+
+- **Five green monochrome MFDs**, bezels marked `MFD`: three in a bank above
+  the viewport, two flanking the centre console. Each has a row of four red
+  buttons above and below it — **eight soft keys per display**, which is where
+  most of the 64 lamp ids go.
+- A **centre console** below the viewport carrying the radar/map/damage scope,
+  heat and speed, with its switch legends printed down both edges: `ZOOM`,
+  `SHUTDOWN`, `AUXIL MODE`, `MAP`, `DMG`, `TGT`, `FLUSH`, `CROUCH`, `RANGE`,
+  `MULTI`, `LIGHT`, `SEARCH LIGHT`, `CENTER`, `AUTO`, `PILOT MODE`.
+- A **numeric keypad** on the coaming, for pilot identity.
+- A `CAUTION — DO NOT TOUCH VIEWPORT GLASS` label, because the main view is a
+  real optical assembly rather than a screen you look at.
+
+Read those legends against the table above and they are the same switches:
+`ZOOM`/`RANGE` are the radar pair, `MAP`/`DMG`/`TGT` the three secondary-display
+modes, `SEARCH LIGHT` and `LIGHT` the vision pair, `CENTER` the torso, `PILOT
+MODE` the difficulty ladder, `SHUTDOWN` the reactor.
+
+**Caveat, and it matters.** The photographs available are of a *later* pod
+generation than this release — their main view is texture-mapped under a
+clouded sky and their centre console is a colour LCD, where 13.1.8 is
+flat-shaded and drives a mono CRT plus discrete lamps and bar graphs. So the
+photographs are evidence for the **family** — how many MFDs, how many keys each,
+what the legends say — and not proof of this build's exact layout.
+
+### Which lamp is which
+
+Still unknown, and it does not need a photograph to fix. The pod tells us: drive
+an input, watch which lamp id changes on the Remote I/O wire, and read the
+status line the firmware prints at the same moment. `SEARCH LIGHT ON` arriving
+in the same frame as lamp `0x2A` going to brightness 1 names lamp `0x2A`.
+
+That makes the mapping an experiment inside our own emulator rather than an
+archaeology problem — the same kind of oracle everything else here was settled
+by. It needs the input path wired first, which is step 1 of the order of work
+anyway.
+
 
 ## Networking
 
@@ -148,29 +223,70 @@ PLAYER_CONFIG  node, cockpit, pilot     GAME_OVER  node
 comments — node type 1 is the ops console, 2 a cockpit, 3 a camera, 4 a router
 — along with each node's place in the loop and which load script to use.
 
-## The operator console: write it, do not emulate it
+## The operator console: lift it to read it, write it to run it
 
-This is the strategic call in this document.
+This section used to say *write it, do not emulate it*, on the grounds that
+emulating meant a 68k Mac, its Toolbox and THINK C's relocations. That was too
+binary, and it ignored a tool we already have. `macrecomp` in the sibling
+workspace is a 68k Mac static-recompilation toolkit — extract, disassemble with
+Toolbox traps annotated, lift to C against an SDL2 runtime — and it has HyperCard
+booting, which is a *larger* program than this one.
 
-Starting a game is the oldest blocker in the project. The obvious route —
-emulate the Macintosh console — is the expensive one: it means a 68k Mac, its
-toolbox, and getting past THINK C's `CREL`/`DREL` relocations, all to run a
-program whose entire job is to read plaintext files and send named messages.
+So the right question is not whether to use it but what for, and its own
+`scan_traps.py --coverage` answers that in one command. Run against the
+console:
 
-Those plaintext files are in the release and we have already parsed most of
-them. `Vehicle_List` gives 38 vehicles over six chassis. `Team_List` gives
-eight houses in eight colours. `Scenario_List` gives eleven maps.
-`Script_List`, `Game_Setup`, `Net_Configuration`, the load scripts. And the
-message vocabulary is not guessed, it is transcribed from the console's own log.
+```
+  call sites  920/1624 (56%)
+  distinct    159/345 (46%)
 
-So the console becomes a few hundred lines that read the release's own data
-files and speak the recovered protocol — and it gives us a game start, which
-unblocks the pose data, which unblocks everything downstream of it. It is also
-the piece that makes the thing playable by other people, which no amount of
-further decoding does.
+  missing, by manager, ranked by call sites:
+      207 sites   3 traps  SANE (float)
+      121 sites  29 traps  QuickDraw
+       52 sites  21 traps  TextEdit
+       43 sites   1 traps  Print Mgr
+       40 sites  18 traps  Window Mgr
+       38 sites  26 traps  File Mgr
+```
 
-The camera ship and Mission Review follow the same logic later, and neither is
-on the critical path.
+For comparison the toolkit scores Shufflepuck Cafe at 92% and HyperCard at 76%.
+The console is a full Macintosh application — menus, editable text fields, a
+print path for score sheets — so it carries more Toolbox surface than a game
+does, and **the entire 44% gap is operator-interface furniture we do not want**.
+
+The binary says the same thing about itself. It names its own source files, and
+there are 53 of them: **36 are THINK Class Library** — `CApplication`,
+`CDirector`, `CDialogDirector`, `CEditText`, `CPrinter` — and only **17 are
+VWE's own**:
+
+```
+Functions.c   Load.c       LongQD.c      OpConApp.c    OpConData.c
+OpConDoc.c    OpConMain.c  SiteLink.c    Start.c       SyncSettings.c
+TBUtilities.c TCLUtilities.c TestSeq.c   Utilities.c   Verification.c
+ResClientOpConDoc.c
+```
+
+`Start.c` and `Load.c` are what we are missing. And the message names are all
+in one contiguous string region, `0x76C8`-`0x90AE` — `GAME_OVER`,
+`COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG`, `Drop Location`, `MECH_CLASS`,
+`IDENTIFY_YOURSELF`, `SHADOW_ROM`, `NET_CONFIG_SEND_MSG` — so the network layer
+is one module, not scattered.
+
+**So: lift to read, write to run.**
+
+Use macrecomp's front end on those modules to recover **the byte layout of each
+message**, which is the one thing we do not have and the thing that gates a
+game start. Reading them needs no Toolbox at all. Then write the console
+itself, because everything else it does is read plaintext files that are in the
+release and already parsed — `Vehicle_List`, `Team_List`, `Scenario_List`,
+`Script_List`, `Game_Setup`, `Net_Configuration`, whose own comments document
+the node types — and drive a UI we would rather design than reproduce.
+
+Full recompilation stays available if the encodings turn out to be tangled
+enough that running the original is cheaper than reimplementing it. The
+`DREL`/`CREL` relocation resources are the first thing to work out either way:
+10,524 bytes of data fixups, needed before a string pointer in `DATA` resolves
+to the string it names.
 
 ## Order of work
 
@@ -216,4 +332,6 @@ on the critical path.
 - **Type 7**, 607 KB of compressed archive with no per-record length to check a
   decompressor against.
 - **Two TMS34082 operations** whose manual pages do not survive legibly.
-- **Which lamp is which**, as above: a labelling job.
+- **Which lamp is which.** Not a decoding problem: drive an input, watch the
+  lamp id on the wire, read the status line the firmware prints. It needs the
+  input path wired, which is step 1 anyway.

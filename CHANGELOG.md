@@ -8,6 +8,41 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The cockpit's whole switch inventory, from the firmware.** The ROM prints a
+  status line every time a control is thrown, so the panel is recoverable
+  without seeing a pod: torso twist and centring, visible/infrared/searchlight,
+  the three secondary-display modes, radar zoom and range, target select,
+  indirect fire and forward observer, three stick modes, fine and regular
+  pedals, inertia or instant stops, and a **difficulty ladder built into the
+  cockpit** - `BASIC` / `STANDARD` / `VETERAN` / `MASTER MODE`, with
+  `CROSSHAIR ON`/`OFF` and a `PANEL TRAINING MODE` for teaching the switches.
+  The damage messages line up one-for-one with the 21 hit locations.
+- Photographs of a surviving pod give the arrangement - five green MFDs, three
+  above the viewport and two flanking the console, eight soft keys each - and
+  their printed legends read against the ROM strings as the same switches.
+  Noted in ARCHITECTURE.md with the caveat that the photographs are of a
+  **later pod generation** than this release: texture-mapped view, colour LCD
+  console, where 13.1.8 is flat-shaded on a mono CRT.
+- **Which lamp is which turns out not to need a photograph.** Drive an input,
+  watch which lamp id changes on the Remote I/O wire, read the status line
+  printed in the same frame. An experiment in our own emulator rather than an
+  archaeology problem.
+
+### Changed
+
+- **ARCHITECTURE.md's operator-console call, corrected with measurements.** It
+  said *write it, do not emulate it*, dismissing the 68k Mac route on THINK C's
+  relocations. The sibling `macrecomp` toolkit already does 68k Mac static
+  recompilation and has HyperCard - a larger program - booting, so the honest
+  answer needed numbers. Its `scan_traps.py --coverage` on the console:
+  **920/1624 call sites (56%)**, the gap dominated by SANE, QuickDraw, TextEdit
+  and the Print Manager. The binary names its own 53 source files and **36 are
+  THINK Class Library**; only 17 are VWE's, of which `Start.c` and `Load.c` are
+  what we want, with every message name in one string region at `0x76C8`.
+  So: **lift it to read it, write it to run it** - use the toolkit's front end
+  to recover the message byte layouts, which needs no Toolbox at all, then
+  write the console because the rest of its job is reading plaintext files we
+  have already parsed.
 - **ARCHITECTURE.md** - the long view. What the finished thing is (a pod in
   SDL windows you can drag around, panels driven by the Remote I/O byte stream
   so one could later be real hardware, ARCNET encapsulated in UDP with a small
