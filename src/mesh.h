@@ -46,6 +46,7 @@ struct mesh {
 	float mr[MESH_MATS], mg[MESH_MATS], mb[MESH_MATS];
 	uint8_t mkind[MESH_MATS], mset[MESH_MATS];
 	int nmat;
+	int written;				/* every write to a vertex slot, rewrites included */
 	int nmat_top;				/* highest material index, plus one */
 	float box[7];				/* the model's own stated extent */
 	/* $040's node tree. On a skeleton this is the rest pose: each node is a
@@ -113,6 +114,7 @@ static void mesh_put(struct mesh *m, uint32_t i, float x, float y, float z)
 {
 	if (i >= MESH_VERTS) return;
 	m->vx[i] = x; m->vy[i] = y; m->vz[i] = z;
+	m->written++;
 	if (!m->vset[i]) m->nvert++;
 	m->vset[i] = 1;
 	if ((int)i + 1 > m->top) m->top = (int)i + 1;
@@ -149,7 +151,17 @@ static uint32_t mesh_target(uint32_t operand)
  * what model.py does and what the interpreter's own threading implies. A
  * position already walked is not walked again, so loops terminate.
  */
-static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
+/* Which way a conditional branch goes.
+ *
+ * ALL walks both arms, which finds everything a model *can* draw and is what
+ * the checks want. It is wrong for a picture: a model that keeps levels of
+ * detail behind its branches ends up with all of them stacked in one frame.
+ * FALL and TAKE each walk one arm. See mesh_best. */
+#define MESH_ALL  0
+#define MESH_FALL 1
+#define MESH_TAKE 2
+
+static void mesh_run_mode(struct mesh *m, const uint8_t *data, uint32_t bytes, int mode)
 {
 	static uint32_t w[16384];
 	static uint8_t seen[16384];
@@ -190,10 +202,30 @@ static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
 			case 0x2C0:				/* jump, always */
 				at = mesh_target(w[at]);
 				continue;
-			case 0x320: case 0x360:			/* jump on a predicate */
+			case 0x320: case 0x360: {		/* jump on a predicate */
+				uint32_t end = mesh_predicate(w, n, at, &bad);
+				if (bad || end >= n) { m->stopped = "predicate"; goto done; }
+				if (mode == MESH_ALL) {
+					if (nwork < 256) work[nwork++] = mesh_target(w[end]);
+				} else if (mode == MESH_TAKE) {
+					at = mesh_target(w[end]);
+					continue;
+				}
+				at = end + 1;
+				continue;
+			}
 			case 0x420:				/* predicate into a slot */
 				at = mesh_predicate(w, n, at, &bad) + 1;
 				if (bad) { m->stopped = "predicate"; goto done; }
+				continue;
+			case 0x300: case 0x340:			/* jump on face facing */
+				if (mode == MESH_ALL) {
+					if (nwork < 256) work[nwork++] = mesh_target(w[at + 1]);
+				} else if (mode == MESH_TAKE) {
+					at = mesh_target(w[at + 1]);
+					continue;
+				}
+				at += 2;
 				continue;
 			case 0x0A0:				/* one vertex */
 				if (at + 4 > n) { m->stopped = "short vertex"; goto done; }
@@ -287,6 +319,32 @@ static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
 	}
 done:
 	return;
+}
+
+static void mesh_run(struct mesh *m, const uint8_t *data, uint32_t bytes)
+{
+	mesh_run_mode(m, data, bytes, MESH_FALL);
+}
+
+/* The walk that draws the most of a model without drawing it twice.
+ *
+ * A model that writes each vertex slot once is a sequence, not a choice, so
+ * the full walk is right. One that writes slots again on each arm is holding
+ * levels of detail, and the full walk would stack them - so take whichever
+ * single arm drew more. This is tools/render.py's best_model, and the two have
+ * to agree.
+ */
+static void mesh_best(struct mesh *m, const uint8_t *data, uint32_t bytes)
+{
+	static struct mesh other;
+
+	mesh_run_mode(m, data, bytes, MESH_ALL);
+	if (m->written <= (m->nvert > 0 ? m->nvert : 1) * 6 / 5)
+		return;
+	mesh_run_mode(m, data, bytes, MESH_FALL);
+	mesh_run_mode(&other, data, bytes, MESH_TAKE);
+	if (other.npoly > m->npoly)
+		memcpy(m, &other, sizeof(*m));
 }
 
 #endif /* BATTLEPOD_MESH_H */

@@ -458,7 +458,7 @@ static int rig_load(uint32_t id)
 	uint32_t len = mesh_find(g_mesh_base, 0x200000u, id, g_meshbuf, sizeof g_meshbuf);
 
 	if (!len) return 0;
-	mesh_run(&g_part, g_meshbuf, len);
+	mesh_best(&g_part, g_meshbuf, len);
 	return g_part.npoly > 0;
 }
 
@@ -676,6 +676,7 @@ static void rig_all(void)
 static struct scene g_scene;
 static const char *g_scenefile;
 static const char *g_sceneout;
+static float g_sceneturn = 0.7f, g_scenepitch = -0.28f, g_scenezoom = 0.9f;
 static struct mesh g_kindmesh[SCENE_KINDS];
 static uint8_t g_kindok[SCENE_KINDS];
 
@@ -690,7 +691,7 @@ static int scene_prepare(void)
 		uint32_t len = mesh_find(g_mesh_base, 0x200000u, (uint32_t)g_scene.kind[i],
 					 g_meshbuf, sizeof g_meshbuf);
 		if (!len) continue;
-		mesh_run(&g_kindmesh[i], g_meshbuf, len);
+		mesh_best(&g_kindmesh[i], g_meshbuf, len);
 		g_kindok[i] = g_kindmesh[i].npoly > 0;
 		ok += g_kindok[i];
 	}
@@ -765,7 +766,7 @@ static void scene_report(void)
 	printf("\n");
 
 	if (g_sceneout) {
-		int poly = scene_draw(0.7f, -0.28f, 0.9f);
+		int poly = scene_draw(g_sceneturn, g_scenepitch, g_scenezoom);
 		FILE *f = fopen(g_sceneout, "wb");
 		if (f) {
 			fwrite(g_sceneframe.px, 1, sizeof g_sceneframe.px, f);
@@ -2057,6 +2058,11 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
+		else if (!strcmp(a, "--scene-view") && i + 3 < argc) {
+			g_sceneturn = (float)atof(argv[++i]);
+			g_scenepitch = (float)atof(argv[++i]);
+			g_scenezoom = (float)atof(argv[++i]);
+		}
 		else if (!strcmp(a, "--rig") && i + 1 < argc)
 			g_rig_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 #ifdef BATTLEPOD_SDL

@@ -27,6 +27,26 @@ All notable changes to this project are documented here. The format follows
   unidentified device at `0x00010007`-`0x00010015`. That address range stays
   unidentified.
 
+### Fixed
+
+- **The map was drawing a fraction of its geometry, and the wrong models.**
+  Caught by looking at the picture. Three separate faults:
+- **The C decoder only walked the fall-through.** `tools/render.py` picks the
+  best of three walks; `src/mesh.h` did not, so the terrain mesa came out at
+  **9 polygons instead of 132**. `mesh_run_mode` now takes `ALL`/`FALL`/`TAKE`
+  and `mesh_best` ports the heuristic - full walk unless the model rewrites
+  vertex slots, otherwise whichever single arm drew more.
+- **The wrong column named the model on nine-field records.** Column 1 holds a
+  collision hull - 0 to 7 polygons, radii in the hundreds - and column 8 holds
+  the real geometry. BadLands places 78 terrain mesas that way, so they were
+  all being drawn as flat plates.
+- **`scene.h` and `rig.h` were not in the Makefile's dependencies**, so a fixed
+  decoder kept reporting the broken numbers. The same trap as `mesh.h` two
+  commits ago; all the headers are now one `HDRS` variable.
+- Together: **9,308 polygons to 53,792**, and from a low camera BadLands-16 is
+  mesas and buildings receding into haze rather than scattered plates.
+  `--scene-view turn pitch zoom` is new for getting down among them.
+
 ### Added
 
 - **Whole maps, drawn.** The release ships **eleven scenario files in plain

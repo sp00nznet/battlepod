@@ -675,10 +675,19 @@ each object by its own heading and scale. One decoded model is drawn hundreds
 of times, which is what the display list does too, and is why the rasteriser
 takes a placement rather than a merged mesh the size of a map.
 
+**Which column names the model differs by record length, and getting it wrong
+draws the collision hulls instead.** On a nine-field record, column 1 holds
+shapes of 0 to 7 polygons with radii in the hundreds - a hull, not a model -
+while column 8 holds the real geometry: 132 polygons for the terrain mesa, 151
+for a building. An eight-field record has no column 8 and its column 1 is the
+drawable one. That is what the console's `thing, class, shape` log line is
+doing with three ids.
+
 The maps are thousands of units across where a mech is nine tall, so from above
-the objects are small: what the picture shows is the shape of the terrain
-rather than any one building. Three of the nineteen models BadLands names
-decode to no geometry, which is not yet explained.
+the objects are specks. `--scene-view turn pitch zoom` puts the camera down
+among them, and from there BadLands is mesas and buildings receding into haze -
+which is what the period footage shows. One of the seventeen models it names
+decodes to no geometry, which is not yet explained.
 
 This needs no game running, which is why it was worth doing now: it is the
 first thing in this project to draw a whole world rather than one object.

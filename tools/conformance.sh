@@ -220,7 +220,7 @@ if [ -f "$TI_RES" ]; then
         echo "== a whole map =="
         CHECKTEXT=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --scene "$SCN" --steps 1 --top 0 2>/dev/null)
         check_at_least "scenario objects placed" 882
-        check_at_least "scenario models used" 19
+        check_at_least "scenario models used" 17
         check_at_least "scenario models decoded" 16
     fi
 

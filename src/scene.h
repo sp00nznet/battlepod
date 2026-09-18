@@ -87,7 +87,16 @@ static int scene_load(struct scene *s, const char *path)
 		}
 		if ((nv == 8 || nv == 9) && s->n < SCENE_MAX) {
 			struct scene_obj *o = &s->obj[s->n++];
-			o->model = (int)v[1];
+			/* Which column names the drawable model differs by record
+			 * length, and the data says which. On a nine-field record
+			 * column 1 holds shapes of 0 to 7 polygons with radii in
+			 * the hundreds - a collision hull - while column 8 holds
+			 * real geometry: 132 polygons for the terrain mesa, 151
+			 * for a building. An eight-field record has no column 8
+			 * and its column 1 is the drawable one. This matches the
+			 * console's own "thing, class, shape" log line having
+			 * three ids to hand out. */
+			o->model = (int)v[nv == 9 ? 8 : 1];
 			o->at.x = (float)v[2];
 			o->at.y = (float)v[3];
 			o->at.z = (float)v[4];
