@@ -77,10 +77,6 @@ the program cannot start itself. Something writes that word first; the 68020 is
 the obvious candidate, given it makes 208 distinct references into the Amiga's
 memory window.
 
-**`0x3FFFE168` and `0x3FFFE174`**, in the TI renderer's window, are read by the
-main game loop and formatted onto Remote I/O displays `0x80` and `0x86` as raw
-`%08x`. What they count is unknown.
-
 **The part at `0x00010007`-`0x00010015` has no name.** What it does is no
 longer open - two four-register control ports at a stride of 4, touched by
 eight instructions in the whole ROM, each run doing set/clear/clear/set of one
@@ -155,8 +151,9 @@ move.*
 - **What each entity field *is*.** The arena is built on an ordinary boot -
   1000 entities of 0x6B4 bytes - and the bytes each message writes are now
   measured on the running firmware rather than read out of the handlers, for
-  fourteen opcodes. Two fields are named: `+0x02` is the class the handlers
-  switch on, and `+0x9C` is the sequence `0xD2` refuses to go backwards on.
+  fourteen opcodes. Five fields are named, four of them by the firmware's own
+  printf labels - `+0x00` Owner, `+0x02` Class_ID, `+0x06` Number, `+0x0A`
+  Thing_Flags - plus `+0x9C`, the sequence `0xD2` refuses to go backwards on.
   The rest are located but not named; that still needs a game running to watch
   a field change against something visible.
 

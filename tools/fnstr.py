@@ -32,9 +32,12 @@ def text_at(data, off, limit=120):
     s = data[off:end]
     if len(s) < 3:
         return None
-    if any(c < 0x20 or c > 0x7E for c in s):
+    # The firmware's log lines end in a newline, and several carry a tab or a
+    # carriage return inside them. Rejecting every control character threw all
+    # of those away - which is most of what this tool exists to find.
+    if any((c < 0x20 and c not in (9, 10, 13)) or c > 0x7E for c in s):
         return None
-    return s.decode("ascii")
+    return s.decode("ascii").rstrip(chr(13) + chr(10) + chr(9))
 
 
 def scan(data, base, start, limit=0x400):
@@ -92,6 +95,10 @@ def selftest():
     data = bytes(body)
     got = scan(data, 0x1000, 0x1000)
     assert got == [(0x1000, "pea", "hello")], got
+    # a log line ending in a newline is a string, not a rejection
+    logged = bytes([0x48, 0x7A, 0x00, 0x06, 0x4E, 0x71, 0x4E, 0x75])
+    logged += bytes([0x6C, 0x69, 0x6E, 0x65, 0x0A, 0x00])   # "line" nl nul
+    assert scan(logged, 0, 0) == [(0, "pea", "line")], scan(logged, 0, 0)
     assert calls(data, 0x1000, 0x1000) == []
     # a jsr absolute is picked up, and the scan stops at the rts
     data = b"\x4e\xb9\x00\x12\x34\x56" b"\x4e\x75"

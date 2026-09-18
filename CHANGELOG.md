@@ -8,6 +8,38 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The renderer's fixed error area, named by the ROM.** `TI ERROR!` dumps
+  fifteen labelled longwords from `0x3FFFE164`: `TI_RoutineID`,
+  `TI_ErrorNumber`, `TI_ProfileSP`, `TI_FPUStatus`, `TI_FPUPC`,
+  `TI_VideoIntTimer`, `TI_LastShape`, `TI_LastZone`, `TI_LastCommand`,
+  `TI_ShapePCOffset`, `TI_ProcPC`, `TI_ScanConv_Flag`, `TI_PolygonCount`,
+  `TI_LastObject`, `TI_ProcSP`.
+- **Which settles `0x3FFFE168` and `0x3FFFE174`**, listed until now as measured
+  and unexplained: they are `TI_ErrorNumber` and `TI_FPUPC`, and the main loop
+  puts them on Remote I/O displays `0x80` and `0x86` so an operator can read a
+  crash code off a cabinet that will not start.
+- **The entity header, in the firmware's own words.** The periodic report
+  prints `Class_ID=%d, Number=%d, Thing_Flags=0x%08x` from `My_Mech_Ptr`, and
+  the error dump prints `Last Object Owner` from `+0x00`. So `+0x00` is Owner,
+  `+0x02` Class_ID, `+0x06` Number, `+0x0A` Thing_Flags - and `0x0218AEE4`
+  holds `My_Mech_Ptr`, a pointer to this pod's own entity.
+- **Eight opcodes with names**, from what their handlers log: `0xBA` damage
+  (`old damage spreader`), `0xEB` burst damage, `0xEE` the router announcing
+  itself, `0xED` a player's vehicle created and linked, `0xC4` the router's
+  ready-and-timing report, `0xD3` camera selection, `0xE5` a player greeted by
+  name - and **`0xC6` is `ROUTER_MODEM_COMMAND_MSG`**, on the same standard of
+  evidence that named `0xC5`.
+
+### Fixed
+
+- **`fnstr.py` was rejecting every string that ended in a newline**, which is
+  most of what the firmware logs. It had been reporting "no strings" for
+  handler after handler and those silences were being read as findings - the
+  sweep that named `0xC5` had already run with the broken filter. Allowing tab,
+  newline and carriage return turned the same sweep into eight named opcodes.
+  Recorded in FALSE-TRAILS.md: a filter that silently returns *fewer* results
+  is the dangerous kind.
+
 - **Class 0 is a free slot, and `0xE8` makes one.** `0xE8` switches seven ways
   on the class - 1, 9, 10, 11, 12, 13, 19, each a different teardown - and then
   every class, not only those seven, ends with the entity's class zeroed.

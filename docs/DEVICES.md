@@ -1240,6 +1240,39 @@ so `+0x9C` is a sequence or timestamp and a late update is discarded rather
 than applied - which is what a state-replication protocol over an unreliable
 LAN has to do, and the first evidence here that this one does it.
 
+### Eight opcodes with names
+
+`tools/fnstr.py` was throwing away every string that ended in a newline, which
+is most of what the firmware logs - see FALSE-TRAILS.md. With that fixed, the
+handlers say a good deal more about themselves:
+
+| opcode | what its handler says | reading |
+|---|---|---|
+| `0xBA` | `old damage spreader` | damage, applied to a named entity |
+| `0xC4` | `Master router ready, Delay %f`, `Slave router ready, trip time %d`, `Slave router going idle`, `# %d, AVG Time %f, Trip %ld, Out %ld, Back %ld, RTC %ld, Error %ld` | the router's own ready-and-timing report |
+| `0xC6` | `Send Modem Attention`, `+++`, `OK`, `Function:%d Timeout %d, Size %d` | **`ROUTER_MODEM_COMMAND_MSG`** |
+| `0xD3` | `Camera 1` | camera selection |
+| `0xE5` | `WELCOME %s` | a player greeted by name |
+| `0xEB` | `Burst damage not correctly handled!!` | burst damage |
+| `0xED` | `Hover_Player_Link()`, chassis names, `Camera 1`, `THRUSTOK` | a player's vehicle created and linked |
+| `0xEE` | `I am the router (coo-coo-ca-chu)` | the router announcing itself |
+
+**`0xC6` is `ROUTER_MODEM_COMMAND_MSG`**, on the same standard of evidence that
+named `0xC5`. The console logs that message as
+`node long, command string, function long, timeout long`; the handler runs the
+modem - `Send Modem Attention`, `+++`, waiting for `OK` - and logs
+`Function:%d Timeout %d, Size %d` followed by `%s`. Function, timeout, a
+length and a string, in a handler that drives a modem. Nothing else in the
+vocabulary has that shape, and `0xC6` is receive-only, which is what a command
+from the console has to be.
+
+The other seven are descriptions rather than names: what the handler is *for*
+is clear, which console message it is is not. `0xBA` and `0xEB` being damage is
+worth having on its own - they are the first two opcodes tied to the
+simulation rather than to the plumbing, and `0xBA` is one of the 29 the pod
+both sends and receives, which is how damage has to work when every pod runs
+its own copy of the world.
+
 ### `0xF6`-`0xFF`: a dispatch inside the dispatch
 
 The ten opcodes that share an arm share it because the arm is **another
@@ -1695,6 +1728,93 @@ does need the code — and now it is a narrow question about a handful of
 functions in `Start.c` and `Load.c` rather than an open one about a 260 KB
 application.
 
+
+### The renderer's error block, named by the ROM
+
+`TI ERROR!` is printed with a fixed dump of fifteen longwords, and the ROM
+labels every one of them. The dump is a straight run from `0x3FFFE164` in the
+renderer's window:
+
+```
+3FFFE164  TI_RoutineID          3FFFE184  TI_LastCommand
+3FFFE168  TI_ErrorNumber        3FFFE188  TI_ShapePCOffset
+3FFFE16C  TI_ProfileSP          3FFFE18C  TI_ProcPC
+3FFFE170  TI_FPUStatus          3FFFE190  TI_ScanConv_Flag
+3FFFE174  TI_FPUPC              3FFFE194  TI_PolygonCount
+3FFFE178  TI_VideoIntTimer      3FFFE198  TI_LastObject
+3FFFE17C  TI_LastShape          3FFFE19C  TI_ProcSP
+3FFFE180  TI_LastZone
+```
+
+followed by `Processor Stack Dump from 0x%x` and `Profile Stack Dump`, eight
+longwords each.
+
+**This settles two addresses that were measured and unexplained.**
+`0x3FFFE168` and `0x3FFFE174` are read by the main game loop and pushed onto
+Remote I/O displays `0x80` and `0x86` as raw `%08x`; what they counted was
+listed as unknown. They are **`TI_ErrorNumber`** and **`TI_FPUPC`** - so the
+cockpit puts the renderer's error code and the address its floating-point unit
+died at on the panel, where an operator can read them off a cabinet that will
+not start. That is exactly the kind of thing an arcade site needs and exactly
+the kind of thing no manual bothers to write down.
+
+`TI_LastObject` is not a pointer but a **`Number`** - the dump indexes the
+entity table with it:
+
+```
+02138DDA  move.l $3fffe198.l, D0      TI_LastObject
+02138DE0  asl.l  #2, D0
+02138DE2  lea    $2189f10.l, A0       the entity table
+02138DE8  move.l (A0,D0.l), (-$a2,A6)
+02138DF2  move.l ($2,A0), -(A7)       "Last Object Class %d"
+02138E08  move.w (A1)+, (A0)+         "Last Object Owner %d", from +0x00
+```
+
+### The entity header, in the firmware's own words
+
+Three of those labels name fields this project had located but not named. The
+periodic status report prints, from `My_Mech_Ptr`:
+
+```
+02139B4E  move.l ($2,A0), -(A7)
+02139B44  move.l ($6,A0), -(A7)
+02139B3A  move.l ($a,A0), -(A7)
+02139B52  pea    "Class_ID=%d, Number=%d, Thing_Flags=0x%08x"
+```
+
+so:
+
+| | |
+|---|---|
+| `+0x00` word | **Owner** - from the `TI ERROR!` dump's `Last Object Owner` |
+| `+0x02` long | **Class_ID** - the field every handler switches on |
+| `+0x06` long | **Number** - the id that goes on the wire, and the table index |
+| `+0x0A` long | **Thing_Flags** |
+
+`Number` being both the wire id and the subscript is now confirmed from three
+directions: the senders read `+0x06` into the packet, the handlers index the
+table with what the packet carries, and the error dump indexes the table with
+a field it calls `TI_LastObject`.
+
+**`0x0218AEE4` holds `My_Mech_Ptr`** - a pointer to this pod's own entity. An
+earlier note here described it as the source of a message pump, which is what
+the code around it does with it; naming it settles what it points at.
+
+The same report is worth knowing about for its own sake:
+
+```
+----- PERIODIC -----
+Average fps   %f
+Worst case    %d (%f fps)
+Best case     %d (%f fps)
+Currently     %d (%f fps)
+Remaining time = %ld
+My_Mech_Ptr = %p
+Class_ID=%d, Number=%d, Thing_Flags=0x%08x
+```
+
+The pod keeps its own frame-rate statistics and prints them on the console,
+which will be the measurement to beat when any of this runs.
 
 ## Renderer command 6
 

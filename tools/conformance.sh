@@ -140,6 +140,12 @@ a, D0
   0000  44 7A 00 00 47 1C 40 00 45 9C 40 00
 tap 021492D8 hit 1
   0000  55 00 00 01
+'TI ERROR!  Dump of fixed area error variables'
+'TI_ErrorNumber   0x%x'
+'TI_FPUPC         0x%x'
+'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
+02138CE2  move.l
+02139B4E  move.l
 02122184  jsr
 0215BA8A  move.b
 0215B9F8  ori.b
@@ -228,6 +234,21 @@ fi
 # installed.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0215B9E4:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02123336:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# Scenario 4n: the renderer's fixed error area, named by the ROM itself. The
+# TI ERROR! dump is a straight run of fifteen longwords from 0x3FFFE164, each
+# printed with its own label, and two of those addresses were listed as
+# measured and unexplained until this was read.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02138CE2:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# and the entity header, from the periodic report: Class_ID, Number, Thing_Flags
+# at +0x02, +0x06 and +0x0A of My_Mech_Ptr.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02139B34:7 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# The labels themselves never reach the console on a healthy boot - nothing
+# errors and the periodic report is not running - so they are read out of the
+# image instead, by the same tool that names handlers from their strings.
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
+    python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         02138CB8:200 02139B20:60 >> "$OUT" 2>&1 || true
+fi
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

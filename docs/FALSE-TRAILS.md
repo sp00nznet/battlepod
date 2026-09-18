@@ -131,6 +131,17 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**A string extractor that rejected control characters threw away most of the
+firmware's log lines.** `fnstr.py` accepted only printable ASCII between two
+NULs, and the firmware ends nearly every log line with a newline. So it
+reported "no strings" for handler after handler, and those silences were read
+as findings. The damage was retroactive as well as current: the sweep that
+named `0xC5` had already been run with the broken filter. Fixed by allowing
+tab, newline and carriage return; the same sweep then named eight opcodes,
+including `0xBA` as damage and `0xC6` as `ROUTER_MODEM_COMMAND_MSG`. A filter
+that silently produces *fewer* results is the dangerous kind, because nothing
+about the output says it is wrong.
+
 **A header that is not in the Makefile's dependency list will hand you a fixed
 decoder reporting the old numbers.** This happened with `mesh.h`, and then again
 with `scene.h` and `rig.h` after `mesh.h` was fixed but the lesson was not
