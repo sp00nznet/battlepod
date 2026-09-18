@@ -120,7 +120,10 @@ tap 0214604E hit 1
 text 56704, data 4720, bss 692, linked at 0
   absflag 1 (no relocations)
 Starting Secondary
-Secondary Started"
+Secondary Started
+4007e000, 
+674, (-
+clr.b   (A0)"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -133,6 +136,11 @@ Secondary Started"
 # what a configured cockpit looks like, and the network receive gets past its
 # first test instead of returning -1 before touching anything.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --set-at 02122D9C 0218AEB0=01020000 --set-at 02122D9C 0218AEB4=00000102     --tap 0214604E --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4f: the SecCom block's address, read straight out of the code that
+# sets it up - the base written to its pointer, then 0x674 bytes zeroed, then
+# the handshake.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02138B52:11 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 4e: bring the secondary display up through the firmware's own menu.
 # The handshake is a spin on 0x40000100 waiting for the Amiga to say it is

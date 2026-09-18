@@ -58,6 +58,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The SecCom block is at `0x4007E000`.** Its location was never known. The
+  code that sets it up sits immediately before the handshake call: a base
+  written to a pointer at `0x02194452`, then **`0x674` bytes zeroed a byte at a
+  time**, then `jsr $214DA26`. In the Amiga's own address space that is offset
+  `0x7E000` - far above its program, which ends at `0xF6A4`.
+- That also explains why watching `0x40000000`-`0x4000FFFF` turned up only the
+  handshake word: **the block is in a different 64K**. Three new checkpoints
+  read it straight out of the disassembly; the harness is at **80/80**.
+- It is set up on a game start, not by the monitor's `p`, so the pointer is
+  still zero after `Secondary Started` and the block cannot be watched live
+  yet. The 0x674 appearing as both a printf argument and a loop bound is what
+  settles the size beyond doubt.
 - **The secondary display's handshake driven to completion.** The handshake
   itself was already recorded here from an earlier session; what is new is that
   the firmware's own `p - Start Secondary` now gets past it and says

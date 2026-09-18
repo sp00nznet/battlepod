@@ -1776,6 +1776,31 @@ code at `0x02138BB8` pushes `$674` against a `%x` format, so the shared
 communication block is **0x674 = 1,652 bytes**, not 674. Every prose mention of
 it in this project said 674 until now.
 
+**The block is at `0x4007E000`.** The code that sets it up sits immediately
+before the handshake call, in the game-start path:
+
+```
+02138B52  move.l  #$4007E000, $2194452.l    the block's base, cached here
+02138B5C  clr.l   (-$70,A6)                 a counter
+02138B6E  movea.l (-$a6,A6), A0             loop:
+          addq.l  #1, (-$a6,A6)
+          clr.b   (A0)                      zero a byte
+          addq.l  #1, (-$70,A6)
+          cmpi.l  #$674, (-$70,A6)
+          bcs     $2138B6E                  0x674 bytes of it
+02138B86  jsr     $214DA26                  then the handshake
+```
+
+So the 68020 clears 1,652 bytes at `0x4007E000` and only then asks the Amiga
+whether it is ready. In the Amiga's own address space that is offset
+`0x7E000` - far above the program, which ends at `0xF6A4`.
+
+That is also why watching `0x40000000`-`0x4000FFFF` found nothing but the
+handshake word: **the block is in a different 64K**. It is set up on a game
+start rather than by the monitor's `p`, so the pointer at `0x02194452` is still
+zero after `Secondary Started`, and the block itself cannot be watched until a
+game runs.
+
 **It has now been driven to completion.** The firmware's own diagnostic menu
 has `p - Start Secondary`, and with the ready word supplied it gets past the
 wait and says so:
