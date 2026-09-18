@@ -682,7 +682,7 @@ carries **208 distinct references into `0x40000000`-`0x40010000`**, the Amiga's
 memory window, with `0x40000000` itself referenced **137 times**. The two
 boards share memory, and the display is driven across it rather than booted.
 
-So the next question is that interface - which is also the 674-byte SecCom
+So the next question is that interface - which is also the 1,652-byte SecCom
 protocol the roadmap has been carrying as a to-do since the start. `AMIGA3_0`
 names `MAPDISP!` and `NAVSECT!`, and `btsecond3_0` names `SECTOR`, `TARGET` and
 `DAMAGE`, which are the three modes the cockpit firmware's own status lines
@@ -1771,8 +1771,10 @@ wait until [0x40000100] == 0x01234567     ; Secondary ready
 ```
 
 Board-local offsets 0x100/0x104/0x108. The ROM later reports
-`main game loop (SecCom 674 bytes).` — a 674-byte communication block shared
-with the Amiga.
+`main game loop (SecCom 674 bytes).` — and **that 674 is hexadecimal**. The
+code at `0x02138BB8` pushes `$674` against a `%x` format, so the shared
+communication block is **0x674 = 1,652 bytes**, not 674. Every prose mention of
+it in this project said 674 until now.
 
 **It has now been driven to completion.** The firmware's own diagnostic menu
 has `p - Start Secondary`, and with the ready word supplied it gets past the

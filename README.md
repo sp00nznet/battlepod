@@ -112,7 +112,8 @@ recipe:
    scratch. Commands go through a queue in the renderer's memory; replies come
    back through the same buffer.
 5. Wait for the Amiga 500 to write `0x01234567`, answer with `0x76543210`, and
-   agree on a 674-byte shared communication block.
+   agree on a 1,652-byte shared communication block (the firmware prints its
+   size in hex, which is where the long-standing "674" came from).
 6. Push all 989 KB of `btAudio.dld` through a 32-entry ring FIFO to the audio
    board.
 7. Enter the main game loop, and poll the boot monitor for an incoming packet

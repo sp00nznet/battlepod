@@ -531,7 +531,7 @@ Python renderer's output gets into the same window.
 4. **ARCNET over UDP** and the centre server, at which point two pods on one
    LAN is the same code as two pods across the internet.
 5. **The secondary display**, either by running the 61 KB Aztec C program on a
-   second Musashi context or by reimplementing the 674-byte SecCom protocol.
+   second Musashi context or by reimplementing the 1,652-byte SecCom protocol.
 6. **Audio**, decoding `btAudio.dld`'s record stream.
 7. **Camera ship and Mission Review**, once there is something worth watching.
 

@@ -47,6 +47,15 @@ All notable changes to this project are documented here. The format follows
   mesas and buildings receding into haze rather than scattered plates.
   `--scene-view turn pitch zoom` is new for getting down among them.
 
+### Fixed
+
+- **The SecCom block is 1,652 bytes, not 674.** The firmware prints
+  `main game loop (SecCom 674 bytes).` and every piece of prose in this project
+  took that at face value for months. The code at `0x02138BB8` pushes **`$674`**
+  against a **`%x`** format, so the number is hexadecimal: **0x674 = 1,652**.
+  Corrected in DEVICES.md, ROADMAP.md, ARCHITECTURE.md and README.md; the
+  firmware's own line is left verbatim, because that is what it says.
+
 ### Added
 
 - **The secondary display's handshake driven to completion.** The handshake
