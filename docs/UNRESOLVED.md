@@ -152,12 +152,18 @@ move.*
   is set up during an ordinary boot. But a boot only ever finds it empty, so
   what a message *contains* needs something to send one. The 298 bytes below
   `+0x12A` are also unidentified.
-- **What each entity field *is*.** The dispatch is mapped, the entity arena is
-  built on an ordinary boot - 1000 entities of 0x6B4 bytes - and 46 offsets are
-  recovered from the messages that report them. A packet injected at the wire
-  now moves seven of those fields, so they are reachable rather than
-  theoretical. What each one *means* still needs a game running to watch it
-  change against something visible.
+- **What each entity field *is*.** The arena is built on an ordinary boot -
+  1000 entities of 0x6B4 bytes - and the bytes each message writes are now
+  measured on the running firmware rather than read out of the handlers, for
+  fourteen opcodes. Two fields are named: `+0x02` is the class the handlers
+  switch on, and `+0x9C` is the sequence `0xD2` refuses to go backwards on.
+  The rest are located but not named; that still needs a game running to watch
+  a field change against something visible.
+
+- **Which class numbers are which.** `0xDF` distinguishes class 8 from class
+  10 and drops everything else, so the numbering is real and small. The
+  console's taxonomy has the names - `MECH_CLASS`, `VTV_CLASS`, `HOVER_CLASS`
+  and the rest - and nothing measured yet joins a name to a number.
 - **The input report format.** The receive interrupt hands each byte to a state
   machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
   past the firmware's decoder produced nothing.

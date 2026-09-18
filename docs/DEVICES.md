@@ -1122,6 +1122,87 @@ table and the handler. It is the first time anything in this project has made
 the game's own state move, and it is a scenario in the harness so it stays
 true.
 
+### Asking the firmware which bytes a message writes
+
+Reading the handlers statically covers the ones that unpack with the
+compiler's plain copy idiom and misses the ones that do arithmetic on the way
+in. `tools/entityfields.py` asks the firmware instead, by difference:
+
+- boot the cockpit and dump entity 1;
+- boot it again with one packet injected at the wire, dump entity 1 again;
+- whatever differs is what that message wrote.
+
+Both runs are deterministic, so the difference is the message and nothing else.
+The packet's body is a **ramp** - byte `n` holds the value `n` - so a longword
+that lands in the entity carries its own packet offset with it and the map
+falls out of the dump rather than out of a reading.
+
+Two things had to be got right before it worked, and both are findings.
+
+**The entity id has to be real.** A ramp body would put `0x08090A0B` where the
+id goes, and the handler would index a 1000-entry table with it. `+0x08` is
+forced to 1 in one variant and `+0x0C` in the other, because those are the only
+two places a message puts the id.
+
+**`entity+0x02` is the class, and handlers switch on it.** `0xDF` writes only
+the three position fields and stops:
+
+```
+0213C2A4  movea.l (-$68,A6), A0
+0213C2A8  move.l  ($2,A0), D0        the class
+0213C2AC  bra     $213c374
+...
+0213C374  subq.l #8, D0   beq ...    class 8:  nothing more
+0213C37A  subq.l #2, D0   beq ...    class 10: three more fields
+0213C380  bra    $213cf44            anything else: drop
+```
+
+and the arena loop clears `+0x02` on every entity at boot, so an entity nobody
+has configured takes the do-nothing arm. Writing a class in first - at
+`Get_Event`, which both runs reach, not at the dispatch, which only the
+injected run reaches - makes the rest of each handler visible.
+
+### What the sweep says
+
+With entity 1 given class 10, **14 of the opcodes write the entity they name**,
+between 1 and 90 bytes each:
+
+```
+B9  +0AC   2 from packet+0E   +67C  24 from packet+10
+CC  +026  12 from packet+0C   +072  16 computed      +086   8 from packet+28
+CD  +026  12 from packet+0C   +06A   4 from packet+32  +076  12 from packet+18
+    +08A   4 from packet+2C   +0A6   1 from packet+31
+D2  +026  12   +09E   2   +0B4   4   +0C4  24   +0E8  12   +100   8   +120   4
+DD  +026  12   +0AA   2   +0D8   4   +2A4  48, then packet+40 into six
+                                     records 0x18 apart
+DE  +026  12 from packet+10   +056   4 from packet+0C   +07E  24 from packet+1C
+E1  +026  12 from packet+0C   +0AA  16
+```
+
+with `CA`, `D7`, `D9`, `DC`, `DF` and `E0` writing between one and sixteen
+bytes each. Every field the static reading found is here, in the same place -
+and the messages the static reading could not follow, `B9` `CA` `CC` `CD` `D7`
+`D9` `DC` `DE` `E0` `E8`, are now mapped as well.
+
+The broadcast in `0xDD` shows up exactly as the code said: packet `+0x40` into
+`+0x2E0`, `+0x2F8`, `+0x310`, `+0x340`, `+0x358`, `+0x370`.
+
+### An ordering guard
+
+`0xD2` opens with one before it does anything:
+
+```
+0213BFEC  movea.l ($8,A6), A0
+0213BFF0  movea.l (-$28,A6), A1
+0213BFF4  movea.l ($4,A0), A0       something off the event
+0213BFF8  cmpa.l  ($9c,A1), A0      against the entity's +0x9C
+0213BFFC  ble     $213c1d4          not newer: drop the whole message
+```
+
+so `+0x9C` is a sequence or timestamp and a late update is discarded rather
+than applied - which is what a state-replication protocol over an unreliable
+LAN has to do, and the first evidence here that this one does it.
+
 ### `0xF6`-`0xFF`: a dispatch inside the dispatch
 
 The ten opcodes that share an arm share it because the arm is **another

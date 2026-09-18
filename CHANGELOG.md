@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/entityfields.py` - ask the firmware which bytes a message writes.**
+  Boot and dump entity 1; boot again with one packet injected and dump it
+  again; the difference is the message. The packet body is a ramp, byte `n`
+  holding the value `n`, so a longword that lands in the entity carries its own
+  packet offset with it. Both runs are deterministic, so nothing else moves.
+- **`entity+0x02` is the class, and handlers switch on it.** `0xDF` copies the
+  three position fields, reads `+0x02`, and takes one arm for class 8, another
+  for class 10, and drops everything else. The arena loop clears `+0x02` at
+  boot, so an unconfigured entity takes a do-nothing arm - which is why the
+  first sweep saw less than the static reading, and the first thing the tool
+  had to learn to do was write a class in first.
+- **Fourteen opcodes write the entity they name**, 1 to 90 bytes each, now
+  mapped byte for byte. Every field the static reading found is confirmed in
+  place, and ten messages it could not follow - `B9 CA CC CD D7 D9 DC DE E0
+  E8` - are mapped for the first time. `0xDD`'s broadcast of packet `+0x40`
+  into six records `0x18` apart comes out of the dump exactly as the code said.
+- **`entity+0x9C` is a sequence, and `0xD2` refuses to go backwards on it**:
+  it compares a longword off the event against `+0x9C` and drops the whole
+  message if it is not newer. First evidence that this is a state-replication
+  protocol with an out-of-order guard, which is what a LAN simulation needs.
+
 - **The published Mech Damage Heat Chart checked against the ROM.** All **33
   configurations and all 20 weapons** on it are in the vehicle table, and the
   five the ROM has that the chart does not are exactly the ones whose names say
