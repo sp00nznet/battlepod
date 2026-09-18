@@ -136,6 +136,15 @@ decoder reporting the old numbers.** This happened with `mesh.h`, and then again
 with `scene.h` and `rig.h` after `mesh.h` was fixed but the lesson was not
 generalised. Every header is now one `HDRS` variable.
 
+**A cleared byte looks exactly like a byte copied from packet offset zero.**
+The difference tool attributed each changed run to the packet offset whose
+value it matched, which is sound for every value but one. `0xE8`, whose entire
+effect is to zero an entity's class and return the slot to the pool, was
+reported as copying packet `+0x00` into the entity - a reading that would have
+made the one message that *destroys* a thing look like one that configures it.
+An inference that is right for 255 values out of 256 still needs the 256th
+handled explicitly.
+
 **Bash heredocs eat backslash escapes in generated source.** `\n` inside a
 heredoc becomes a real newline, which produces unterminated string literals in C
 and Python alike. It cost time on at least five occasions. Use the `Write` tool,

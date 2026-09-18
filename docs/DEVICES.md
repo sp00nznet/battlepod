@@ -1187,6 +1187,43 @@ and the messages the static reading could not follow, `B9` `CA` `CC` `CD` `D7`
 The broadcast in `0xDD` shows up exactly as the code said: packet `+0x40` into
 `+0x2E0`, `+0x2F8`, `+0x310`, `+0x340`, `+0x358`, `+0x370`.
 
+### Class 0 is a free slot, and `0xE8` makes one
+
+Running the sweep twice, once with the class the boot leaves and once with a
+class written in, separates the messages that need a configured entity from the
+ones that do not: **12 opcodes at class 0, 14 at class 10**. Only `0xDF` writes
+more of the entity at the higher class; `0xE0` and `0xE8` do nothing at all at
+class 0.
+
+`0xE8` is worth following, because it is the one message whose effect is to
+*remove* something. It switches seven ways on the class:
+
+```
+0213CA4C  subq.l #1, D0  beq ...     class 1
+0213CA52  subq.l #8, D0  beq ...     class 9
+0213CA58  subq.l #1, D0  beq ...     class 10
+0213CA5E  subq.l #1, D0  beq ...     class 11
+0213CA64  subq.l #1, D0  beq ...     class 12
+0213CA68  subq.l #1, D0  beq ...     class 13
+0213CA6C  subq.l #6, D0  beq ...     class 19
+```
+
+each arm calling a different routine - a teardown per kind of thing - and then
+every class, not only those seven, ends with the entity's class **zeroed**.
+Sweeping the class from 0 to 23 and injecting `0xE8` each time shows exactly
+that: every non-zero class loses its class byte, and class 0 changes nothing.
+
+So **class 0 is a free slot**. That is also what the arena loop leaves behind -
+`clr.l ($2,A3)` on all thousand entities - and it means the boot state is not
+"a thousand blank objects" but "a thousand free slots", with `0xE8` the message
+that returns one to the pool.
+
+The class numbers the firmware distinguishes so far are **1, 8, 9, 10, 11, 12,
+13 and 19**. The console's taxonomy has the names for them - `MECH_CLASS`,
+`VTV_CLASS`, `HOVER_CLASS`, `COPTER_CLASS`, `CAMERAMAN_CLASS`,
+`ANIMATOR_CLASS`, `POD_CLASS`, `EXPLOSION_CLASS` and the map classes - and
+nothing measured yet joins a name to a number.
+
 ### An ordering guard
 
 `0xD2` opens with one before it does anything:

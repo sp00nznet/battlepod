@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Class 0 is a free slot, and `0xE8` makes one.** `0xE8` switches seven ways
+  on the class - 1, 9, 10, 11, 12, 13, 19, each a different teardown - and then
+  every class, not only those seven, ends with the entity's class zeroed.
+  Sweeping the class from 0 to 23 and injecting `0xE8` each time confirms it:
+  every non-zero class loses its class byte and class 0 changes nothing. So the
+  boot state is not a thousand blank objects, it is a thousand **free slots**.
+- The class gate measured rather than assumed: **12 opcodes write the entity at
+  class 0, 14 at class 10**. Only `0xDF` writes more of it at the higher class;
+  `0xE0` and `0xE8` do nothing at all at class 0.
+- The class numbers the firmware distinguishes so far: **1, 8, 9, 10, 11, 12,
+  13, 19**, with 0 free.
+
+### Fixed
+
+- **A cleared byte is not a byte copied from the front of the packet.**
+  `entityfields.py` attributed a changed run to the packet offset whose value
+  it matched, which makes zero ambiguous - and `0xE8`, whose whole effect is to
+  zero the class, came out as "from packet+00". An all-zero run is now reported
+  as cleared and never attributed.
+
 - **`tools/entityfields.py` - ask the firmware which bytes a message writes.**
   Boot and dump entity 1; boot again with one packet injected and dump it
   again; the difference is the message. The packet body is a ramp, byte `n`

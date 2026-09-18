@@ -160,10 +160,12 @@ move.*
   The rest are located but not named; that still needs a game running to watch
   a field change against something visible.
 
-- **Which class numbers are which.** `0xDF` distinguishes class 8 from class
-  10 and drops everything else, so the numbering is real and small. The
-  console's taxonomy has the names - `MECH_CLASS`, `VTV_CLASS`, `HOVER_CLASS`
-  and the rest - and nothing measured yet joins a name to a number.
+- **Which class numbers are which.** The firmware distinguishes **1, 8, 9, 10,
+  11, 12, 13 and 19** across the handlers read so far, and **0 is a free
+  slot** - measured, by sweeping the class and watching `0xE8` return the
+  entity to the pool. The console's taxonomy has the names - `MECH_CLASS`,
+  `VTV_CLASS`, `HOVER_CLASS` and the rest - and nothing measured yet joins a
+  name to a number.
 - **The input report format.** The receive interrupt hands each byte to a state
   machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
   past the firmware's decoder produced nothing.

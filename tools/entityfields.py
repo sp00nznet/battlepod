@@ -87,9 +87,23 @@ def ranges(a, b):
     return out
 
 
+CLEARED = -1
+
+
 def source(b, off, n):
-    """If a changed run is a verbatim copy, the packet offset it came from."""
-    if n < 1 or b[off] >= PKTLEN:
+    """Where a changed run came from: a packet offset, CLEARED, or unknown.
+
+    Zero is ambiguous - a byte the handler cleared and a byte copied from
+    packet offset 0 look identical - so an all-zero run is reported as cleared
+    and never attributed to the packet. `0xE8` is the case that matters: it
+    zeroes the entity's class, which is a message that removes a thing, and
+    reading that as "copied from packet+00" would have been wrong twice over.
+    """
+    if n < 1:
+        return None
+    if all(b[off + k] == 0 for k in range(n)):
+        return CLEARED
+    if b[off] >= PKTLEN:
         return None
     for k in range(1, n):
         if b[off + k] != b[off] + k:
@@ -132,9 +146,9 @@ def sweep(binary, script, ops, klass=None):
         print("%02X  %d runs, %d bytes" % (op, len(best), total))
         for off, n in best:
             src = source(body, off, n)
-            print("      +%03X  %2d  %s" %
-                  (off, n, "from packet+%02X" % src if src is not None
-                   else "computed"))
+            how = ("cleared" if src == CLEARED else
+                   "from packet+%02X" % src if src is not None else "computed")
+            print("      +%03X  %2d  %s" % (off, n, how))
     print("")
     print("opcodes that write the entity they name: %d" % hits)
 
@@ -151,6 +165,9 @@ def selftest():
     # a verbatim longword carries the offset it came from
     assert source([0, 0x0C, 0x0D, 0x0E, 0x0F], 1, 4) == 0x0C
     assert source([0, 0x0C, 0x0D, 0x00, 0x0F], 1, 4) is None
+    # a cleared byte is not a byte copied from the front of the packet
+    assert source([0x11, 0x00], 1, 1) == CLEARED
+    assert source([0x11, 0x00, 0x00, 0x00, 0x00], 1, 4) == CLEARED
     p = packet(0xE1, 8).split()
     assert p[0] == "E1" and p[8:12] == ["00", "00", "00", "01"]
     assert p[0x0C] == "0C" and len(p) == PKTLEN
