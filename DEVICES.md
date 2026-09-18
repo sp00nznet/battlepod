@@ -776,7 +776,7 @@ ERROR: Orig. %d, Pri. %d, Num. %ld, Time %ld, String:
 an origin, a priority, a sequence number and a timestamp.
 
 
-### Nothing dispatches a game message at receive time
+### Two receive paths, and which is which
 
 The question left over from the identity reply was where opcodes `0x01`-`0x07`
 go once a game is running, since the dispatch at `0x02122FBC` throws them away.
@@ -798,10 +798,10 @@ receive paths and they are not the same one.**
   if (pkt) { len = pkt[2]; body = pkt+4; opcode = body[0]; goto 02122FBC }
 ```
 
-So the chain of `subq`/`beq` at `0x02122FBC` serves **the boot monitor's queue**,
-which is why the opcodes it knows are the low-level ones: identify yourself,
-set the timebase, route. A packet that arrives off the network and is addressed
-to this pod goes somewhere else entirely - it is **posted as an event**.
+So the chain of `subq`/`beq` at `0x02122FBC` serves **the boot monitor's queue**
+at service `+0x18`, which is where ARCNET traffic arrives - and that is where a
+game message from the console lands. A packet that comes in off the **site
+link** instead is posted as an event.
 
 That also confirms the header from the receiving side. `buf[6]` and `buf[7]`
 are matched against `0x02179D32`/`33`, which is exactly where the sender at
@@ -832,6 +832,32 @@ it names where to look when a game does start, and it says that writing the
 operator console does not need a second dispatch to be found first.
 
 
+### The site link, and a correction
+
+Two sections below were written on a wrong reading and are corrected here
+rather than quietly edited. **`0x02146004` is not the game's network receive.
+It is the SiteLink modem.** Its own strings settle it:
+
+```
+Modem in command mode
+Answered at 115200...Syncing up.
+Answered at 9600...Syncing up.
+```
+
+and the state it runs on, `0x0239DD9A`, indexes an eight-entry jump table of
+connection states, with state 0 matching an `OK` from a Hayes modem. That is
+the inter-centre link from `Dial_List`, not the ARCNET the console talks over.
+
+So of the two receive paths in the main loop, the one that posts events is the
+**modem**, and the one that reaches the opcode dispatch - boot monitor service
+`+0x18` - is where ARCNET traffic arrives. The question of where game opcodes
+`0x01`-`0x07` are handled is therefore still open: they reach the dispatch at
+`0x02122FBC` and it discards them.
+
+What survives unchanged is the shape of both mechanisms, which is worth keeping
+because both are real: `Post_Event` and its 400-slot queue, and an identity
+that the firmware only ever reads. Only the wire they belong to was wrong.
+
 ### The pod's identity is something it is told, not something it works out
 
 `0x0218AEB0` holds this cockpit's address as a `(net, node)` byte pair, and
@@ -849,8 +875,9 @@ zero until something outside puts an address there. That something is the
 operator console, which is why `Net_Configuration` carries a node number per
 cockpit and why `COCKPIT_CONFIG_MSG` exists.
 
-While they are zero, nothing can happen. The network receive at `0x02146004`
-opens with
+While they are zero the **site link** can do nothing - and the same pair is
+read by the router filter in the main loop, so an unconfigured pod also
+forwards nothing. The modem receive at `0x02146004` opens with
 
 ```
 if (peer == game identity)      return -1      ; both zero: taken
@@ -858,7 +885,7 @@ if (mine != peer)               return -1
 ```
 
 so an unconfigured pod returns "nothing received" before touching a device, a
-buffer or a byte. Every network packet in the game path is behind that gate.
+buffer or a byte.
 
 Supplying an address once the pod is running - which is what a configured
 cockpit looks like - gets past it:

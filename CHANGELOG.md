@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`0x02146004` is the SiteLink modem, not the game's network receive.** Two
+  entries below were written on that wrong reading. Its own strings settle it -
+  `Modem in command mode`, `Answered at 115200...Syncing up.` - and the state
+  at `0x0239DD9A` indexes eight connection states, with state 0 matching an
+  `OK` from a Hayes modem. That is the inter-centre link from `Dial_List`.
+- So of the two receive paths, the one that posts events is the **modem**, and
+  the one reaching the opcode dispatch - boot monitor service `+0x18` - is
+  where ARCNET traffic arrives. **Where game opcodes `0x01`-`0x07` are handled
+  is open again**: they reach `0x02122FBC` and it discards them.
+- Both mechanisms are real and stand as described - `Post_Event` with its
+  400-slot queue, and an identity the firmware only ever reads. Only the wire
+  they belong to was wrong, and the identity gate turns out to gate the site
+  link and the router filter rather than the game path.
+- Nearly claimed a third thing and checked first: `pea $10012.l` in that code
+  is a **lookup token** passed to a table search at `0x02122550`, not the
+  unidentified device at `0x00010007`-`0x00010015`. That address range stays
+  unidentified.
+
 ### Added
 
 - **The pod's identity is something it is told, not something it works out.**
