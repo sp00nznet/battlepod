@@ -29,6 +29,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The first opcode with a name: `0xC5` is `ROUTER_STATUS_MSG`.**
+  `0x02145E1C` builds it as an opcode, a `strncpy` of up to **0x50 bytes** of
+  text, and a longword - and its callers are the SiteLink modem's own state
+  arms, the ones printing `Modem in command mode`. The console logs exactly one
+  message of that description: `ROUTER_STATUS_MSG from node %ld, status %s,
+  status code %ld`. Three agreeing facts rather than a decode, and written down
+  as inference - but it is the first named opcode in this protocol and it cost
+  nothing.
+- The console corroborates the shape: `CODE_18` compares a received packet's
+  byte against `#$C5` and against nothing else in that form, which is what one
+  special-cased message type looks like. **First opcode seen in both binaries.**
+- **What the A5 cross-reference will cost, measured rather than guessed.**
+  `DATA` holds no plain-offset pointers to the message strings - all 39,096
+  bytes searched, nothing - so the pointers do not exist until the relocations
+  are applied. `DREL` is two sections: ~2,486 32-bit offsets descending from
+  `0xD4D2`, then ~290 16-bit ascending. Both ranges run past `DATA` at `0x98B8`
+  and past `DATA`+`ZERO` at `0xA8C8`, which is what THINK C's far-data model
+  looks like. Naming the other 30 opcodes goes through that.
 - **The 33 opcodes are the in-game message set, not the setup sequence** - a
   guess checked before it was built on. The nine handlers from `0x64` to `0x70`
   line up in count with the nine `*_CLASS` records the map file carries, which

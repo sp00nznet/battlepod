@@ -1077,6 +1077,65 @@ resources: code and data relocations applied at load time. The operands on disk
 are placeholders. Reading the sender means implementing those relocation tables
 first — a reverse-engineering job in its own right, on an undocumented format.
 
+### The first opcode with a name: `0xC5`
+
+Putting names to the 31 opcodes the pod sends means reading the other end, and
+one of them can be had without any of that work.
+
+`0x02145E1C` builds a message and the shape is distinctive:
+
+```
+02145E1C  link  A6, #-$64
+02145E24  pea   $50.w                 up to 0x50 bytes
+02145E28  move.l ($8,A6), -(A7)       the caller's string
+02145E2C  pea   (-$5c,A6)
+02145E30  jsr   $215D9F4              strncpy
+02145E36  move.b #$C5, (-$64,A6)      the opcode, at the struct's base
+02145E3C  move.l ($c,A6), (-$c,A6)    a longword from the caller
+02145E4E  ... two words from $239DD9E and $239DDA4
+```
+
+So a `0xC5` carries **a text line of up to eighty characters and a number**.
+Its callers are the arms of the SiteLink modem's state machine - the ones that
+print `Modem in command mode` and `Answered at 115200...Syncing up.`
+
+The console logs exactly one message with that shape, and it is the router's:
+
+```
+ROUTER_STATUS_MSG from node %ld, status %s, status code %ld
+```
+
+a status **string** and a status **code**, from the router. Sent by router code,
+carrying a string and a number, and the only console message of that
+description. **`0xC5` is `ROUTER_STATUS_MSG`.** That is inference from three
+agreeing facts rather than a decode, so it is written here as such - but it is
+the first opcode in this protocol with a name, and it was free.
+
+The console's own code corroborates the *shape* if not the name: `CODE_18`
+compares a received packet's byte against `#$C5` and nothing else in that form,
+which is what a special case for one message type looks like.
+
+### What the A5 cross-reference will cost
+
+Naming the rest needs the console's encoders, and that needs its globals
+resolved. Two things were established about what that involves.
+
+`DATA` holds **no plain-offset pointers** to the message strings - searching all
+39,096 bytes for a longword equal to any message string's offset finds nothing -
+so the pointers are not there until the relocations are applied.
+
+`DREL` is 10,524 bytes in **two sections**: about 2,486 32-bit offsets
+descending from `0xD4D2` to `0x80B2`, then about 290 16-bit offsets ascending.
+Both ranges run past the end of `DATA` at `0x98B8`, and past `DATA` plus `ZERO`
+at `0xA8C8`, which is what THINK C's far-data model looks like and is why the
+resource exists at all.
+
+So the route is: work out the base those offsets are measured from, apply the
+fixups, then trace `A5`-relative displacements from the code to the fixed-up
+slots. That is a real piece of work rather than a probe, and it is the job
+`macrecomp`'s front end was picked for.
+
+
 ### The console as its own specification
 
 The plan was to lift the operator console's code to read what it puts on the
