@@ -12,7 +12,8 @@ All notable changes to this project are documented here. The format follows
   entries below were written on that wrong reading. Its own strings settle it -
   `Modem in command mode`, `Answered at 115200...Syncing up.` - and the state
   at `0x0239DD9A` indexes eight connection states, with state 0 matching an
-  `OK` from a Hayes modem. That is the inter-centre link from `Dial_List`.
+  `OK
+` from a Hayes modem. That is the inter-centre link from `Dial_List`.
 - So of the two receive paths, the one that posts events is the **modem**, and
   the one reaching the opcode dispatch - boot monitor service `+0x18` - is
   where ARCNET traffic arrives. **Where game opcodes `0x01`-`0x07` are handled
@@ -28,6 +29,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The game's own message dispatch, found from the sending side.** The packet
+  sender at `0x021468A4` has **43 call sites**, 28 in one module, and each
+  writes its own opcode first: **31 distinct opcodes from `0xBA` to `0xED`**.
+  That said the game protocol lives nowhere near `0x01`-`0x07`, and the
+  receiving half turned up in the same neighbourhood.
+- **The opcode is at packet byte `0x13`, not byte 0.** `0x02139E64` reads
+  `($13,A0)` and branches into a **33-arm dispatch** at `0x0213A332` covering
+  `0x21` to `0x7A`. That one fact is what made the earlier reading wrong: byte
+  0 is the low-level type the boot monitor switches on, and the game's type
+  sits nineteen bytes in.
+- Most arms translate the wire message into **`Post_Event(kind 0xB1, param N)`**
+  and queue it, so a game message is not acted on where it arrives - the same
+  shape the modem path has. The dispatch is reached from a message pump at
+  `0x0213909E` fed from `0x0218AEE4`, with the firmware's own
+  `Test Event, message# %d` sitting beside it.
+- **This supersedes "there is no second dispatch"** from two commits ago. There
+  is one; it was being looked for on the wrong byte and in the wrong opcode
+  range.
 - **The pod's identity is something it is told, not something it works out.**
   `0x0218AEB0` is this cockpit's `(net, node)` and `0x02179D32` the game's, and
   across a whole boot they are read **273,621 times and written zero times**.

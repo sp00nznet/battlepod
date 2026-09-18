@@ -776,6 +776,61 @@ ERROR: Orig. %d, Pri. %d, Num. %ld, Time %ld, String:
 an origin, a priority, a sequence number and a timestamp.
 
 
+### The game's own message dispatch
+
+There *is* a second dispatch. An earlier section here said there was not, and
+that was wrong twice over: it exists, and the messages it handles are not the
+opcodes `0x01`-`0x07` that were being looked for at all.
+
+It was found from the sending side. The packet sender at `0x021468A4` has **43
+call sites**, 28 of them in one module between `0x0213E332` and `0x0213EE92`,
+and each writes its own opcode into `buf[0]` first. Pulling those out gives
+**31 distinct opcodes the pod can send, from `0xBA` to `0xED`** - a range that
+has nothing to do with `0x01`-`0x07`. That said the game protocol lives
+somewhere else, and made it worth looking for the receiving half in the same
+neighbourhood.
+
+```
+02139E64  link    A6, #-4
+02139E6C  movea.l ($8,A6), A0     the packet
+02139E70  moveq   #0, D0
+02139E72  move.b  ($13,A0), D0    the opcode
+02139E76  bra     $213A332        33 arms
+```
+
+**The opcode is at byte `0x13` of the packet, not byte 0.** That is the single
+fact that made the earlier reading wrong: byte 0 carries the low-level type the
+boot monitor's dispatch switches on, and the game's own type sits nineteen
+bytes in, past the header the sender writes and past whatever follows it.
+
+The dispatch is 33 arms wide and covers `0x21` to `0x7A`:
+
+```
+  21  Post_Event(kind B1, param 33)     37  Post_Event(kind B1, param 41)
+  2A  Post_Event(kind B1, param 3C)     38  Post_Event(kind B1, param 42)
+  2B  Post_Event(kind B1, param 3D)     39  Post_Event(kind B1, param 40)
+  2C  Post_Event(kind B1, param A8)     3B  3D  4A  51  64  66  68  69
+  2D  Post_Event(kind B1, param 43)     6A  6B  6C  6F  70  71  73  75
+  32..36  Post_Event(kind B1, 04 08 0C 10 14)   78  79  7A
+```
+
+Most arms do one thing: turn the wire message into an **event of kind `0xB1`**
+with a parameter, and hand it to `Post_Event` - which is the queue measured
+two sections above. So a game message is not acted on where it arrives; it is
+translated into an event and queued, exactly as the modem path does with its
+own traffic.
+
+The dispatch is reached from a message pump at `0x0213909E`, which takes a
+message from `0x0218AEE4`, reads a type at its `+2`, sends type `0x0C`
+somewhere of its own and everything else here. Near it sits the string
+`Test Event, message# %d`, which is the firmware naming what it is doing.
+
+So the picture is: **byte 0 for the monitor, byte `0x13` for the game, and
+`Post_Event` underneath both.** What is still not known is what any individual
+opcode means - the console's own log gives names and fields for the messages it
+sends, and those names now have a numbering to be matched against.
+
+
 ### Two receive paths, and which is which
 
 The question left over from the identity reply was where opcodes `0x01`-`0x07`
@@ -845,14 +900,15 @@ Answered at 9600...Syncing up.
 ```
 
 and the state it runs on, `0x0239DD9A`, indexes an eight-entry jump table of
-connection states, with state 0 matching an `OK` from a Hayes modem. That is
+connection states, with state 0 matching an `OK
+` from a Hayes modem. That is
 the inter-centre link from `Dial_List`, not the ARCNET the console talks over.
 
 So of the two receive paths in the main loop, the one that posts events is the
 **modem**, and the one that reaches the opcode dispatch - boot monitor service
-`+0x18` - is where ARCNET traffic arrives. The question of where game opcodes
-`0x01`-`0x07` are handled is therefore still open: they reach the dispatch at
-`0x02122FBC` and it discards them.
+`+0x18` - is where ARCNET traffic arrives. And the question of where game opcodes `0x01`-`0x07` are handled dissolved
+once the game's own dispatch turned up: it reads its opcode from byte `0x13`,
+not byte 0, and its messages run `0x21` to `0x7A`. See the section above.
 
 What survives unchanged is the shape of both mechanisms, which is worth keeping
 because both are real: `Post_Event` and its 400-slot queue, and an identity
