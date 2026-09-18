@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod has a watchdog, and `Get_Event` kicks it.** `0x00010000` gets a
+  `0x80`/`0x00` pulse from a three-instruction routine called from exactly one
+  place: the top of the event pump, on a deadline 100 ticks of the free-running
+  timebase apart. A pulse from the one function that cannot stop running while
+  the pod is alive. It fires 453 times in a boot.
+- **`0x00010007`-`0x00010015` is characterised**, if not named. Two
+  four-register control ports at a stride of 4, touched by **eight instructions
+  in 534 KB of ROM and nothing else**, each run doing set/clear/clear/set of
+  one mask - immediately after installing the interrupt vectors it goes with.
+  It was listed as "two interleaved 8-bit parts, probed once at init"; it is
+  interrupt routing.
+- **The catch-all exception handler**: 56 vectors point at `0x02123358`, which
+  prints the vector offset and the faulting PC straight out of the console port
+  and then loops forever re-printing - except vector offset `0x138`, which it
+  returns from. One interrupt is expected and ignored; everything else
+  announces itself and hangs.
+- Four more checkpoints. **111/111.**
+
 - **`--astub`, an audio board instead of a poke.** The board is a ring the
   68020 fills and the DSP drains; the stub writes the head index into the tail,
   so it drains as fast as it is filled, and raises the signature's low byte on

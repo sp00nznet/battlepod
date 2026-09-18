@@ -139,7 +139,11 @@ a, D0
   0000  41 20 00 00 42 48 00 00 43 16 00 00
   0000  44 7A 00 00 47 1C 40 00 45 9C 40 00
 tap 021492D8 hit 1
-  0000  55 00 00 01"
+  0000  55 00 00 01
+02122184  jsr
+0215BA8A  move.b
+0215B9F8  ori.b
+02123336  ori.b"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -210,6 +214,20 @@ fi
 # poke the download shows as 1.2 million open-bus accesses, with the board it
 # shows as none, because the ring is real memory.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567 --tap 021492D8 --peek 50001000:4     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4m: the watchdog. Get_Event, the top of the game's event pump, holds
+# a deadline against the free-running timebase and calls a three-instruction
+# subroutine when it passes - 0x80 then 0x00 into 0x00010000. That is a pulse on
+# a byte register from the one function that runs every frame, which is what a
+# watchdog kick looks like and where one belongs.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02122164:9 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0215BA8A:3 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# and the two control ports beside it, written by eight instructions in the
+# whole ROM and by nothing else, each time right after interrupt vectors are
+# installed.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0215B9E4:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02123336:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

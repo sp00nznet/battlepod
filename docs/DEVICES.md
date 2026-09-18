@@ -2211,9 +2211,70 @@ not emulated; `btAudio.dld` goes through the FIFO and is thrown away. What is
 now true is only that the ROM believes its audio board is there, which is what
 it needs to believe to get on with anything else.
 
+### The device at `0x00010000`: a watchdog and two control ports
+
+With the audio download no longer burying the bus log, what is left of the
+unmapped traffic is small enough to read line by line. It resolves into two
+things.
+
+**`0x00010000` is strobed, and the strobe is a watchdog kick.** The routine is
+three instructions:
+
+```
+0215BA8A  move.b #$80, $10000.l
+0215BA92  move.b #$0,  $10000.l
+0215BA9A  rts
+```
+
+a pulse on bit 7 and nothing else. It is called from **exactly one place**, and
+that place is the top of `Get_Event` - the event pump every frame goes through:
+
+```
+02122164  move.l $21bb13e.l, D0        the deadline
+0212216A  cmp.l  $2000808.l, D0        against the free-running timebase
+02122170  bge    $212218a              not yet
+02122178  addi.l #$64, D0              next one, 100 ticks on
+0212217E  move.l D0, $21bb13e.l
+02122184  jsr    $215ba8a.l            kick
+```
+
+A pulse on a deadline, from the one function that cannot stop running while the
+pod is alive. That is what a watchdog is for and where one belongs. In a boot
+it fires **453 times**.
+
+**`0x00010007`-`0x00010015` are two four-register control ports.** Eight
+instructions in 534 KB of ROM touch them and nothing else does:
+
+```
+02123336  ori.b  #$40, $10007.l        after installing 56 exception vectors
+0212333E  andi.b #$bf, $1000f.l
+02123346  andi.b #$bf, $1000b.l
+0212334E  ori.b  #$40, $10013.l
+
+0215B9F8  ori.b  #$84, $10009.l        after installing autovectors 2 and 3
+0215BA00  andi.b #$7b, $1000d.l
+0215BA08  andi.b #$7b, $10011.l
+0215BA10  ori.b  #$84, $10015.l
+```
+
+Two ports interleaved at a stride of 4, four registers each, and each group
+does **set, clear, clear, set of one mask** - `0x40` for the first, `0x84` for
+the second. Both runs happen immediately after the code installs the interrupt
+vectors they go with, which is what makes this interrupt routing rather than
+anything else. The **part** is still unidentified; what it is *for* is not.
+
+**The catch-all vector handler.** The first of those two sites fills 56
+exception vectors with one routine at `0x02123358`, which reads the vector
+offset from the stack frame at `(0x1A,A7)` and the PC at `(0x16,A7)`, formats
+them as `VVVV PPPPPPPP` and writes them straight out of the console port - then
+loops forever re-printing, **except** for vector offset `0x138`, which it
+returns from. So an unexpected exception in this cockpit announces itself and
+hangs, and exactly one interrupt is expected and ignored.
+
 ## Open questions
 
-- Which parts sit at `0x00010007..0x00010015`?
+- Which *part* sits at `0x00010007..0x00010015`? What the ROM does with
+  it is above; the chip is still unnamed.
 - The UART receive register — needed to drive the ROM's built-in diagnostic
   menu, which can start the renderer, the Secondary and a test game on demand.
 - Resource type semantics (1, 2, 4, 7).

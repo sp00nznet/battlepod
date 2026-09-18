@@ -72,9 +72,12 @@ memory window.
 main game loop and formatted onto Remote I/O displays `0x80` and `0x86` as raw
 `%08x`. What they count is unknown.
 
-**The unidentified device at `0x00010007`-`0x00010015`**: two interleaved 8-bit
-parts, probed once at init. Candidates remain the second serial port, a timer,
-or the ARCNET controller.
+**The part at `0x00010007`-`0x00010015` has no name.** What it does is no
+longer open - two four-register control ports at a stride of 4, touched by
+eight instructions in the whole ROM, each run doing set/clear/clear/set of one
+mask (`0x40`, then `0x84`) immediately after the interrupt vectors it goes with
+are installed. See DEVICES.md. What is missing is only the chip. Settled by: a
+board photograph, or a schematic.
 
 ---
 
