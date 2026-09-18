@@ -58,6 +58,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The SecCom block is a 32-slot message ring, and the arithmetic closes it.**
+  The enqueue at `0x0212C1EC` gives up the whole layout: a write index at
+  `+0x12A`, a read index at `+0x12E`, `& 0x1F` for 32 slots, and a slot stride
+  that works out to **42 bytes** (`i*5`, `<<2`, `+i`, `<<1`) from a base of
+  `+0x132`. **`0x132 + 32 x 42 = 0x672` against a block of `0x674`** - two bytes
+  of slack and nothing unaccounted for. Third independent confirmation of the
+  size, after the loop bound and the printf.
+- **It is set up during an ordinary boot, not only on a game start** - correcting
+  what was written here last commit. After a normal run the pointer at
+  `0x02194452` holds `0x4007E000` and the firmware reaches `main game loop`. The
+  only traffic a boot generates is three reads of `+0x12A` and one of `+0x12E`:
+  the producer checking whether the ring is full and finding nothing to send.
+- Also tried and worth recording: **the monitor's `y - START TEST GAME` does
+  nothing**, because reaching the monitor at all requires patching an `RTS` over
+  the game init - the same code path the test game would use. Three new
+  checkpoints; the harness is at **83/83**.
 - **A `docs/` folder, and two documents this project should have had from the
   start.** The technical writing moved out of the root -
   `docs/DEVICES.md`, `docs/RENDERING.md`, `docs/ARCHITECTURE.md`,

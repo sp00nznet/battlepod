@@ -111,9 +111,11 @@ thing: the pod has never been made to start a mission.
   terminator. There is nothing to draw.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
-- **The SecCom block's contents.** Its address and size are known; it is zeroed
-  and populated on a game start, so the pointer at `0x02194452` is still zero
-  after `Secondary Started`.
+- **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
+  42-byte messages at `+0x132`, with indices at `+0x12A` and `+0x12E` - and it
+  is set up during an ordinary boot. But a boot only ever finds it empty, so
+  what a message *contains* needs something to send one. The 298 bytes below
+  `+0x12A` are also unidentified.
 - **What the 33 in-game opcodes mean.** The dispatch is mapped and the vehicle
   state structure is beginning to show - a word flag at `+0x92`, floats at
   `+0x2E` and `+0x100`, 24-byte records at `+0x140` - but nothing exercises them.

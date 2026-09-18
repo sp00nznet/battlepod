@@ -1801,6 +1801,44 @@ start rather than by the monitor's `p`, so the pointer at `0x02194452` is still
 zero after `Secondary Started`, and the block itself cannot be watched until a
 game runs.
 
+### What is in the block: a 32-slot message ring
+
+The block is not opaque. `0x0212C1EC` is the enqueue and it gives up the whole
+layout:
+
+```
+0212C1F4  movea.l $2194452.l, A0        the block
+0212C1FA  move.l  ($12A,A0), D0         the write index
+0212C1FE  addq.l  #1, D0
+0212C200  andi.l  #$1F, D0              32 slots
+0212C20C  cmp.l   ($12E,A0), D0         against the read index
+0212C210  beq     $212C252              full: return 0
+          ... i*4 + i = 5i, <<2 = 20i, +i = 21i, <<1 = 42i
+0212C22E  add.l   $2194452.l, D0
+0212C234  addi.l  #$132, D0             the slot array
+0212C242  move.l  ($8,A6), (A0)         the caller's word into the slot
+```
+
+and `0x0212C256` is the commit, which advances the write index by one modulo 32
+once the slot is filled.
+
+```
++0x000 .. +0x129   298 bytes, not yet identified
++0x12A             write index, long
++0x12E             read index, long
++0x132             32 slots of 42 bytes
+```
+
+**The arithmetic closes the block.** `0x132 + 32 x 42 = 0x672`, against a block
+of `0x674` - two bytes of slack and nothing unaccounted for. That is the second
+independent confirmation of the size, after the loop bound and the printf.
+
+It is also **set up during an ordinary boot**, not only on a game start: after a
+normal run the pointer at `0x02194452` holds `0x4007E000`, and the firmware
+reaches `main game loop (SecCom 674 bytes).` The only traffic a boot generates
+is three reads of `+0x12A` and one of `+0x12E` - the producer checking whether
+the ring is full and finding nothing to send.
+
 **It has now been driven to completion.** The firmware's own diagnostic menu
 has `p - Start Secondary`, and with the ready word supplied it gets past the
 wait and says so:

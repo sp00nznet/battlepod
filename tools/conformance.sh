@@ -123,7 +123,10 @@ Starting Secondary
 Secondary Started
 4007e000, 
 674, (-
-clr.b   (A0)"
+clr.b   (A0)
+12a,A0), D0
+12e,A0), D0
+132, D0"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -136,6 +139,10 @@ clr.b   (A0)"
 # what a configured cockpit looks like, and the network receive gets past its
 # first test instead of returning -1 before touching anything.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --set-at 02122D9C 0218AEB0=01020000 --set-at 02122D9C 0218AEB4=00000102     --tap 0214604E --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4g: the SecCom message ring - the indices it keeps and the slot
+# arithmetic, straight out of the enqueue.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0212C1EC:24 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 4f: the SecCom block's address, read straight out of the code that
 # sets it up - the base written to its pointer, then 0x674 bytes zeroed, then
