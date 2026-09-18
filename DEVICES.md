@@ -825,6 +825,38 @@ message from `0x0218AEE4`, reads a type at its `+2`, sends type `0x0C`
 somewhere of its own and everything else here. Near it sits the string
 `Test Event, message# %d`, which is the firmware naming what it is doing.
 
+### What these messages are, and what they are not
+
+The obvious guess was that this table is the console's setup sequence - the
+`COCKPIT_CONFIG_MSG`, `MECH_CLASS` and map-download messages the log names.
+The nine handlers from `0x64` to `0x70` even line up in count with the nine
+`*_CLASS` records the map file carries. **The code says otherwise**, and it is
+worth writing down so the guess is not made twice.
+
+The arms that do more than queue an event operate on the **local vehicle's
+state** through a pointer at `0x0218AEE4`:
+
+```
+0x68   [$218AEE4 + 0x2E]  -= 5.0    then compares it against -2.8
+0x3B   [$218AEE4 + 0x100] -= 2.0
+0x66   [$218AEE4 + 0x92] = 0xFFFF, call $0215A9B4, clear it again
+0x4A   walks 24-byte records from [$218AEE4 + 0x140], reading a float from each
+```
+
+Subtracting five from a float and checking a threshold is damage or heat, not a
+map record. So `0x21`-`0x7A` is the **in-game** message set - what pods say to
+each other and what the console says during a mission - and the setup sequence
+is not obviously in this table at all.
+
+That also gives the first sight of the vehicle state structure: a word flag at
+`+0x92`, floats at `+0x2E` and `+0x100`, and an array of 24-byte records at
+`+0x140`.
+
+Putting names to individual opcodes needs the other end. The console's log
+gives every message a name and a field list; its code writes the opcode that
+goes with each. Reading that means the `DREL` fixups and an A5 cross-reference,
+which is the job `macrecomp`'s front end was picked for.
+
 So the picture is: **byte 0 for the monitor, byte `0x13` for the game, and
 `Post_Event` underneath both.** What is still not known is what any individual
 opcode means - the console's own log gives names and fields for the messages it

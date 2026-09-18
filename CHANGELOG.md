@@ -29,6 +29,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The 33 opcodes are the in-game message set, not the setup sequence** - a
+  guess checked before it was built on. The nine handlers from `0x64` to `0x70`
+  line up in count with the nine `*_CLASS` records the map file carries, which
+  looked convincing; the code refutes it. The arms that do more than queue an
+  event operate on the local vehicle through a pointer at `0x0218AEE4`:
+  `0x68` subtracts **5.0** from a float at `+0x2E` and compares it against
+  -2.8, `0x3B` subtracts 2.0 from `+0x100`, `0x4A` walks 24-byte records from
+  `+0x140`. Subtracting five from a float and checking a threshold is damage or
+  heat, not a map record.
+- First sight of the **vehicle state structure** as a result: a word flag at
+  `+0x92`, floats at `+0x2E` and `+0x100`, an array of 24-byte records at
+  `+0x140`, all off the pointer at `0x0218AEE4`.
+- Naming individual opcodes needs the other end - the console's code writes the
+  opcode that goes with each named message - which means the `DREL` fixups and
+  an A5 cross-reference, the job `macrecomp`'s front end was picked for.
 - **The game's own message dispatch, found from the sending side.** The packet
   sender at `0x021468A4` has **43 call sites**, 28 in one module, and each
   writes its own opcode first: **31 distinct opcodes from `0xBA` to `0xED`**.
