@@ -118,7 +118,9 @@ Hex data from remote I/O is displayed below
 set 0218AEB0 = 01020000 at pc 02122D9C
 tap 0214604E hit 1
 text 56704, data 4720, bss 692, linked at 0
-  absflag 1 (no relocations)"
+  absflag 1 (no relocations)
+Starting Secondary
+Secondary Started"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -131,6 +133,11 @@ text 56704, data 4720, bss 692, linked at 0
 # what a configured cockpit looks like, and the network receive gets past its
 # first test instead of returning -1 before touching anything.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --set-at 02122D9C 0218AEB0=01020000 --set-at 02122D9C 0218AEB4=00000102     --tap 0214604E --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4e: bring the secondary display up through the firmware's own menu.
+# The handshake is a spin on 0x40000100 waiting for the Amiga to say it is
+# ready; supplying that word gets past it and the firmware says so.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --set 2138A64=4E754E75 --set 40000100=1234567     --duart-in 'p' --steps 40000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 4d: load the Amiga secondary display's own program and run it. It is
 # a 601A image linked at zero with no relocations, so it goes where it expects

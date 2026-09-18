@@ -1774,6 +1774,30 @@ Board-local offsets 0x100/0x104/0x108. The ROM later reports
 `main game loop (SecCom 674 bytes).` — a 674-byte communication block shared
 with the Amiga.
 
+**It has now been driven to completion.** The firmware's own diagnostic menu
+has `p - Start Secondary`, and with the ready word supplied it gets past the
+wait and says so:
+
+```
+--duart-in 'p' --set 40000100=1234567
+
+  Starting Secondary
+  Secondary Started
+```
+
+Without it, `0x40000100` is read **12,112 times** in one run while the console
+prints `Waiting for Secondary to become ready 0` — the handshake is a spin, and
+the number it reports is the word it read.
+
+Two things that follow. **The `0x400` is not arbitrary**: the load script puts
+`AMIGA3_0` at `0x400003E4`, its 601A header is 28 bytes, so the Amiga program's
+text begins at `0x40000400` - window offset `0x400`, exactly what the 68020
+hands over. The handshake tells the other board where its code is.
+
+And **nothing touches the Amiga window during an ordinary boot at all** - the
+watch comes back empty over `0x40000000`-`0x4000FFFF` until the secondary is
+started. It is brought up on demand, which is why this never appeared before.
+
 ### Audio board
 
 An Analog Devices DSP board. The System 3.0 manual: "Contained inside the sound

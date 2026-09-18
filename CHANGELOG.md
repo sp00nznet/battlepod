@@ -49,6 +49,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The secondary display's handshake driven to completion.** The handshake
+  itself was already recorded here from an earlier session; what is new is that
+  the firmware's own `p - Start Secondary` now gets past it and says
+  **`Secondary Started`**. Without the ready word, `0x40000100` is read
+  **12,112 times** in one run while the console prints
+  `Waiting for Secondary to become ready 0` - the wait is a spin, and the
+  number it prints is the word it read.
+- **The `0x400` the 68020 hands over is the Amiga program's text base.** The
+  load script puts `AMIGA3_0` at `0x400003E4`, its 601A header is 28 bytes, so
+  its text begins at `0x40000400` - window offset `0x400`, exactly the value
+  written to `0x40000108`. The handshake tells the other board where its code
+  is, which also explains the `--set 40000100=1234567` that has been in the
+  harness since before anyone wrote down why.
+- **Nothing touches the Amiga window during an ordinary boot.** Watching
+  `0x40000000`-`0x4000FFFF` across a full boot comes back empty; the board is
+  brought up on demand. Two new checkpoints; the harness is at **77/77**.
 - **The secondary display's program runs for the first time.** `--amiga` loads
   `AMIGA3_0` - a plain **601A image**, text 56,704, data 4,720, bss 692, with
   `ABSFLAG = 1` meaning no relocation table - at address **0**, where its own
