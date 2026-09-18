@@ -29,6 +29,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The console's relocations are read, and the model was wrong.** THINK C's
+  far model does not reach globals through A5: this application has **zero
+  `lea (d16,A5),An` sites and eight `pea (d16,A5)` in 260 KB of code**. It puts
+  absolute 32-bit `DATA` offsets inline and ships `CREL` to say where - a flat
+  list of ascending 16-bit offsets per segment, each naming a longword holding
+  one. Confirmed by those longwords landing on real string starts.
+- That work went upstream into **`macrecomp/tools/relocs.py`**, since it is
+  general THINK C support rather than anything to do with this cabinet.
+- **It has not yielded the message opcodes.** The console's message strings sit
+  high in `DATA`, above `0x67C3`, and no fixup site in any segment points at
+  them. Five of the twenty segments carry no `CREL` at all, which is where to
+  look next. Recorded as an unfinished thread rather than a solved one.
 - **The first opcode with a name: `0xC5` is `ROUTER_STATUS_MSG`.**
   `0x02145E1C` builds it as an opcode, a `strncpy` of up to **0x50 bytes** of
   text, and a longword - and its callers are the SiteLink modem's own state

@@ -353,10 +353,20 @@ release and already parsed — `Vehicle_List`, `Team_List`, `Scenario_List`,
 the node types — and drive a UI we would rather design than reproduce.
 
 Full recompilation stays available if the encodings turn out to be tangled
-enough that running the original is cheaper than reimplementing it. The
-`DREL`/`CREL` relocation resources are the first thing to work out either way:
-10,524 bytes of data fixups, needed before a string pointer in `DATA` resolves
-to the string it names.
+enough that running the original is cheaper than reimplementing it.
+
+**The relocations are now read**, and the answer was not the one assumed here.
+THINK C's far model does not reach globals through A5 at all - this application
+has **zero `lea (d16,A5),An` sites and eight `pea (d16,A5)` in 260 KB of code**.
+It puts absolute 32-bit `DATA` offsets inline in the code instead, and `CREL`
+says where they are: a flat list of ascending 16-bit offsets per segment, each
+naming a longword that holds one. That is confirmed - the longwords land on
+real string starts - and it now lives in `macrecomp` as `tools/relocs.py`.
+
+What it has not yet yielded is the message opcodes. The console's own message
+strings sit high in `DATA`, above `0x67C3`, and **no fixup site in any segment
+points at them**; five of the twenty segments carry no `CREL` at all, which is
+the obvious place to look next.
 
 ## Step 1, done: the panel in windows
 
