@@ -1609,6 +1609,52 @@ static uint32_t rd32(const uint8_t *p) {
 	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
 }
 
+/* ------------------------------------------------- the secondary display */
+
+/* The pod's second screen is an Amiga board, and its program is a plain 601A
+ * image: text 56,704, data 4,720, bss 692. Its header says `ABSFLAG = 1` -
+ * **no relocations** - and its first instruction is `jmp $0000E112`, an
+ * absolute address inside its own data. So it is linked to run at zero, which
+ * is what a bare-metal display board with no operating system looks like.
+ *
+ * The load script puts it at 0x400003E4 for the 68020 to copy across. To run
+ * it we put it where it expects to be instead: text and data at 0, bss zeroed
+ * behind them, and start at 0. */
+static const char *g_amiga;
+
+static int amiga_load(const char *path)
+{
+	uint8_t hdr[28];
+	uint32_t text, data, bss, a;
+	long n;
+	FILE *f = fopen(path, "rb");
+
+	if (!f) { fprintf(stderr, "cannot open %s\n", path); return 0; }
+	if (fread(hdr, 1, 28, f) != 28 || hdr[0] != 0x60 || hdr[1] != 0x1A) {
+		fprintf(stderr, "%s is not a 601A image\n", path);
+		fclose(f);
+		return 0;
+	}
+	text = rd32(hdr + 2);
+	data = rd32(hdr + 6);
+	bss  = rd32(hdr + 10);
+	n = (long)text + data;
+
+	ram_add(0, (uint32_t)n + bss + 0x100);
+	for (a = 0; a < (uint32_t)n; a++) {
+		int c = fgetc(f);
+		if (c == EOF) break;
+		g_page[a >> PAGE_BITS][a & (PAGE_SIZE - 1)] = (uint8_t)c;
+	}
+	fclose(f);
+
+	printf("secondary display %s: text %u, data %u, bss %u, linked at 0\n",
+	       path, text, data, bss);
+	printf("  absflag %u (%s)\n", (unsigned)((hdr[26] << 8) | hdr[27]),
+	       ((hdr[26] << 8) | hdr[27]) ? "no relocations" : "relocatable");
+	return 1;
+}
+
 static int load_script(const char *script)
 {
 	char dir[1024], *buf, *p;
@@ -2084,6 +2130,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
 		else if (!strcmp(a, "--scene-drop") && i + 1 < argc) g_scenedrop = atoi(argv[++i]);
+		else if (!strcmp(a, "--amiga") && i + 1 < argc) g_amiga = argv[++i];
 		else if (!strcmp(a, "--scene-view") && i + 3 < argc) {
 			g_sceneturn = (float)atof(argv[++i]);
 			g_scenepitch = (float)atof(argv[++i]);
@@ -2187,6 +2234,15 @@ int main(int argc, char **argv)
 		ram_add(set_addr[i], 4);
 		m68k_write_memory_32(set_addr[i], set_val[i]);
 		printf("  set %08X = %08X\n", set_addr[i], set_val[i]);
+	}
+
+	/* The secondary display runs instead of the cockpit firmware, not beside
+	 * it: a different program for a different board, and the first time
+	 * anything here has run one. */
+	if (g_amiga) {
+		if (!amiga_load(g_amiga)) return 1;
+		g_entry = 0;
+		g_have_entry = 1;
 	}
 
 	if (!g_have_entry) { fprintf(stderr, "no Go_Address in script and no --entry\n"); return 1; }

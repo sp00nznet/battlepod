@@ -653,6 +653,41 @@ solids to collide with.
 That also explains the primitive vocabulary. Solids, cylinders and ARES are not
 how the pod draws; they are how it *reasons* about shape.
 
+## The secondary display, and why it will not start on its own
+
+The pod's second screen is an Amiga board. Its program, `AMIGA3_0`, had never
+been looked at; `battlepod --amiga` now loads and runs it.
+
+It is a plain **601A image**: text 56,704, data 4,720, bss 692. Its header says
+`ABSFLAG = 1` - **no relocation table** - and its first instruction is
+`jmp $0000E112`, an absolute address inside its own data. So it is linked to
+run at **zero**, which is what a bare-metal display board with no operating
+system looks like, and it is loaded where it expects to be rather than at the
+`0x400003E4` the cockpit's load script stages it at.
+
+**It does not start.** The word at `0xE112` is zero in the file, under either
+mapping of the header, and the trace shows it plainly:
+
+```
+   0  00000000  jmp     $e112.l
+   1  0000E112  ori.b   #$0, D0        ... and on through zeros
+```
+
+There is a hole of zeros around `0xE000`-`0xE400` inside the data section, and
+the entry points into it. Something fills that word before the program runs,
+and it is not the image.
+
+The other board is the obvious candidate and the evidence agrees: `ROM3_0`
+carries **208 distinct references into `0x40000000`-`0x40010000`**, the Amiga's
+memory window, with `0x40000000` itself referenced **137 times**. The two
+boards share memory, and the display is driven across it rather than booted.
+
+So the next question is that interface - which is also the 674-byte SecCom
+protocol the roadmap has been carrying as a to-do since the start. `AMIGA3_0`
+names `MAPDISP!` and `NAVSECT!`, and `btsecond3_0` names `SECTOR`, `TARGET` and
+`DAMAGE`, which are the three modes the cockpit firmware's own status lines
+select between.
+
 ## The network packet interface
 
 The firmware's main loop polls monitor slot `+0x18` and, when it gets a pointer,

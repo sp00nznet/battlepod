@@ -49,6 +49,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The secondary display's program runs for the first time.** `--amiga` loads
+  `AMIGA3_0` - a plain **601A image**, text 56,704, data 4,720, bss 692, with
+  `ABSFLAG = 1` meaning no relocation table - at address **0**, where its own
+  `jmp $0000E112` says it expects to be. A bare-metal display board with no
+  operating system.
+- **It does not start, and the reason is now known.** The word at `0xE112` is
+  zero in the file under either mapping, inside a hole of zeros at
+  `0xE000`-`0xE400`; the trace runs `jmp $e112` straight into them. Something
+  fills that word before the program runs, and it is not the image.
+- The other board is the candidate and the evidence agrees: `ROM3_0` carries
+  **208 distinct references into `0x40000000`-`0x40010000`**, the Amiga's memory
+  window, `0x40000000` itself **137 times**. The boards share memory and the
+  display is driven across it rather than booted - which makes the next
+  question that interface, the 674-byte SecCom protocol the roadmap has carried
+  since the start. Two new checkpoints; the harness is at **75/75**.
 - **Standing where the pilot stood.** Every scenario opens with a block of
   five-column drop points - facing, position, height - which the console reads
   with the `%f %f %f %f %d` grammar. BadLands has **sixteen, one per pod**, and

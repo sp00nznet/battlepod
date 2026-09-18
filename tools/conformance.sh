@@ -116,7 +116,9 @@ Lamp number in hex (00 - 3b, 50 - 53 and 60)
 Hex data from remote I/O is displayed below
 [d3]
 set 0218AEB0 = 01020000 at pc 02122D9C
-tap 0214604E hit 1"
+tap 0214604E hit 1
+text 56704, data 4720, bss 692, linked at 0
+  absflag 1 (no relocations)"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -129,6 +131,13 @@ tap 0214604E hit 1"
 # what a configured cockpit looks like, and the network receive gets past its
 # first test instead of returning -1 before touching anything.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --set-at 02122D9C 0218AEB0=01020000 --set-at 02122D9C 0218AEB4=00000102     --tap 0214604E --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4d: load the Amiga secondary display's own program and run it. It is
+# a 601A image linked at zero with no relocations, so it goes where it expects
+# to be rather than where the cockpit stages it.
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/AMIGA3_0" ]; then
+    "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"         --amiga "${VWE_GAME_FILES}/Cockpit Software/AMIGA3_0"         --steps 200000 --top 0 >> "$OUT" 2>&1 || true
+fi
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
