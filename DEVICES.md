@@ -733,11 +733,10 @@ The dispatch at `0x02122FBC` is a chain of `subq`/`beq` rather than a table:
 | `0xE4` | `0x02122F3C` | reads or sets the timebase at `0x02000808` |
 | anything else | `0x02145E90` | the inter-centre router |
 
-Worth knowing: **the low opcodes are thrown away here.** `0x02122F32` releases
-the packet and returns to the main loop without looking at it. So the messages
-that configure and start a game are handled by something else that is not
-running yet, and finding that is the next question rather than an assumption
-that this dispatch is the whole story.
+Worth knowing: **the low opcodes are thrown away here** - `0x02122F32` releases
+the packet and returns to the main loop without looking at it. That is not the
+whole story, and the next section is why: this dispatch serves the boot
+monitor's queue, and a game message arriving off the network never reaches it.
 
 The identity handler writes its reply as four bytes and a `sprintf`:
 
@@ -775,6 +774,62 @@ ERROR: Orig. %d, Pri. %d, Num. %ld, Time %ld, String:
 ```
 
 an origin, a priority, a sequence number and a timestamp.
+
+
+### Nothing dispatches a game message at receive time
+
+The question left over from the identity reply was where opcodes `0x01`-`0x07`
+go once a game is running, since the dispatch at `0x02122FBC` throws them away.
+The answer is that they never reach that dispatch at all. **There are two
+receive paths and they are not the same one.**
+
+```
+02122D9C   the receive loop
+  D0 = [$21BB0EA] << 8 + $2183716      a 256-byte slot, indexed
+  jsr $2146004                          take a packet from the network
+  if (len > 0) {
+      if (buf[0] == 0xE4) ... adjust the timebase from buf[0x0A]
+      if (buf[6] != [$2179D32] || buf[7] != [$2179D33])
+          forward it: this one is not ours          <- the router
+      else
+          Post_Event(3, 0, 0, buf)                  <- ours: queue it
+  }
+  pkt = monitor_poll()                   +0x18, the boot monitor's own queue
+  if (pkt) { len = pkt[2]; body = pkt+4; opcode = body[0]; goto 02122FBC }
+```
+
+So the chain of `subq`/`beq` at `0x02122FBC` serves **the boot monitor's queue**,
+which is why the opcodes it knows are the low-level ones: identify yourself,
+set the timebase, route. A packet that arrives off the network and is addressed
+to this pod goes somewhere else entirely - it is **posted as an event**.
+
+That also confirms the header from the receiving side. `buf[6]` and `buf[7]`
+are matched against `0x02179D32`/`33`, which is exactly where the sender at
+`0x021468A4` writes the game identity. The two ends agree.
+
+### Post_Event, and a 400-slot queue
+
+`0x021228D6` is not a dispatcher. It takes a kind and three longwords and files
+them, and the firmware names it in its own error string:
+
+```
+In Post_Event, event queue full!
+```
+
+Two kinds have dedicated slots of their own rather than queue entries - kind
+`0x0C` at `0x021BB0F2` and kind `2` at `0x021BB118`, each stamped with the
+timebase from `0x02000808` as it goes in. Everything else, network packets
+included, goes into a table at `0x021B7566` in records of **0x26 bytes** up to
+`0x021BB0C6`, which is **exactly 400 slots**.
+
+So a game message is not handled when it arrives. It is timestamped, queued,
+and picked up by the game loop - which is not running, because no game has
+started. The low opcodes were never being discarded by the wrong handler; they
+were going to the right one, into a queue nobody is draining yet.
+
+This is the same wall in a new place, but it is a more useful shape of wall:
+it names where to look when a game does start, and it says that writing the
+operator console does not need a second dispatch to be found first.
 
 
 ### The protocol, from the operator console's own log

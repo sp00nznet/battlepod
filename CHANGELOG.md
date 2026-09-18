@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Nothing dispatches a game message at receive time, and that was the wrong
+  question.** The dispatch at `0x02122FBC` discards opcodes `0x01`-`0x07`, so
+  the plan was to find the other dispatch that handles them. There is no other
+  dispatch: **there are two receive paths.** That chain serves the *boot
+  monitor's* queue, which is why the opcodes it knows are identify, timebase
+  and route. A packet that arrives off the network and matches this pod's game
+  identity goes somewhere else entirely - it is **posted as an event**.
+- **`Post_Event` and a 400-slot queue.** `0x021228D6` takes a kind and three
+  longwords and files them, stamped with the timebase. Kinds `0x0C` and `2`
+  have dedicated slots; everything else, network packets included, goes into a
+  table at `0x021B7566` in records of `0x26` bytes up to `0x021BB0C6` -
+  **exactly 400**. The firmware names the routine itself, in
+  `In Post_Event, event queue full!`.
+- So the low opcodes were never going to the wrong handler. They go to the
+  right one, into a queue nobody is draining, because the game loop is not
+  running. The same wall as everywhere else, but a more useful shape: it names
+  where to look when a game does start, and it means writing the operator
+  console does not need a second dispatch found first.
+- It also confirms the packet header from the receiving side: `buf[6]` and
+  `buf[7]` are matched against `0x02179D32`/`33`, which is exactly where the
+  sender at `0x021468A4` writes the game identity. Both ends agree.
 - **The Remote I/O link works in both directions now.** `--rio-in` drives the
   receiver nothing had ever driven, and the firmware confirms it without us
   interpreting anything: feed `01 00 03 03 D3 05 01 D9` and its own "display
