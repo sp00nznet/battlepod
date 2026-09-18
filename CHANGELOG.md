@@ -8,6 +8,28 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The published Mech Damage Heat Chart checked against the ROM.** All **33
+  configurations and all 20 weapons** on it are in the vehicle table, and the
+  five the ROM has that the chart does not are exactly the ones whose names say
+  they would not have been printed: `Explo Vulture`, `Loki Test DNU`,
+  `MadCat V4`, `Madcat V5`, `THOR V7`.
+- **The ROM's `Drone` is the chart's `Loki V7`**, settled by the chart's own
+  arithmetic rather than by reading a cell: 8.0 damage and 3.0 heat at 300 m
+  but 4.0 and 1.0 at 600 m, which is one `SRM 2` plus two `LASER SM` and
+  nothing else - and that is uniquely what `Drone` carries.
+- Three more checkpoints. **114/114.**
+
+### Fixed
+
+- **The chart's weapon numbers are not this build's**, and saying otherwise
+  would have been easy: the loadouts match exactly, so the values look like
+  they should. They are not a scale factor apart - seven of twenty are exactly
+  five times the chart's damage and the rest are not - the missile ranges match
+  while the energy and ballistic ones do not, and `ROM2_0`, `ROM2_5` and
+  `ROM3_0` all carry byte-for-byte the same weapon table, so it is not an older
+  cockpit in this dump either. The chart is evidence about the roster, not
+  about the numbers.
+
 - **`docs/SOURCES.md` - the paper trail, and what is not in it.** There is **no
   board schematic** in any published material. Checked all of it: the System
   3.0 manual is field service, the System 4.0 manual is a different machine

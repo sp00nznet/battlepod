@@ -365,6 +365,12 @@ if [ -f "$ROM" ]; then
     check_at_least "weapons named" 20
     check_at_least "loadouts matching by name" 3
     check_at_least "loadouts matching in full" 2
+    # VWE printed a Mech Damage Heat Chart for players. Every configuration and
+    # every weapon on it has to be in the ROM, and the ones the ROM has that the
+    # chart does not are the five whose names say they are test builds.
+    check_at_least "chart configurations found in the ROM" 33
+    check_at_least "chart weapons found in the ROM" 20
+    check_exactly  "configurations the ROM has and the chart does not" 5
 fi
 
 # The operator console is the sender. It logs every message it puts on the wire

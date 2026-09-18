@@ -67,6 +67,55 @@ firmware, though the one found kicks a register every 100 ticks from
 `Get_Event` and this one is about audio channels. They may or may not be the
 same thing.
 
+## The Mech Damage Heat Chart, and what it settles
+
+`mech-damage-heat-chart` is three pages VWE printed for players: a weapon table
+with damage, heat and a range ladder; one row per configuration with a count
+per weapon; and the totals at 300, 600, 900 and 1200 metres. It is the only
+account of this roster that did not come out of a cockpit, which is exactly
+what makes it worth holding the ROM against.
+
+**Every name on it is in the ROM.** All 33 configurations and all 20 weapons,
+checked by the harness. And the five configurations the ROM has that the chart
+does not are, by their own names, the ones that would not have been printed:
+
+```
+Explo Vulture, Loki Test DNU, MadCat V4, Madcat V5, THOR V7
+```
+
+- `Loki Test DNU` says so outright.
+- `MadCat V4`, `Madcat V5` and `THOR V7` are the three the release's own
+  `New mechs and VTV` spreadsheet writes out in words - that is, additions
+  documented separately from the chart.
+
+**It also names the ROM's `Drone`.** The chart has a `Loki V7` the ROM does
+not, and the ROM has a `Drone` the chart does not. The chart's own arithmetic
+settles it without needing to read a faint cell: `Loki V7` does 8.0 damage and
+3.0 heat at 300 m but 4.0 damage and 1.0 heat at 600 m, and the only weapon in
+the chart that is worth exactly 4.0/1.0 and still reaches 600 m is the `SRM 2`.
+The 300 m difference, 4.0 damage and 2.0 heat, is two `LASER SM`. So `Loki V7`
+carries one SRM 2 and two small lasers - which is precisely and uniquely what
+the ROM's `Drone` carries.
+
+### The numbers, though, are not this build's
+
+The loadouts agree. The weapon values do not, and not by a scale factor:
+
+| | chart damage | ROM | chart heat | ROM | chart range | ROM |
+|---|---|---|---|---|---|---|
+| `LASER MD` | 5.0 | 25 | 3.0 | 2.0 | 600 | 350 |
+| `LASER LG` | 8.0 | 50 | 8.0 | 6.0 | 900 | 600 |
+| `E PPC` | 17.0 | 75 | 15.0 | 16.0 | 1500 | 950 |
+| `AFC 25` | 5.0 | 25 | 7.0 | 0.8 | 1200 | 900 |
+| `LRM 15` | 15.0 | 75 | 5.0 | 6.5 | 6000 | 6000 |
+
+Seven of the twenty are exactly five times the chart's damage and the rest are
+not, so it is not a units difference. The missile ranges match and the energy
+and ballistic ranges do not. **`ROM2_0`, `ROM2_5` and `ROM3_0` carry byte-for-byte
+the same weapon table**, so the chart does not belong to an older cockpit in
+this dump either. It is a different balance pass than any ROM here, and the
+chart is evidence about the roster rather than about the numbers.
+
 ## Other material
 
 - `vwe-release-13.1.8` - the software dump this whole project reads.

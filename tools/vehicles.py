@@ -147,6 +147,54 @@ ORACLE = {
 }
 
 
+# VWE printed a "Mech Damage Heat Chart" for players: one row per configuration,
+# one column per weapon, and the totals at four ranges. It is the only account
+# of this roster that did not come out of the cockpit, which makes it worth
+# holding the ROM against - see docs/SOURCES.md.
+#
+# Its twenty column headings, in its own abbreviations:
+CHART_WEAPONS = ["MG", "GAUSS", "LASER SM", "LASER MD", "LASER LG", "PPC",
+                 "E LAS SM", "E LAS MD", "E LAS LG", "E PPC",
+                 "AFC100", "AFC 50", "AFC 25",
+                 "SRM 2", "SRM 4", "SRM 6",
+                 "LRM 5", "LRM 10", "LRM 15", "LRM 20"]
+
+# and its thirty-three rows.
+CHART_MECHS = [
+    "Madcat Prime", "Madcat V1", "Madcat V2", "Madcat V3",
+    "Loki Prime", "Loki V1", "Loki V2", "Loki V3", "Loki V4", "Loki V5",
+    "Loki V6", "Loki V7",
+    "Thor Prime", "Thor V1", "Thor V2", "Thor V3", "Thor V4", "Thor V5",
+    "Thor V6",
+    "Vulture Prime", "Vulture V1", "Vulture V2", "Vulture V3", "Vulture V4",
+    "Vulture V5",
+    "Avatar Prime", "Avatar V1", "Avatar V2", "Avatar V3",
+    "Sunder Prime", "Sunder V1", "Sunder V2", "Sunder V3",
+]
+
+# The one configuration whose name differs. The chart's Loki V7 carries a
+# single SRM 2 and two small lasers, which is what the ROM's `Drone` carries
+# and what nothing else carries; the ROM kept the working name.
+CHART_RENAME = {"Drone": "Loki V7"}
+
+
+def chart(rs, wt):
+    """How the ROM's roster lines up with the published chart."""
+    have = {CHART_RENAME.get(v.name, v.name).lower(): v for v in rs}
+    listed = [m for m in CHART_MECHS if m.lower() in have]
+    extra = sorted(CHART_RENAME.get(v.name, v.name) for v in rs
+                   if CHART_RENAME.get(v.name, v.name).lower()
+                   not in {m.lower() for m in CHART_MECHS})
+    hud = {w[1].strip() for w in wt if w[1]}
+    named = [c for c in CHART_WEAPONS if c in hud]
+    print("chart configurations found in the ROM: %d of %d"
+          % (len(listed), len(CHART_MECHS)))
+    print("chart weapons found in the ROM: %d of %d" % (len(named), len(CHART_WEAPONS)))
+    print("configurations the ROM has and the chart does not: %d" % len(extra))
+    print("  " + ", ".join(extra))
+    return listed, extra
+
+
 def check(rom):
     wt, rs = weapons(rom), roster(rom)
     ok = sum(v.sane() for v in rs)
@@ -175,6 +223,8 @@ def check(rom):
     print("weapons named               : %d" % sum(1 for w in wt if w[0]))
     print("loadouts matching by name   : %d" % names)
     print("loadouts matching in full   : %d" % full)
+    print("")
+    chart(rs, wt)
     return ok, len(chassis), names, full
 
 
