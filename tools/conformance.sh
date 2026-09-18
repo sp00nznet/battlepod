@@ -216,6 +216,18 @@ if [ -f "$TI_RES" ]; then
     echo
     echo "== model archive =="
     CHECKTEXT=$(python tools/model.py "$TI_RES" --stats 2>/dev/null)
+    check_exactly() {
+        got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
+        total=$((total + 1))
+        if [ "$got" = "$2" ]; then
+            pass=$((pass + 1))
+            printf '  ok    %-32s %s (must be %s)
+' "$1" "$got" "$2"
+        else
+            printf '  FAIL  %-32s %s (must be %s)
+' "$1" "${got:-?}" "$2"
+        fi
+    }
     check_at_least() {
         got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
         total=$((total + 1))
@@ -323,6 +335,11 @@ if [ -f "$OPSCON" ]; then
     check_at_least "file grammars recovered" 27
 fi
 
+# The two halves of the game protocol have to agree, and where a message is both
+# sent and received the same field has to appear on both sides - the sender
+# reading it out of the entity structure and the handler writing it back in.
+# Any disagreement there is a decoding error, so the floor for it is zero.
+#
 # The two halves of the game protocol have to agree. The receiver is a 71-entry
 # jump table over packet byte 0; the senders are 45 call sites that each write
 # their own opcode into the front of the buffer. Every opcode the pod sends must
@@ -333,8 +350,13 @@ if [ -f "$ROM" ]; then
     echo "== the game protocol =="
     CHECKTEXT=$(python tools/netmsg.py "$ROM" --check 2>/dev/null)
     check_at_least "call sites found" 45
+    check_at_least "opcodes the dispatch handles" 46
+    check_at_least "distinct handlers" 37
     check_at_least "opcodes the pod sends" 38
     check_at_least "sent opcodes inside B9..FF" 38
+    check_at_least "field pairs confirmed by both ends" 44
+    check_at_least "distinct structure offsets" 46
+    check_exactly  "field pairs the two ends disagree on" 0
     check_at_least "C5 payload bytes" 100
 fi
 

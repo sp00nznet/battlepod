@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The entity table is at `0x02189F10`**, an array of pointers indexed by the
+  entity id a packet carries, referenced from **231 sites** in the ROM. An id
+  on the wire is a subscript, which is why the protocol names a thing in four
+  bytes.
+- **The receive handlers are the exact inverse of the senders**, field for
+  field, and reading both gives a check nothing else here has. `netmsg.py
+  --fields`: **44 field pairs confirmed by both ends, none disagreeing.** Two
+  readings taken from different code by different methods, consistent to the
+  byte.
+- **46 distinct offsets in the entity structure**, recovered without running
+  the game. Among them `0xDD` broadcasts one packet field across six sibling
+  records **0x18 = 24 bytes apart**, which puts a stride on the record array
+  that was previously only known to exist.
+- Five more conformance checkpoints, one of them an exact-match rather than a
+  floor: the two ends of the protocol must disagree on **zero** fields.
+  **101/101.**
+
 - **Both halves of the game protocol, side by side.** The receiving table gives
   71 opcodes; `tools/netmsg.py` reads the sending side and puts the two
   together. The sender at `0x021468A4` has **45 call sites**, each writing its

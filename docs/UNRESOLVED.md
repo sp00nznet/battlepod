@@ -24,11 +24,12 @@ any table binding a part id to a chassis, which does not exist anywhere in the
 cockpit software.
 
 **The three longwords every entity message carries after the entity id.**
-They come from the entity structure's `+0x26`, `+0x2A` and `+0x2E`, they are
-in every simulation message that names an entity, and `+0x2E` is independently
-known to hold a float. Reading them as x, y, z rests on the console logging
-`x float, y float, z float` in exactly that place. Settled by: a running game,
-where a moving pod would make the numbers say it themselves.
+That they are `+0x26`, `+0x2A` and `+0x2E` of the entity structure is now
+confirmed from both ends - the sender reads them out and the handler writes
+them back to the same offsets. Reading them as **x, y, z** is still inference,
+from the console logging `x float, y float, z float` in exactly that place and
+from `+0x2E` being independently known to hold a float. Settled by: a running
+game, where a moving pod would make the numbers say it themselves.
 
 **Which of `0xF6`-`0xFF` is which console setup message.** The block is
 identified as the pod's mode machine and each handler's effect on the ROM's
@@ -125,9 +126,10 @@ thing: the pod has never been made to start a mission.
   is set up during an ordinary boot. But a boot only ever finds it empty, so
   what a message *contains* needs something to send one. The 298 bytes below
   `+0x12A` are also unidentified.
-- **What the 33 in-game opcodes mean.** The dispatch is mapped and the vehicle
-  state structure is beginning to show - a word flag at `+0x92`, floats at
-  `+0x2E` and `+0x100`, 24-byte records at `+0x140` - but nothing exercises them.
+- **What the 33 in-game opcodes mean.** The dispatch is mapped, and the entity
+  structure now has 46 offsets in it recovered from the network messages that
+  report them - but nothing exercises them. What each field *is* still needs a
+  game running to watch it change.
 - **The input report format.** The receive interrupt hands each byte to a state
   machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
   past the firmware's decoder produced nothing.

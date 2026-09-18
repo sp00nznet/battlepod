@@ -1010,6 +1010,71 @@ an 80-byte string at `+0x08` and a longword at `+0x58`, which is
 `status string, status code long` written out. No other message the pod sends
 has that shape.
 
+### The entity table, and the structure the messages report
+
+A handler does not search for the thing a message names. It indexes:
+
+```
+0213BBE6  movea.l (-$64,A6), A0      the packet
+0213BBEA  move.l  ($8,A0), D0        the entity id
+0213BBEE  asl.l   #2, D0
+0213BBF0  lea     $2189f10.l, A0     the entity table
+0213BBF6  move.l  (A0,D0.l), (-$68,A6)
+```
+
+**`0x02189F10` is an array of entity pointers indexed by the id on the wire**,
+and it is referenced from **231 sites** across the ROM - the game's master
+object table. An id in a packet is a subscript, which is why the protocol can
+name a thing in four bytes.
+
+What follows the lookup is the message's field list, run backwards:
+
+```
+0213BC00  adda.l #$c,   A0           packet+0x0C
+0213BC0A  adda.l #$26,  A1           entity+0x26
+0213BC10  move.l (A0), (A1)
+```
+
+repeated once per field. So a handler is the exact inverse of its sender, and
+that gives a check nothing else here has: for every message the pod both sends
+and receives, the same field must appear on both sides - the sender reading it
+out of the entity, the handler writing it back in. `netmsg.py --fields`:
+
+```
+D2  +10>26= +14>2A= +18>2E= +1C>D0= +20>D4= +24>D8= +28>F0= +2C>E8= +30>EC=
+    +34>C4= +38>C8= +3C>CC= +44>100= +40>104= +48>120= +08>B4=
+DF  +0C>26= +10>2A= +14>2E= +18>110= +1C>10C= +20>114=
+E1  +0C>26= +10>2A= +14>2E= +18>AA= +1C>B2= +20>B6= +24>AE=
+```
+
+**44 field pairs agree and none disagree**, which is a real result: the two
+readings were taken from different code by different methods, and they are
+consistent to the byte.
+
+Five stores look like disagreements and are not. `0xDD` writes packet `+0x40`
+into **six** places - `+0x2E0`, `+0x2F8`, `+0x310`, `+0x340`, `+0x358`,
+`+0x370` - unrolled, one value broadcast across sibling records **0x18 = 24
+bytes apart**, with one 0x30 gap where a record is skipped. Twenty-four-byte
+records are already known to live in this structure.
+
+The offsets the messages touch, assembled from every message that touches them:
+
+```
+26 2A 2E        every message that names an entity carries these three
+6A 6E           0xDC, on its own
+AA AC AE B2 B4 B6
+C4 C8 CC CE D0 D4 D8 DC
+E8 EC F0
+100 104 10C 110 114 120
+2A4..2D0        fifteen consecutive fields, 0xDD
+2E0 2F8 310 340 358 370   the 24-byte records
+```
+
+**46 distinct offsets in one structure**, recovered without ever running the
+game. It is not the whole entity - `+0x92` and `+0x140` are known from
+elsewhere and no message reports them - but it is the first map of it, and each
+entry is anchored by two independent pieces of code rather than one.
+
 ### `0xF6`-`0xFF`: a dispatch inside the dispatch
 
 The ten opcodes that share an arm share it because the arm is **another

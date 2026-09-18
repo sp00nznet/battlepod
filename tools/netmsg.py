@@ -19,6 +19,7 @@ import sys
 
 SEND = 0x021468A4
 BASE = 0x020FFFE4
+RECV = 0x0213CF2C      # the game's byte-0 dispatch
 
 # move.<sz> <src>, (d16,A6), by the two opcode bytes that precede the
 # displacements. The A6 destination is what makes it a buffer store.
@@ -136,6 +137,80 @@ def report(data, base, send=SEND):
             print("      +%02X  %s  %s" % (off, "bwl"[w >> 1], src))
 
 
+def unpack(data, base, start, end):
+    """Packet-to-structure copies in a receive handler.
+
+    A handler holds the packet in one stack slot and the entity it names in
+    another, and copies fields across with the same five-instruction idiom
+    every time: load a slot into A0, walk it with `adda.l`, load the other slot
+    into A1, walk that, `move` through both. Tracking the two registers turns
+    the idiom back into a pair of offsets.
+
+    Yields (src slot, src offset, dst slot, dst offset, width).
+    """
+    reg = {}                     # 0 -> A0, 1 -> A1, as (slot, offset)
+    out = []
+    i = start - base
+    while i < end - base:
+        w = (data[i] << 8) | data[i + 1]
+        if w in (0x206E, 0x226E):            # movea.l (d16,A6), A0/A1
+            reg[(w >> 9) & 1] = [struct.unpack(">h", data[i + 2:i + 4])[0], 0]
+            i += 4
+            continue
+        if w in (0xD1FC, 0xD3FC):            # adda.l #imm, A0/A1
+            r = 0 if w == 0xD1FC else 1
+            if r in reg:
+                reg[r][1] += struct.unpack(">I", data[i + 2:i + 6])[0]
+            i += 6
+            continue
+        if w in (0x2290, 0x3290, 0x1290):    # move.<sz> (A0), (A1)
+            if 0 in reg and 1 in reg:
+                out.append(tuple(reg[0]) + tuple(reg[1]) +
+                           ({0x2290: 4, 0x3290: 2, 0x1290: 1}[w],))
+            i += 2
+            continue
+        if w in (0x2368, 0x3368, 0x1368):    # move.<sz> (d16,A0), (d16,A1)
+            if 0 in reg and 1 in reg:
+                ds = struct.unpack(">h", data[i + 2:i + 4])[0]
+                dd = struct.unpack(">h", data[i + 4:i + 6])[0]
+                out.append((reg[0][0], reg[0][1] + ds,
+                            reg[1][0], reg[1][1] + dd,
+                            {0x2368: 4, 0x3368: 2, 0x1368: 1}[w]))
+            i += 6
+            continue
+        if w in (0x2088, 0x3089, 0x1089):    # move.<sz> A1/(A1), (A0)
+            i += 2
+            continue
+        if w == 0x4E75:
+            break
+        i += 2
+    return out
+
+
+def packet_slot(data, base, start):
+    """The stack slot a handler keeps the packet in.
+
+    Every handler opens the same way: the event is the argument, and the packet
+    is the longword at its `+0x10`. A handler that copies between two different
+    objects has more than one slot in play, so knowing which one is the packet
+    is what keeps their fields apart.
+    """
+    i = start - base
+    for j in range(i, i + 0x20, 2):
+        if (data[j] << 8 | data[j + 1]) == 0x2D68 and            struct.unpack(">h", data[j + 2:j + 4])[0] == 0x10:
+            return struct.unpack(">h", data[j + 4:j + 6])[0]
+    return None
+
+
+def recv_fields(data, base, start, end):
+    """(packet offset, structure offset, width) for one handler."""
+    slot = packet_slot(data, base, start)
+    if slot is None:
+        return []
+    return [(o0, o1, w) for s0, o0, s1, o1, w in unpack(data, base, start, end)
+            if s0 == slot]
+
+
 def table(data, base, send=SEND):
     """opcode -> [(sender head, payload length)]."""
     out = {}
@@ -148,10 +223,98 @@ def table(data, base, send=SEND):
     return out
 
 
+def receivers(data, base, at=RECV):
+    """opcode -> handler address, read out of the dispatch rather than typed in.
+
+    The dispatch is the compiler's standard dense switch: subtract the first
+    case, reject anything past the count, double, index a table of 16-bit
+    offsets and jump relative to the instruction after the index. Every operand
+    it needs is in those seven instructions.
+    """
+    i = at - base
+    assert data[i] == 0x04 and data[i + 1] == 0x40, "not a subi.w at %08X" % at
+    first = struct.unpack(">H", data[i + 2:i + 4])[0]
+    assert data[i + 4] == 0x0C and data[i + 5] == 0x40, "not a cmpi.w"
+    count = struct.unpack(">H", data[i + 6:i + 8])[0]
+    j = i + 8
+    while not (data[j] == 0x41 and data[j + 1] == 0xFA):   # lea (d16,PC), A0
+        j += 2
+    tbl = base + j + 2 + struct.unpack(">h", data[j + 2:j + 4])[0]
+    while not (data[j] == 0x4E and data[j + 1] == 0xFB):   # jmp (PC,D0.w)
+        j += 2
+    origin = base + j + 2
+    out = {}
+    for k in range(count):
+        v = struct.unpack(">h", data[tbl - base + 2 * k:tbl - base + 2 * k + 2])[0]
+        t = origin + v
+        if t != base + i + 0x18:                   # the shared "drop it" exit
+            out[first + k] = t
+    return out
+
+
+def fields(data, base, send=SEND, recv=RECV, quiet=False):
+    """Every message's fields, from both ends, and the structure behind them."""
+    r = receivers(data, base, recv)
+    heads = sorted(set(r.values()))
+    snd = table(data, base, send)
+    st = sites(data, base, send)
+    agree = disagree = extra = 0
+    ent = {}
+    for op in sorted(r):
+        h = r[op]
+        k = heads.index(h)
+        end = heads[k + 1] if k + 1 < len(heads) else h + 0x300
+        fs = recv_fields(data, base, h, end)
+        if not fs:
+            continue
+        want = {}
+        if op in snd:
+            at, _ = snd[op][0]
+            site = [x for x in st if x > at][0]
+            bd = call_args(data, base, site)[1]
+            for off, _w, src in stores(data, base, at, site, bd):
+                if src.startswith("arg+8+"):
+                    want[off] = int(src.rsplit("+", 1)[1], 16)
+        parts = []
+        seen = set()
+        for o0, o1, w in fs:
+            ent.setdefault(o1, set()).add(op)
+            mark = ""
+            if o0 in want:
+                if want[o0] == o1:
+                    agree += 1
+                    seen.add(o0)
+                    mark = "="
+                elif o0 in seen:
+                    # The same packet field written to a second place. The
+                    # sender only reads one of them, so this is a broadcast
+                    # into sibling records, not a contradiction: `0xDD` puts
+                    # packet+0x40 into six fields 0x18 apart.
+                    extra += 1
+                    mark = "*"
+                else:
+                    disagree += 1
+                    mark = "!"
+            parts.append("+%02X>%X%s" % (o0, o1, mark))
+        if not quiet:
+            print("%02X  %s" % (op, " ".join(parts)))
+    if not quiet:
+        print()
+    print("field pairs confirmed by both ends: %d" % agree)
+    print("packet fields broadcast to sibling records: %d" % extra)
+    print("field pairs the two ends disagree on: %d" % disagree)
+    print("distinct structure offsets: %d" % len(ent))
+    if not quiet:
+        print("  " + " ".join("%X" % o for o in sorted(ent)))
+
+
 def check(data, base, send=SEND):
     """Countable facts, for the conformance harness."""
     t = table(data, base, send)
+    r = receivers(data, base)
     print("call sites found: %d" % len(sites(data, base, send)))
+    print("opcodes the dispatch handles: %d" % len(r))
+    print("distinct handlers: %d" % len(set(r.values())))
     print("opcodes the pod sends: %d" % len(t))
     print("senders with a payload length: %d" %
           sum(1 for v in t.values() for _, ln in v if ln))
@@ -160,6 +323,7 @@ def check(data, base, send=SEND):
           sum(1 for op in t if 0xB9 <= op <= 0xFF))
     # ROUTER_STATUS_MSG: a 100-byte packet whose body is an 80-byte string
     # followed by a longword. No other message the pod sends has that shape.
+    fields(data, base, send, quiet=True)
     c5 = t.get(0xC5, [])
     st = []
     if c5:
@@ -209,6 +373,8 @@ def main(argv):
     data = open(argv[1], "rb").read()
     if "--check" in argv:
         return check(data, base, send)
+    if "--fields" in argv:
+        return fields(data, base, send)
     report(data, base, send)
 
 
