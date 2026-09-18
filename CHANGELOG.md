@@ -29,6 +29,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The console's log strings are not statically referenced, and that is now
+  measured rather than suspected.** Six ways of reaching them were tried and
+  all came back empty: all **4,256** code fixups target `DATA` `0x0072`-
+  `0x31CA` and none above; `DREL` slot contents stop at `0x7468`, just below
+  the messages at `0x7572`; no `DATA` longword equals a message offset; no
+  32-bit or 16-bit constant in any segment does either.
+- The mechanism itself works - the same technique finds `CArray.c`,
+  `CObject.c`, `CWindow.c` and an assertion message through `CREL` sites and
+  `DREL` slots - and the extraction is faithful to the resource fork byte for
+  byte. These particular strings are simply not on the end of it.
+- Two leads written down rather than chased: **five of twenty segments carry no
+  `CREL`** (`CODE_0`, `1`, `11`, `12`, `13`), and **`DATA` opens with a
+  longword `600` then 600 words** while containing exactly 600 printable
+  strings - a coincidence that survives, since read as offsets in three
+  framings only 12 to 16 of the 600 land on a string start where an index would
+  land on all.
 - **The console's relocations are read, and the model was wrong.** THINK C's
   far model does not reach globals through A5: this application has **zero
   `lea (d16,A5),An` sites and eight `pea (d16,A5)` in 260 KB of code**. It puts

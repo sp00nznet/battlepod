@@ -1115,25 +1115,57 @@ The console's own code corroborates the *shape* if not the name: `CODE_18`
 compares a received packet's byte against `#$C5` and nothing else in that form,
 which is what a special case for one message type looks like.
 
-### What the A5 cross-reference will cost
+### What reading the console's globals cost, and what it bought
 
-Naming the rest needs the console's encoders, and that needs its globals
-resolved. Two things were established about what that involves.
+The plan was to resolve the console's globals and trace `A5` displacements to
+the message encoders. **THINK C's far model does not use `A5` that way**: this
+application has **zero `lea (d16,A5),An` sites and eight `pea (d16,A5)` in 260
+KB of code.** It puts absolute 32-bit `DATA` offsets inline in the code
+instead, and `CREL` says where they are - a flat list of ascending 16-bit
+offsets per segment, each naming a longword that holds one. `DREL` does the
+same inside `DATA`, in two encodings, both measured as `DATA_size + (v -
+0x10000)`.
 
-`DATA` holds **no plain-offset pointers** to the message strings - searching all
-39,096 bytes for a longword equal to any message string's offset finds nothing -
-so the pointers are not there until the relocations are applied.
+That is confirmed rather than assumed, and it now lives in `macrecomp` as
+`tools/relocs.py`, which is where general THINK C support belongs.
 
-`DREL` is 10,524 bytes in **two sections**: about 2,486 32-bit offsets
-descending from `0xD4D2` to `0x80B2`, then about 290 16-bit offsets ascending.
-Both ranges run past the end of `DATA` at `0x98B8`, and past `DATA` plus `ZERO`
-at `0xA8C8`, which is what THINK C's far-data model looks like and is why the
-resource exists at all.
+### The console's log strings are not statically referenced
 
-So the route is: work out the base those offsets are measured from, apply the
-fixups, then trace `A5`-relative displacements from the code to the fixed-up
-slots. That is a real piece of work rather than a probe, and it is the job
-`macrecomp`'s front end was picked for.
+The message names and field lists this project relies on - `COCKPIT_CONFIG_MSG
+node %d, forward %d, name %s` and its thirty neighbours - sit in the console's
+`DATA` resource from `0x7572` to `0x93C0`. Finding the code that passes each
+one to its logger would give the opcode that goes with it, which is the last
+thing standing between here and a working operator console.
+
+**Nothing in the application refers to them.** That is measured, not assumed:
+
+| looked for | result |
+|---|---|
+| a `CREL` fixup site holding the string's offset | all **4,256** fixups target `0x0072`-`0x31CA`; none above |
+| a `DREL` slot holding a pointer to it | slot contents that are valid offsets stop at `0x7468` |
+| any `DATA` longword equal to the offset | none, across all 39,096 bytes |
+| the offset as a 32-bit constant in any segment | none |
+| the offset as a 16-bit constant in any segment | none |
+| `pea (d16,A5)` / `lea (d16,A5),An` with a fitting base | 8 sites and **0** sites respectively, no base fits |
+
+The extraction is not the problem: `DATA.bin` matches the resource fork byte
+for byte from file offset `0x156`, and the same technique does find references
+to other strings - `CArray.c`, `CObject.c`, `CWindow.c`, an assertion message -
+through `CREL` sites and `DREL` slots alike. The mechanism works. These
+particular strings are simply not on the end of it.
+
+Two leads remain, both unexplored:
+
+**Five of the twenty code segments carry no `CREL` at all** - `CODE_0`, `1`,
+`11`, `12` and `13`, the last three being 500, 3,714 and 1,274 bytes. Whatever
+reaches its data another way is in there.
+
+**`DATA` opens with a longword `600` and then 600 words**, with strings
+beginning around `0x4B4`. There are also exactly 600 printable strings in the
+resource, which is a striking coincidence - but the table is not an index of
+them: read as offsets in any of three framings, only 12 to 16 of the 600 land
+on a string start, where an index would land on all of them. So the coincidence
+stays a coincidence until something explains it.
 
 
 ### The console as its own specification
