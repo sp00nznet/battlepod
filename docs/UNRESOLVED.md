@@ -38,6 +38,15 @@ globals is written down, but the console's names - `COCKPIT_CONFIG_MSG`,
 the receiving side alone. Settled by: the console's encoders, or a captured
 session.
 
+**Where the node ID reaches the software from.** The System 3.0 manual
+documents an 8-position Node ID DIP switch on the CPU board front plate and
+says communication is impossible without it. The firmware never writes
+`0x0218AEB0`/`B1`. So the switch is read either by the boot monitor - which
+this project stubs - or by the ARCNET controller as its physical node ID, in
+which case the `(net, node)` pair the game filters on is a different number
+altogether. Nothing measured says which. Settled by: a real boot monitor, or a
+capture of what a configured pod actually puts in that pair.
+
 **The feet are `473`/`476` and `493`/`496`.** By elimination from the seven-id
 block the rest of each leg came from. The adjacency rule that decides every
 other joint cannot decide these - a foot hangs on a node with nothing below it,
@@ -76,8 +85,10 @@ main game loop and formatted onto Remote I/O displays `0x80` and `0x86` as raw
 longer open - two four-register control ports at a stride of 4, touched by
 eight instructions in the whole ROM, each run doing set/clear/clear/set of one
 mask (`0x40`, then `0x84`) immediately after the interrupt vectors it goes with
-are installed. See DEVICES.md. What is missing is only the chip. Settled by: a
-board photograph, or a schematic.
+are installed. See DEVICES.md. What is missing is only the chip. **Not settled by the
+paper**: every published manual and patent has been checked and none is
+board-level - see SOURCES.md. Settled by: a board photograph, or a schematic
+that has not been scanned.
 
 ---
 

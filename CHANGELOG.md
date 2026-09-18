@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`docs/SOURCES.md` - the paper trail, and what is not in it.** There is **no
+  board schematic** in any published material. Checked all of it: the System
+  3.0 manual is field service, the System 4.0 manual is a different machine
+  (Tesla, a Pentium PC with a Division graphics card), the System 1 manual is
+  operations, and both VWE patents are mechanical. So the part at
+  `0x00010007`-`0x00010015` cannot be named from the documents.
+- The service manual pays anyway. **The node ID is an 8-position DIP switch on
+  the CPU board front plate** - which matters, because the firmware never
+  writes `0x0218AEB0`/`B1` and the number has to come from somewhere. Whether
+  the boot monitor reads that switch or the ARCNET controller does is now an
+  explicit open question rather than an unnoticed gap.
+- Also from the front plate: an **Interrupt Button** that "will force an
+  interrupt on the CPU... used only under VWE supervision as a debugging tool",
+  and confirmation that the **ARCNET controller is on the CPU board**.
+- And the manual's own words for something found independently in the firmware:
+  "sound is reestablished within 15 seconds as the **software watchdog** will
+  reactivate the audio channels."
+
 - **The pod has a watchdog, and `Get_Event` kicks it.** `0x00010000` gets a
   `0x80`/`0x00` pulse from a three-instruction routine called from exactly one
   place: the top of the event pump, on a deadline 100 ticks of the free-running

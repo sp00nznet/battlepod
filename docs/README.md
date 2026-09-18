@@ -13,6 +13,7 @@ separate from the project's own front page.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Where this is going - the windows, the seams, the networking, and which decisions evidence has already settled. Also answers how the game actually played. |
 | [FALSE-TRAILS.md](FALSE-TRAILS.md) | **Every wrong turn that cost real time, and what killed it.** |
 | [UNRESOLVED.md](UNRESOLVED.md) | **What is assumed, what is measured and unexplained, and what is papered over.** |
+| [SOURCES.md](SOURCES.md) | **The paper trail: what the published manuals and patents contain, and what they do not.** |
 | [PLAN.md](PLAN.md) | The original field notes, kept as written. |
 
 The [changelog](../CHANGELOG.md) is the narrative in order; the
