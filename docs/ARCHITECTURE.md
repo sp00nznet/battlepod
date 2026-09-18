@@ -2,7 +2,7 @@
 
 The hardware findings are in [DEVICES.md](DEVICES.md), the renderer in
 [RENDERING.md](RENDERING.md), and the near-term work in
-[ROADMAP.md](ROADMAP.md). This file is the long view: what the finished thing
+[ROADMAP.md](../ROADMAP.md). This file is the long view: what the finished thing
 should be, what shape it takes, and which decisions are already settled by
 evidence rather than by taste.
 

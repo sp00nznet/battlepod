@@ -22,10 +22,13 @@ has been identified and its command protocol decoded, and the firmware's own
 diagnostic monitor can be driven interactively over the modelled serial port —
 far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
 emit real Remote I/O packets, checksums and all. See
-[DEVICES.md](DEVICES.md) for the map, [RENDERING.md](RENDERING.md) for what it
+[DEVICES.md](docs/DEVICES.md) for the map, [RENDERING.md](docs/RENDERING.md) for what it
 would take to reproduce all four of a cockpit's surfaces, and
-[ROADMAP.md](ROADMAP.md) for what's next, and
-[ARCHITECTURE.md](ARCHITECTURE.md) for what the finished thing should be - a
+[ROADMAP.md](ROADMAP.md) for what's next,
+[docs/](docs/) for the whole technical record - including
+[what turned out to be wrong](docs/FALSE-TRAILS.md) and [what is still
+assumed or papered over](docs/UNRESOLVED.md) - and
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) for what the finished thing should be - a
 pod in SDL windows you can arrange, an operator console written rather than
 emulated, and ARCNET over UDP so eight pods on a LAN is the same code as eight
 across the internet.
@@ -235,7 +238,7 @@ remote i/o: 1 frames decoded
   lamp 05 brightness 01
 ```
 
-which is what a panel renderer consumes. See [RENDERING.md](RENDERING.md).
+which is what a panel renderer consumes. See [RENDERING.md](docs/RENDERING.md).
 
 ## Usage
 
@@ -265,7 +268,7 @@ Run with no arguments for the full option list. The ones that matter:
 
 Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
-how the device map in [DEVICES.md](DEVICES.md) was built.
+how the device map in [DEVICES.md](docs/DEVICES.md) was built.
 
 **Disassemble the TMS340 renderer:**
 
@@ -369,7 +372,7 @@ python tools/render.py "$GF/Cockpit Software/battletech_ti_res" --id 30 --out ou
 Z-buffered flat-shaded triangles at the pod's own 480x360, written as a PNG
 with nothing but the standard library. Model 30 comes out as one of the terrain
 mesas that stand behind the mechs in the period footage. See
-[RENDERING.md](RENDERING.md) for what the pod looked like and why flat shading
+[RENDERING.md](docs/RENDERING.md) for what the pod looked like and why flat shading
 is the right target.
 
 **Extract Macintosh resources** (the operator console's code lives in them):

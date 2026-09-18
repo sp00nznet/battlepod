@@ -58,6 +58,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A `docs/` folder, and two documents this project should have had from the
+  start.** The technical writing moved out of the root -
+  `docs/DEVICES.md`, `docs/RENDERING.md`, `docs/ARCHITECTURE.md`,
+  `docs/PLAN.md` - joined by an index explaining what is where.
+- **`docs/FALSE-TRAILS.md`** records every wrong turn that cost real time and
+  what killed it: the A5 model that does not apply, the modem mistaken for the
+  game receive, "no second dispatch" when the opcode was simply at byte `0x13`,
+  `674` read as decimal, the collision hulls drawn as terrain, the rig box that
+  cannot settle placement, and the Makefile dependency trap that served a fixed
+  decoder's old numbers twice.
+- **`docs/UNRESOLVED.md`** separates what is *assumed* from what is *measured
+  and unexplained* from what is *papered over*, because those fail differently.
+  Every load-bearing assumption now has to say what would settle it - the
+  `461`-`466` torso naming, `0xC5` as `ROUTER_STATUS_MSG`, the feet by
+  elimination - and every fake is listed with what breaks if it is wrong.
 - **The SecCom block is at `0x4007E000`.** Its location was never known. The
   code that sets it up sits immediately before the handshake call: a base
   written to a pointer at `0x02194452`, then **`0x674` bytes zeroed a byte at a

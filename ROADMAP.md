@@ -1,7 +1,12 @@
 # Roadmap
 
-Background and the original field notes are in [PLAN.md](PLAN.md); the hardware
-findings are in [DEVICES.md](DEVICES.md).
+Background and the original field notes are in [PLAN.md](docs/PLAN.md); the hardware
+findings are in [DEVICES.md](docs/DEVICES.md).
+
+Open questions are tracked in [docs/UNRESOLVED.md](docs/UNRESOLVED.md), split
+into what is assumed, what is measured and unexplained, and what is papered
+over. Wrong turns and their disproofs are in
+[docs/FALSE-TRAILS.md](docs/FALSE-TRAILS.md).
 
 ## Done
 
