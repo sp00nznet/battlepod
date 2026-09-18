@@ -1163,6 +1163,21 @@ static void note(uint32_t addr, int size, int is_write, uint32_t val)
 #define RS_OP_ALLOC  2
 #define RS_OP_RENDER 6
 
+/* The audio board is a ring the 68020 fills and the DSP drains. The producer
+ * at 0x02149190 computes next = (head + 4) & 0x7C and spins while the tail
+ * equals it - the FIFO-full test. With no board on the other side the tail
+ * never moves, so the download of btAudio.dld's quarter-million longwords
+ * never finishes and the boot hangs there.
+ *
+ * A board that drains as fast as it is filled is one line: whatever the 68020
+ * writes to the head, write to the tail as well. That is not a cheat about
+ * timing - it is the fastest a real board could be - but it does mean nothing
+ * here plays a sound. */
+#define ASTUB_SIG   0x55000000u		/* +0x00, the top byte the ROM checks */
+#define ASTUB_LEN   0x100u
+
+static uint32_t g_astub;		/* 68k base of the audio board, 0 = off */
+
 static uint32_t g_rstub;		/* 68k address of the comm block, 0 = off */
 static uint32_t g_rsheap = RSTUB_HEAP_68K - TI_TO_68K;	/* next free, TI byte address */
 static uint32_t g_rshandle;
@@ -1507,6 +1522,10 @@ void m68k_write_memory_32(unsigned int a, unsigned int v)
 				rstub_write(a - g_rstub, v);
 			else if (a == RSTUB_FLAG)
 				rstub_flag_write(v);
+		}
+		if (g_astub && a == g_astub + 4) {
+			poke32(g_astub + 8, v);		/* drained already */
+			poke32(g_astub, ASTUB_SIG | 1);	/* and downloaded */
 		}
 		return;
 	}
@@ -2010,6 +2029,9 @@ static void usage(void)
 	"  --duart BASE     model the MC68681 DUART at BASE. Channel B is the\n"
 	"                   console: its output is captured and its receiver fed\n"
 	"  --duart-in TEXT  feed TEXT to the console receiver (\\r and \\n work)\n"
+	"  --astub [ADDR]   stand in for the audio board (default 50001000):\n"
+	"                   answer the signature and drain its download ring\n"
+	"                   as fast as the 68020 fills it\n"
 	"  --rstub ADDR     stand in for the TMS340 renderer: comm block at ADDR,\n"
 	"                   acknowledge every command, log the queue, serve allocations\n"
 	"  --poke ADDR=HEX  unmapped reads at ADDR return HEX\n"
@@ -2160,6 +2182,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rstub") && i + 1 < argc) {
 			g_rstub = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
+		else if (!strcmp(a, "--astub")) {
+			g_astub = (i + 1 < argc && argv[i+1][0] != '-')
+			        ? (uint32_t)strtoul(argv[++i], NULL, 16) : 0x50001000u;
+		}
 		else if (!strcmp(a, "--poke") && i + 1 < argc) {
 			char *c;
 			if (g_npoke >= MAXPOKE) { fprintf(stderr, "too many --poke" "\n"); return 1; }
@@ -2216,6 +2242,8 @@ int main(int argc, char **argv)
 
 	if (!script) { usage(); return 1; }
 
+	if (g_astub) ram_add(g_astub, ASTUB_LEN);
+
 	if (g_rstub) {
 		ram_add(RSTUB_TI_BASE, RSTUB_TI_LEN);
 		ram_add(g_rstub, RSTUB_WINDOW);
@@ -2263,6 +2291,8 @@ int main(int argc, char **argv)
 	m68k_set_reg(M68K_REG_VBR, vbr);
 	g_vbr = vbr;
 	if (monitor_base) mon_install(monitor_base);
+	if (g_astub) poke32(g_astub, ASTUB_SIG);
+
 	if (g_rstub) {
 		m68k_write_memory_32(RSTUB_PTR, g_rstub - TI_TO_68K);
 		m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);

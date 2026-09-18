@@ -2180,6 +2180,36 @@ itself is a record stream tagged `A5A5`, which is what shows up on the bus.
 
 With only the signature answered the ROM gets further and reports
 "Audio subsystem is NOT properly downloaded!" — it checks the download too.
+That second check is `[base] & 0xFF0000FF >= 0x55000001` at `0x021492BA`, so
+the board is expected to raise the signature's **low** byte once the download
+lands.
+
+### Standing in for the board
+
+`--astub` models the board rather than poking a constant over it. Two lines do
+the whole thing:
+
+- whatever the 68020 writes to the head at `+0x04` is written to the tail at
+  `+0x08` as well - a board that drains the ring as fast as it is filled, which
+  is the fastest a real one could be;
+- and the first push sets the low byte of the signature, which is what the
+  ROM's second check wants: `[base] & 0xFF0000FF` must be **at least
+  `0x55000001`**, not merely `0x55......`.
+
+With that the ROM stops saying `Audio subsystem is NOT properly downloaded!`
+and takes the branch at `0x021492D8` for the first time. All four of its
+subsystem checks now pass.
+
+It also cleans up the bus log, which matters more than it sounds. Answering
+`0x50001000` with a poke made every access to the board open bus, so the
+download of `btAudio.dld` showed up as **1,236,274 unmapped accesses** and
+buried everything else in the report. With the ring as real memory it is zero,
+and what remains in the log is what the pod is actually waiting on.
+
+**This is a stub and it is listed as one.** Nothing plays a sound; the DSP is
+not emulated; `btAudio.dld` goes through the FIFO and is thrown away. What is
+now true is only that the ROM believes its audio board is there, which is what
+it needs to believe to get on with anything else.
 
 ## Open questions
 

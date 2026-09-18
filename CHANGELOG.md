@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--astub`, an audio board instead of a poke.** The board is a ring the
+  68020 fills and the DSP drains; the stub writes the head index into the tail,
+  so it drains as fast as it is filled, and raises the signature's low byte on
+  the first push. The ROM's second audio check is
+  `[base] & 0xFF0000FF >= 0x55000001` - it wants that low byte, which a
+  constant `0x55000000` never gave it.
+- **`Audio subsystem is NOT properly downloaded!` is gone**, and the branch at
+  `0x021492D8` is taken for the first time. All four of the ROM's subsystem
+  checks now pass.
+- The bus log is legible again: the `btAudio.dld` download used to appear as
+  **1,236,274 unmapped accesses** and bury everything else. With the ring as
+  real memory it is zero. **107/107.**
+
 - **A mech moved.** A packet injected at the wire - opcode `0xE1`, entity id 1,
   seven floats - comes back out of memory as seven entity fields at exactly the
   offsets the static reading predicted, including the two the sender writes out

@@ -137,7 +137,9 @@ a, D0
 0214C44E  cmpi.l
   0000  02 1F 99 AC 02 1F A0 60
   0000  41 20 00 00 42 48 00 00 43 16 00 00
-  0000  44 7A 00 00 47 1C 40 00 45 9C 40 00"
+  0000  44 7A 00 00 47 1C 40 00 45 9C 40 00
+tap 021492D8 hit 1
+  0000  55 00 00 01"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -200,6 +202,14 @@ fi
 # Entity 1 is at 0x021FA060: the boot builds 1000 entities of 0x6B4 bytes from
 # 0x021F99AC and fills the pointer table at 0x02189F10.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --packet 'E1 00 00 00 00 00 00 00 00 00 00 01 41 20 00 00 42 48 00 00 43 16 00 00 44 7A 00 00 45 9C 40 00 46 40 E4 00 47 1C 40 00'     --peek 02189F10:8 --peek 021FA086:12 --peek 021FA10A:12     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4l: boot with the audio board answered rather than poked. The board
+# is a ring the 68020 fills and the DSP drains; --astub drains it as fast as it
+# is filled and reports the download complete, which is the last of the ROM's
+# four subsystem checks to stop failing. The bus log is the evidence: with the
+# poke the download shows as 1.2 million open-bus accesses, with the board it
+# shows as none, because the ring is real memory.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567 --tap 021492D8 --peek 50001000:4     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

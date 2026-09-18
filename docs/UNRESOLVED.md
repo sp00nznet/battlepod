@@ -92,6 +92,13 @@ we do not emulate.
 diagnostic monitor is reachable. Every result obtained through the monitor is
 therefore from a cockpit that has been prevented from starting a game.
 
+**The audio board's ring is drained by us, not by a DSP.** `--astub` writes
+the 68020's head index straight into the tail and raises the signature's low
+byte on the first push, so the ROM's download check passes and the boot stops
+complaining. Nothing plays a sound and `btAudio.dld` is thrown away. If the
+real board ever needed to be *slower* than instant - a game that paces itself
+against the audio FIFO - this would hide it.
+
 **The renderer, audio and Amiga boards are stubbed** rather than modelled. The
 display list is intercepted on the 68020 side by design - see ARCHITECTURE.md -
 but that is a decision, not an emulation.
