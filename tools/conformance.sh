@@ -133,7 +133,11 @@ tap 021230C8 hit 1
 b9, D0
 47, D0
 f6, D0
-a, D0"
+a, D0
+0214C44E  cmpi.l
+  0000  02 1F 99 AC 02 1F A0 60
+  0000  41 20 00 00 42 48 00 00 43 16 00 00
+  0000  44 7A 00 00 47 1C 40 00 45 9C 40 00"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -182,6 +186,20 @@ fi
 # is a second dispatch of its own over the same byte - the pod's configuration
 # and mode messages, which it only ever receives.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02104356:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# and the arena the entity table indexes: 1000 entities of 0x6B4 bytes.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0214C440:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# Scenario 4k: drive a mech from outside. The static reading says opcode 0xE1
+# carries seven floats and that the handler writes them into the entity the
+# packet names, at +0x26, +0x2A, +0x2E, +0xAA, +0xB2, +0xB6 and +0xAE. This
+# proves it on the running firmware: inject the packet, then read entity 1 out
+# of memory. Nothing here is patched or stubbed - the packet goes in at the
+# wire and the cockpit's own code puts the numbers where they land.
+#
+# Entity 1 is at 0x021FA060: the boot builds 1000 entities of 0x6B4 bytes from
+# 0x021F99AC and fills the pointer table at 0x02189F10.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --packet 'E1 00 00 00 00 00 00 00 00 00 00 01 41 20 00 00 42 48 00 00 43 16 00 00 44 7A 00 00 45 9C 40 00 46 40 E4 00 47 1C 40 00'     --peek 02189F10:8 --peek 021FA086:12 --peek 021FA10A:12     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

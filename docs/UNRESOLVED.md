@@ -113,6 +113,11 @@ dark**, because unknown is not off. A cosmetic choice, but it is a choice.
 Not unknown so much as unreachable. Everything here is waiting on the same
 thing: the pod has never been made to start a mission.
 
+*Less of this list than it looks, now. The entity arena turns out to be built
+during an ordinary boot, and fields in it can be driven from the wire - see
+DEVICES.md. What is missing is a mission, not the objects a mission would
+move.*
+
 - **Which lamp is which.** The method is known - drive an input, watch the id on
   the Remote I/O wire, read the status line printed in the same frame - and the
   transport works in both directions. The firmware does not light the panel
@@ -126,10 +131,12 @@ thing: the pod has never been made to start a mission.
   is set up during an ordinary boot. But a boot only ever finds it empty, so
   what a message *contains* needs something to send one. The 298 bytes below
   `+0x12A` are also unidentified.
-- **What the 33 in-game opcodes mean.** The dispatch is mapped, and the entity
-  structure now has 46 offsets in it recovered from the network messages that
-  report them - but nothing exercises them. What each field *is* still needs a
-  game running to watch it change.
+- **What each entity field *is*.** The dispatch is mapped, the entity arena is
+  built on an ordinary boot - 1000 entities of 0x6B4 bytes - and 46 offsets are
+  recovered from the messages that report them. A packet injected at the wire
+  now moves seven of those fields, so they are reachable rather than
+  theoretical. What each one *means* still needs a game running to watch it
+  change against something visible.
 - **The input report format.** The receive interrupt hands each byte to a state
   machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
   past the firmware's decoder produced nothing.

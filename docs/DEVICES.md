@@ -1075,6 +1075,53 @@ game. It is not the whole entity - `+0x92` and `+0x140` are known from
 elsewhere and no message reports them - but it is the first map of it, and each
 entry is anchored by two independent pieces of code rather than one.
 
+### Driving a mech from outside
+
+Everything above is a static reading. This is the same claim made on the
+running firmware.
+
+The boot builds the world before any game starts. `0x0214C422` is the loop:
+
+```
+0214C424  muls.l #$6b4, D0
+0214C42C  lea    $21f99ac.l, A0     the arena
+0214C43A  lea    $2189f10.l, A0     the table
+0214C440  move.l A3, (A0,D0.l)
+0214C44E  cmpi.l #$3e8, D2          1000 of them
+```
+
+**1000 entities of `0x6B4` = 1,716 bytes each**, from `0x021F99AC` to
+`0x0239C8CC`, with the pointer table filled in as it goes. Entity 0 is built
+differently from the rest and gets class `7` at its `+0x0A`.
+
+So entity 1 is at `0x021FA060`, and a packet naming id 1 has somewhere to land.
+Inject one - byte 0 `0xE1`, id `1` at `+0x08`, then seven floats chosen to be
+unmistakable:
+
+```
+--packet 'E1 00 00 00 00 00 00 00 00 00 00 01
+          41 20 00 00 42 48 00 00 43 16 00 00
+          44 7A 00 00 45 9C 40 00 46 40 E4 00 47 1C 40 00'
+```
+
+and read the entity back out:
+
+```
+peek 021FA086:   41 20 00 00  42 48 00 00  43 16 00 00
+peek 021FA10A:   44 7A 00 00  47 1C 40 00  45 9C 40 00
+```
+
+`+0x26` is 10.0, `+0x2A` is 50.0, `+0x2E` is 150.0, `+0xAA` is 1000.0, `+0xAE`
+is 40000.0, `+0xB2` is 5000.0. **All seven fields in the places the static
+reading said, including the two the sender writes out of order.**
+
+Nothing on that path is patched or stubbed. The bytes go in at the wire and the
+cockpit's own code carries them through the low-level dispatch, the router, the
+identity filter, `Post_Event` as an event of kind 3, the event pump, the byte-0
+table and the handler. It is the first time anything in this project has made
+the game's own state move, and it is a scenario in the harness so it stays
+true.
+
 ### `0xF6`-`0xFF`: a dispatch inside the dispatch
 
 The ten opcodes that share an arm share it because the arm is **another

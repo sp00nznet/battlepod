@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mech moved.** A packet injected at the wire - opcode `0xE1`, entity id 1,
+  seven floats - comes back out of memory as seven entity fields at exactly the
+  offsets the static reading predicted, including the two the sender writes out
+  of order. Nothing on that path is patched or stubbed: the low-level dispatch,
+  the router, the identity filter, `Post_Event`, the event pump, the byte-0
+  table and the handler are all the cockpit's own code. First time anything
+  here has made the game's own state move.
+- **The world is built during an ordinary boot.** `0x0214C422` fills
+  `0x02189F10` with pointers to **1000 entities of `0x6B4` = 1,716 bytes**,
+  from `0x021F99AC` to `0x0239C8CC`, `cmpi.l #$3e8` in the loop. Entity 0 is
+  built differently and gets class `7`. So the objects a mission would move
+  already exist; what is missing is the mission.
+- Four more checkpoints, including the injected packet's own arrival, read back
+  out of the entity it named. **105/105.**
+
 - **The entity table is at `0x02189F10`**, an array of pointers indexed by the
   entity id a packet carries, referenced from **231 sites** in the ROM. An id
   on the wire is a subscript, which is why the protocol names a thing in four
