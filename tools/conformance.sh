@@ -129,7 +129,9 @@ clr.b   (A0)
 132, D0
 tap 0212300A hit 1
 tap 02123062 hit 1
-tap 021230C8 hit 1"
+tap 021230C8 hit 1
+b9, D0
+47, D0"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -169,6 +171,10 @@ fi
 # identity filter, and is handed to Post_Event as an event of kind 3 - which is
 # the whole inbound path for a message from the operator console.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --clock 2000808     --poke 50001000=55000000 --set 40000100=1234567     --packet '30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 21'     --tap 0212300A --tap 02123062 --tap 021230C8     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4i: the game's own message dispatch - a 71-entry jump table over
+# packet byte 0, opcodes 0xB9 to 0xFF, which is the range the pod also sends in.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213CF2C:7 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

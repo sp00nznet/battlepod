@@ -58,6 +58,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The game's message table, found by following the injected packet.** The
+  loop is an event pump - `Get_Event(0xFFFF)`, an optional hook, then a switch
+  on the event's kind over `-2`, `-1`, `1`, `2`, **`3`**, `0xA`, `0xB0`, `0xB1`,
+  `0xC0`, `0xD0`, `0x10000`, `0x10003`. **Kind 3, a network packet, goes to
+  `0x0213B80A`**, which reads **packet byte 0** and branches into a jump table
+  at `0x0213CE9E`: `subi.w #$B9`, bounds-check against `0x47`, **71 entries**.
+- **Opcodes `0xB9` to `0xFF`, 46 with their own handler.** That is the same
+  range the pod *sends* in - 31 opcodes `0xBA` to `0xED`, found earlier from its
+  43 calls to the packet sender - so it is **one symmetric protocol**, and the
+  operator console's messages live in it. Two new checkpoints; the harness is at
+  **88/88**.
+- Worth keeping straight: this is **not** the dispatch at `0x0213A332` that
+  reads byte `0x13`. Both exist, reached by different routes; the byte-0 table
+  is where a packet off the wire lands.
 - **A packet injected from outside reaches the game's event queue** - the first
   time anything has. The path: a byte-0 opcode the low-level dispatch does not
   claim falls through to the router at `0x0212300A`, passes a second identity

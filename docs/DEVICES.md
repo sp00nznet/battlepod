@@ -898,6 +898,49 @@ opcode means - the console's own log gives names and fields for the messages it
 sends, and those names now have a numbering to be matched against.
 
 
+### The game loop, and the message table at the end of it
+
+Following the injected packet the rest of the way gives the loop's shape and,
+at the end of it, the message vocabulary this project has been after since the
+beginning.
+
+The loop is an event pump:
+
+```
+02138F58  pea   (-$9e,A6)          a buffer
+02138F5C  pea   $FFFF.w            take anything
+02138F60  jsr   $2122154           Get_Event
+          nothing -> round again
+          a hook at (-$8a,A6), if set -> call it
+          otherwise -> switch on the event's kind at $2139306
+```
+
+and the kind switch runs `-2`, `-1`, `1`, `2`, **`3`**, `0xA`, `0xB0`, `0xB1`,
+`0xC0`, `0xD0`, `0x10000`, `0x10003`. **Kind 3 - a network packet - goes to
+`0x0213B80A`**, which takes the packet out of the event at `+0x10`, reads
+**byte 0**, and branches into a jump table:
+
+```
+0213CF2C  subi.w #$B9, D0
+0213CF30  cmpi.w #$47, D0        71 entries
+0213CF34  bcc    $213CF44        out of range: drop it
+0213CF38  lea    (-$9c,PC), A0   the table, at 0213CE9E
+0213CF40  jmp    (PC,D0.w)
+```
+
+**Opcodes `0xB9` to `0xFF`, of which 46 have their own handler**, the rest
+falling to a common exit. `0xF6`-`0xFF` share one. That range is the same one
+the pod *sends* in - 31 opcodes from `0xBA` to `0xED`, found earlier from its
+43 calls to the packet sender - so this is one symmetric protocol rather than
+two, and the console's messages live in it.
+
+Confirmed by walking a packet into it: `--packet '30 ...'` reaches
+`0x02139044`, the kind-3 arm, and then `0x0213B80A`.
+
+Note this is **not** the dispatch at `0x0213A332` that reads byte `0x13`. Both
+exist and they are reached by different routes; the byte-0 table is the one a
+packet off the wire lands in.
+
 ### A game message, followed all the way in
 
 An earlier reading here said the low opcodes are discarded and left it there.
