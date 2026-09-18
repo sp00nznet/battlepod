@@ -677,6 +677,7 @@ static struct scene g_scene;
 static const char *g_scenefile;
 static const char *g_sceneout;
 static float g_sceneturn = 0.7f, g_scenepitch = -0.28f, g_scenezoom = 0.9f;
+static int g_scenedrop = -1;
 static struct mesh g_kindmesh[SCENE_KINDS];
 static uint8_t g_kindok[SCENE_KINDS];
 
@@ -713,6 +714,20 @@ static struct raster g_sceneframe;
  * so one decoded model is drawn many times - which is what the display list
  * does too, and why the rasteriser takes a placement rather than a merged
  * mesh. */
+static int scene_draw_cam(const struct ras_cam *camin, float floor)
+{
+	int i, drawn = 0;
+
+	ras_background(&g_sceneframe, (int)(RAS_H * 0.52f));
+	for (i = 0; i < g_scene.n; i++) {
+		int k = scene_kind(g_scene.obj[i].model);
+		if (k < 0 || !g_kindok[k]) continue;
+		drawn += ras_draw_at(&g_sceneframe, &g_kindmesh[k], camin,
+				     &g_scene.obj[i].at, floor, 0);
+	}
+	return drawn;
+}
+
 static int scene_draw(float turn, float pitch, float zoom)
 {
 	struct ras_cam cam;
@@ -765,8 +780,18 @@ static void scene_report(void)
 		printf(" %d%s", g_scene.kind[i], g_kindok[i] ? "" : "(no geometry)");
 	printf("\n");
 
+	printf("scenario drop points     : %d\n", g_scene.ndrop);
+
 	if (g_sceneout) {
-		int poly = scene_draw(g_sceneturn, g_scenepitch, g_scenezoom);
+		int poly;
+		if (g_scenedrop >= 0) {
+			struct ras_cam cam;
+			float floor;
+			scene_stand(&g_scene, g_scenedrop, &cam, &floor);
+			poly = scene_draw_cam(&cam, floor);
+		} else {
+			poly = scene_draw(g_sceneturn, g_scenepitch, g_scenezoom);
+		}
 		FILE *f = fopen(g_sceneout, "wb");
 		if (f) {
 			fwrite(g_sceneframe.px, 1, sizeof g_sceneframe.px, f);
@@ -2058,6 +2083,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
+		else if (!strcmp(a, "--scene-drop") && i + 1 < argc) g_scenedrop = atoi(argv[++i]);
 		else if (!strcmp(a, "--scene-view") && i + 3 < argc) {
 			g_sceneturn = (float)atof(argv[++i]);
 			g_scenepitch = (float)atof(argv[++i]);

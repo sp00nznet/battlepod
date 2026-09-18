@@ -692,6 +692,31 @@ decodes to no geometry, which is not yet explained.
 This needs no game running, which is why it was worth doing now: it is the
 first thing in this project to draw a whole world rather than one object.
 
+### Standing where the pilot stood
+
+Every scenario opens with a block of five-column drop points - a facing in
+degrees, a position, a height - before the map records, terminated by
+`-1 -1 -1 -1 -1`. BadLands has sixteen, one per pod. `--scene-drop N` puts the
+camera at one of them:
+
+```
+./build/battlepod.exe "$GF/Full_Load_3_0"     --scene "$GF/Scenarios/BadLands-16" --scene-drop 0 --scene-out out/pod.rgb
+```
+
+The camera model orbits a centre, so standing somewhere means putting the
+centre one look-ahead in front and turning to match. A heading of h needs
+**turn = -h**, which is what makes the world direction `(sin h, 0, cos h)` come
+out as straight ahead in view space.
+
+The height column is 5.4 on every drop in every map, which is a cockpit on a
+machine nine units tall - so this is eye level, not a camera position someone
+chose.
+
+What comes out is the picture the pod showed. BadLands is mesas and rock spires
+strung along the horizon over sand; Urbana, from its own drop point, is tower
+blocks and low buildings - a city. Same code, same archive, different scenario
+file.
+
 ## Drawing it
 
 `tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,

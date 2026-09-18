@@ -36,9 +36,21 @@ struct scene_obj {
 	struct ras_place at;
 };
 
+#define SCENE_DROPS 64
+
+/* Where a pilot starts: a facing in degrees, a position in the map's own
+ * coordinates, and a height. The five-column block at the head of every
+ * scenario, terminated by `-1 -1 -1 -1 -1`, which the console reads with the
+ * `%f %f %f %f %d` grammar tools/opscon.py recovered. */
+struct scene_drop {
+	float facing, x, y, height;
+};
+
 struct scene {
 	struct scene_obj obj[SCENE_MAX];
 	int n;
+	struct scene_drop drop[SCENE_DROPS];
+	int ndrop;
 	int kind[SCENE_KINDS];		/* the distinct model ids used */
 	int nkind;
 };
@@ -84,6 +96,13 @@ static int scene_load(struct scene *s, const char *path)
 			v[nv++] = d;
 			p = e;
 			while (*p == ' ' || *p == '\t') p++;
+		}
+		if (nv == 5 && v[0] >= 0 && s->ndrop < SCENE_DROPS) {
+			struct scene_drop *p = &s->drop[s->ndrop++];
+			p->facing = (float)v[0];
+			p->x = (float)v[1];
+			p->y = (float)v[2];
+			p->height = (float)v[3];
 		}
 		if ((nv == 8 || nv == 9) && s->n < SCENE_MAX) {
 			struct scene_obj *o = &s->obj[s->n++];
@@ -139,6 +158,35 @@ static void scene_frame(const struct scene *s, struct ras_cam *cam, float *floor
 	cam->dist = (hi[0] - lo[0] > hi[2] - lo[2] ? hi[0] - lo[0] : hi[2] - lo[2]);
 	if (cam->dist < 1.0f) cam->dist = 1.0f;
 	*floor = lo[1];
+}
+
+/* Stand at a drop point and look out across the map, which is the view the
+ * cockpit actually showed.
+ *
+ * The camera model orbits a centre, so standing somewhere means putting the
+ * centre one look-ahead in front and turning to match. A heading of h about
+ * the vertical needs turn = -h: that is what makes the world direction
+ * (sin h, 0, cos h) come out as straight ahead in view space.
+ */
+static void scene_stand(const struct scene *s, int which, struct ras_cam *cam,
+			float *floor)
+{
+	const struct scene_drop *d;
+	float h, ahead = 100.0f;
+
+	if (s->ndrop < 1) { scene_frame(s, cam, floor, 0.0f); return; }
+	if (which < 0) which = 0;
+	if (which >= s->ndrop) which = s->ndrop - 1;
+	d = &s->drop[which];
+
+	h = (float)(d->facing * 3.14159265358979 / 180.0);
+	cam->turn = -h;
+	cam->pitch = 0.0f;
+	cam->dist = ahead;
+	cam->centre[0] = d->x + sinf(h) * ahead;
+	cam->centre[1] = d->height;
+	cam->centre[2] = d->y + cosf(h) * ahead;
+	*floor = 0.0f;
 }
 
 #endif /* BATTLEPOD_SCENE_H */

@@ -222,6 +222,7 @@ if [ -f "$TI_RES" ]; then
         check_at_least "scenario objects placed" 882
         check_at_least "scenario models used" 17
         check_at_least "scenario models decoded" 16
+        check_at_least "scenario drop points" 16
     fi
 
     echo

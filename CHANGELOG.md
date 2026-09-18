@@ -49,6 +49,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Standing where the pilot stood.** Every scenario opens with a block of
+  five-column drop points - facing, position, height - which the console reads
+  with the `%f %f %f %f %d` grammar. BadLands has **sixteen, one per pod**, and
+  `--scene-drop N` puts the camera at one. The height is **5.4 on every drop in
+  every map**, which is a cockpit on a machine nine units tall: eye level, not
+  a number anyone picked.
+- The camera orbits a centre, so standing somewhere means putting the centre
+  one look-ahead in front and turning to match - a heading of h needs
+  **turn = -h**. What comes out is the pod's own picture: BadLands is mesas and
+  rock spires along the horizon over sand, and Urbana from its drop point is
+  tower blocks and low buildings. Same code, same archive, different scenario.
+  One new checkpoint; the harness is at **73/73**.
 - **Whole maps, drawn.** The release ships **eleven scenario files in plain
   text**, and the grammar to read them came out of the operator console, which
   parses them with `scanf`: `GROUND_CLASS %d %d %f %f %f %f %f %d %d` and its
