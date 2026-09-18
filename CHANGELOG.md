@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Both halves of the game protocol, side by side.** The receiving table gives
+  71 opcodes; `tools/netmsg.py` reads the sending side and puts the two
+  together. The sender at `0x021468A4` has **45 call sites**, each writing its
+  own opcode into the first byte of the buffer it then passes - **38 distinct
+  opcodes, `0xB9` to `0xED`**, every one inside the range the receiver covers.
+- That split names things nothing else could: **29 opcodes are sent and
+  received** (pod to pod, the simulation itself), **17 are received only**
+  (`BE C4 C6 D3 E4 E5 EE` and `F6`-`FF` - commands the pod obeys) and **9 are
+  sent only** (`C5 C8 CE D0 D4 D5 D6 E2 E6` - reports the pod files). The three
+  receive-only handlers that carry strings agree: `0xC6` runs the modem `+++`,
+  `0xC4` prints `Master router ready`, `0xE5` prints `WELCOME %s`.
+- **The shape of a packet body.** An 8-byte header, then at `+0x08` the entity
+  id from the entity's own `+0x06`, then three longwords from the entity's
+  `+0x26`/`+0x2A`/`+0x2E`, then message-specific fields drawn from the same
+  structure - `0xD2` takes sixteen of them from `+0xC4` to `+0x120`, `0xDD`
+  nineteen from `+0x2A4` to `+0x2E0`. The entity structure can now be mapped
+  from the messages that report it.
+- **`0xF6`-`0xFF` is a dispatch inside the dispatch**, ten entries at
+  `0x02104342` over the same byte. All ten are receive-only and all ten write
+  the pod's own mode and configuration globals rather than anything in the
+  world. This is where the console's setup messages land.
+- `tools/fnstr.py`, which reports the strings a function in the ROM points at.
+  The firmware narrates itself, so that is usually enough to say what an
+  unnamed handler is for.
+- Four conformance checkpoints for the protocol and two for the second
+  dispatch. **96/96.**
+
+### Fixed
+
+- **`0xC5` is `ROUTER_STATUS_MSG` by layout, not just by description**, and
+  leaves UNRESOLVED.md. Its sender builds a 100-byte packet: `strncpy` of
+  `0x50` bytes into `+0x08`, a longword at `+0x58`. That is
+  `status string, status code long` on the wire, and no other message the pod
+  sends has that shape.
+- **The pod sends 38 opcodes, not 31, from 45 call sites, not 43.** The earlier
+  count took the nearest preceding immediate byte store as the opcode, which
+  misses a sender that writes its opcode before a branch. Requiring the store's
+  displacement to match the buffer the call passes finds the rest. Corrected in
+  place in DEVICES.md and recorded in FALSE-TRAILS.md.
+
 ### Fixed
 
 - **`0x02146004` is the SiteLink modem, not the game's network receive.** Two

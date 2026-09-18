@@ -23,10 +23,19 @@ splitting exactly where the ROM puts the boundary - but not proven. Settled by:
 any table binding a part id to a chassis, which does not exist anywhere in the
 cockpit software.
 
-**`0xC5` is `ROUTER_STATUS_MSG`.** Three agreeing facts - built by router code,
-carries a `strncpy` of up to `0x50` bytes plus a longword, and the console logs
-exactly one message of that description. Not a decode. Settled by: the console's
-encoder, which needs the work in FALSE-TRAILS.md to succeed first.
+**The three longwords every entity message carries after the entity id.**
+They come from the entity structure's `+0x26`, `+0x2A` and `+0x2E`, they are
+in every simulation message that names an entity, and `+0x2E` is independently
+known to hold a float. Reading them as x, y, z rests on the console logging
+`x float, y float, z float` in exactly that place. Settled by: a running game,
+where a moving pod would make the numbers say it themselves.
+
+**Which of `0xF6`-`0xFF` is which console setup message.** The block is
+identified as the pod's mode machine and each handler's effect on the ROM's
+globals is written down, but the console's names - `COCKPIT_CONFIG_MSG`,
+`PLAYER_CONFIG`, `SHADOW_ROM` and the rest - cannot be attached to numbers from
+the receiving side alone. Settled by: the console's encoders, or a captured
+session.
 
 **The feet are `473`/`476` and `493`/`496`.** By elimination from the seven-id
 block the rest of each leg came from. The adjacency rule that decides every

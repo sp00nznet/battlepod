@@ -131,7 +131,9 @@ tap 0212300A hit 1
 tap 02123062 hit 1
 tap 021230C8 hit 1
 b9, D0
-47, D0"
+47, D0
+f6, D0
+a, D0"
 
 # Scenario 4b: the other direction on the Remote I/O link. Nothing had ever
 # driven that receiver, and the stick, throttle and pedals arrive on it. The
@@ -175,6 +177,11 @@ fi
 # Scenario 4i: the game's own message dispatch - a 71-entry jump table over
 # packet byte 0, opcodes 0xB9 to 0xFF, which is the range the pod also sends in.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213CF2C:7 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# Scenario 4j: ten of those opcodes, 0xF6 to 0xFF, share one arm, and that arm
+# is a second dispatch of its own over the same byte - the pod's configuration
+# and mode messages, which it only ever receives.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02104356:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
@@ -316,9 +323,24 @@ if [ -f "$OPSCON" ]; then
     check_at_least "file grammars recovered" 27
 fi
 
+# The two halves of the game protocol have to agree. The receiver is a 71-entry
+# jump table over packet byte 0; the senders are 45 call sites that each write
+# their own opcode into the front of the buffer. Every opcode the pod sends must
+# be one the table covers, and ROUTER_STATUS_MSG's shape - an 80-byte string
+# then a longword, in a 100-byte packet - has to come back out of the sender.
+if [ -f "$ROM" ]; then
+    echo
+    echo "== the game protocol =="
+    CHECKTEXT=$(python tools/netmsg.py "$ROM" --check 2>/dev/null)
+    check_at_least "call sites found" 45
+    check_at_least "opcodes the pod sends" 38
+    check_at_least "sent opcodes inside B9..FF" 38
+    check_at_least "C5 payload bytes" 100
+fi
+
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

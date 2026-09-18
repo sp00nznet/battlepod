@@ -75,6 +75,15 @@ decimal byte count for months. The code pushes `$674` against a `%x` format:
 **0x674 = 1,652 bytes**. Anything derived from a *printed* value rather than a
 decoded one deserves a second look.
 
+**The pod sends 38 opcodes, not 31, and the sender has 45 call sites, not
+43.** The first count took the nearest preceding `move.b #imm,(d16,A6)` as the
+opcode, which is right for most senders and silently wrong for the ones that
+write the opcode before a branch - it picks up some later byte instead. The fix
+is to require the displacement to be the *same* one the call's
+`pea (d16,A6)` pushes, so the store is provably into that buffer's first byte.
+A count that only ever moves upward when the method is tightened is a count
+that was measuring the method.
+
 **The SecCom block is not in the first 64K of the Amiga window.** Watching
 `0x40000000`-`0x4000FFFF` across a full run found only the handshake word, and a
 conclusion was drawn from that. The block is at `0x4007E000`.

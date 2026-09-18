@@ -817,10 +817,10 @@ There *is* a second dispatch. An earlier section here said there was not, and
 that was wrong twice over: it exists, and the messages it handles are not the
 opcodes `0x01`-`0x07` that were being looked for at all.
 
-It was found from the sending side. The packet sender at `0x021468A4` has **43
+It was found from the sending side. The packet sender at `0x021468A4` has **45
 call sites**, 28 of them in one module between `0x0213E332` and `0x0213EE92`,
 and each writes its own opcode into `buf[0]` first. Pulling those out gives
-**31 distinct opcodes the pod can send, from `0xBA` to `0xED`** - a range that
+**38 distinct opcodes the pod can send, from `0xB9` to `0xED`** - a range that
 has nothing to do with `0x01`-`0x07`. That said the game protocol lives
 somewhere else, and made it worth looking for the receiving half in the same
 neighbourhood.
@@ -930,8 +930,8 @@ and the kind switch runs `-2`, `-1`, `1`, `2`, **`3`**, `0xA`, `0xB0`, `0xB1`,
 
 **Opcodes `0xB9` to `0xFF`, of which 46 have their own handler**, the rest
 falling to a common exit. `0xF6`-`0xFF` share one. That range is the same one
-the pod *sends* in - 31 opcodes from `0xBA` to `0xED`, found earlier from its
-43 calls to the packet sender - so this is one symmetric protocol rather than
+the pod *sends* in - 38 opcodes from `0xB9` to `0xED`, found from its 45 calls
+to the packet sender - so this is one symmetric protocol rather than
 two, and the console's messages live in it.
 
 Confirmed by walking a packet into it: `--packet '30 ...'` reaches
@@ -940,6 +940,105 @@ Confirmed by walking a packet into it: `--packet '30 ...'` reaches
 Note this is **not** the dispatch at `0x0213A332` that reads byte `0x13`. Both
 exist and they are reached by different routes; the byte-0 table is the one a
 packet off the wire lands in.
+
+### Both halves of the protocol, and the shape of a packet
+
+The receiving table gives 71 opcodes; the sending side gives what goes in them.
+`tools/netmsg.py` reads both and puts them beside each other.
+
+**The senders.** `0x021468A4` has **45 call sites**. Each builds its packet in
+a stack buffer and writes its own opcode into the buffer's first byte before
+the call, as `move.b #$xx,(d16,A6)` - and the displacement is the same one the
+`pea (d16,A6)` at the call pushes, which is what makes the pairing safe rather
+than merely nearby. That gives **38 distinct opcodes, `0xB9` to `0xED`**, every
+one of them inside the `0xB9`-`0xFF` range the receiver's table covers.
+
+*(An earlier count here said 31 opcodes from `0xBA`. It was reading only the
+nearest preceding immediate byte store, which misses a sender whose opcode is
+written before a branch; matching the displacement against the call's buffer
+argument finds the rest.)*
+
+Putting the two sides together splits the vocabulary three ways:
+
+| | opcodes | what it means |
+|---|---|---|
+| **sent and received** | 29 | pod to pod - the simulation itself |
+| **received only** | `BE C4 C6 D3 E4 E5 EE` and `F6`-`FF` | commands the pod obeys |
+| **sent only** | `C5 C8 CE D0 D4 D5 D6 E2 E6` | reports the pod files |
+
+which is a useful thing to know before naming anything: a receive-only opcode
+comes from the operator console or the router, and a send-only one goes to
+them. `0xC6`'s handler runs the modem string `+++`, `0xC4`'s prints `Master
+router ready` / `Slave router ready`, `0xE5`'s prints `WELCOME %s` - all three
+receive-only, all three console-to-pod, exactly as that split predicts.
+
+**The shape of a packet.** The sender writes an 8-byte header - opcode,
+priority, and three 2-byte (net, node) addresses - and the body begins at
+`+0x08`. Most of the simulation messages open the same way:
+
+```
++00  b   opcode
++08  l   entity id          from the entity's own +0x06
++0C  l   entity +0x26       three consecutive longwords, carried by
++10  l   entity +0x2A       every state message that names an entity
++14  l   entity +0x2E
++18..    message-specific
+```
+
+The three longwords are **measured**; calling them a position is inference,
+from the console logging `x float, y float, z float` right after `thing` in
+every one of its entity messages, and from `+0x2E` already being known to hold
+a float. Beyond them each message draws a different set of fields out of the
+same structure - `0xE1` takes `+0xAA`, `+0xB2`, `+0xB6`, `+0xAE`; `0xD2` takes
+sixteen fields from `+0xC4` to `+0x120`; `0xDD` takes nineteen from `+0x2A4` to
+`+0x2E0` - so the entity structure can be mapped out from the messages that
+report it, which is the first purchase anything has had on it.
+
+**`0xC5` is `ROUTER_STATUS_MSG`, now by layout and not only by description.**
+Its sender is a 100-byte packet:
+
+```
+02145E24  pea    $50.w
+02145E28  move.l ($8,A6), -(A7)
+02145E2C  pea    (-$5c,A6)        buffer+8
+02145E30  jsr    $215d9f4.l       strncpy
+02145E36  move.b #$c5, (-$64,A6)  buffer+0
+...       move.l ($c,A6), (-$c,A6)   buffer+0x58
+```
+
+an 80-byte string at `+0x08` and a longword at `+0x58`, which is
+`status string, status code long` written out. No other message the pod sends
+has that shape.
+
+### `0xF6`-`0xFF`: a dispatch inside the dispatch
+
+The ten opcodes that share an arm share it because the arm is **another
+dispatch over the same byte**:
+
+```
+02104356  subi.w #$f6, D0
+0210435A  cmpi.w #$a, D0        ten entries
+0210435E  bcc    $210436a
+02104366  jmp    (PC,D0.w)      the table, at 02104342
+```
+
+All ten are receive-only, and all ten write the pod's own configuration rather
+than anything in the world:
+
+| | |
+|---|---|
+| `FF` | takes a word from the packet at `+2` into `0x0218AEF8` |
+| `FE` `FD` | save the current mode byte `0x0215DCEE` into `0x0218AEFA`, set mode 5, then write `0x0D` (`FE`) or `0x0F` (`FD`) into three mode bytes and `0x0C` into a fourth |
+| `FC` | the largest handler in the block, 0x77A bytes, four calls to `0x02146D20` |
+| `FB` | reads a mode byte and, on one arm, copies two longwords from the packet into `0x0215DD2A`/`0x0215DD2E` |
+| `F6` | a longword from the packet at `+2` into `0x0215DCFE` |
+| `F7` | a longword from the packet at `+2`, converted to float, into `0x0215DD0E` |
+
+So this is the pod's mode machine, driven from outside - which is what the
+console's setup messages are for, and it is where `COCKPIT_CONFIG_MSG`,
+`PLAYER_CONFIG`, `SHADOW_ROM` and their neighbours have to land. Which is
+which is not settled; that needs the console to say what it puts in a packet,
+not just what it logs.
 
 ### A game message, followed all the way in
 
@@ -1195,7 +1294,7 @@ first — a reverse-engineering job in its own right, on an undocumented format.
 
 ### The first opcode with a name: `0xC5`
 
-Putting names to the 31 opcodes the pod sends means reading the other end, and
+Putting names to the 38 opcodes the pod sends means reading the other end, and
 one of them can be had without any of that work.
 
 `0x02145E1C` builds a message and the shape is distinctive:
