@@ -211,6 +211,19 @@ if [ -f "$TI_RES" ]; then
     check_at_least "vertices decoded in python" 5578
     check_at_least "vertices decoded in C" 5578
 
+    # The release's own scenario files, read with the grammar the operator
+    # console parses them by. Every object names a model resource, so a whole
+    # map is a list of things this project already decodes and draws.
+    SCN="${VWE_GAME_FILES}/Scenarios/BadLands-16"
+    if [ -f "$SCN" ]; then
+        echo
+        echo "== a whole map =="
+        CHECKTEXT=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --scene "$SCN" --steps 1 --top 0 2>/dev/null)
+        check_at_least "scenario objects placed" 882
+        check_at_least "scenario models used" 19
+        check_at_least "scenario models decoded" 16
+    fi
+
     echo
     echo "== whole mechs =="
     CHECKTEXT=$(python tools/render.py "$TI_RES" --mechs 2>/dev/null)

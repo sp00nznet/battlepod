@@ -29,6 +29,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Whole maps, drawn.** The release ships **eleven scenario files in plain
+  text**, and the grammar to read them came out of the operator console, which
+  parses them with `scanf`: `GROUND_CLASS %d %d %f %f %f %f %f %d %d` and its
+  eight-field neighbour. The columns are a class, a **model resource id**, a
+  position, a heading in degrees and a scale - so a scenario is a list of
+  models to place, and every one of them is a resource this project already
+  decodes. **BadLands-16 places 882 objects using 19 models**, and
+  `battlepod --scene` draws 9,308 polygons of it.
+- `src/scene.h` reads the file; `ras_draw_at` places each object by its own
+  heading and scale, so one decoded model is drawn hundreds of times rather
+  than merged into a mesh the size of a map - which is also what the display
+  list does. Three new checkpoints; the harness is at **72/72**.
+- **It needs no game running**, which is why it was worth doing: it is the
+  first thing here to draw a whole world rather than one object. Three of
+  BadLands' nineteen models decode to no geometry, which is recorded and not
+  yet explained.
 - **The console's log strings are not statically referenced, and that is now
   measured rather than suspected.** Six ways of reaching them were tried and
   all came back empty: all **4,256** code fixups target `DATA` `0x0072`-

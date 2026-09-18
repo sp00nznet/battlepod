@@ -22,6 +22,7 @@
 #include "mesh.h"
 #include "raster.h"
 #include "rig.h"
+#include "scene.h"
 
 /* ---------------------------------------------------------------- memory */
 
@@ -669,6 +670,111 @@ static void rig_all(void)
 	printf("mech polygons in C          : %ld\n", polys);
 }
 
+
+/* ---------------------------------------------------------------- scenes */
+
+static struct scene g_scene;
+static const char *g_scenefile;
+static const char *g_sceneout;
+static struct mesh g_kindmesh[SCENE_KINDS];
+static uint8_t g_kindok[SCENE_KINDS];
+
+/* Decode each distinct model a map uses, once. A scenario places the same
+ * handful of resources hundreds of times, so this is a small cache rather than
+ * a mesh per object. */
+static int scene_prepare(void)
+{
+	int i, ok = 0;
+
+	for (i = 0; i < g_scene.nkind; i++) {
+		uint32_t len = mesh_find(g_mesh_base, 0x200000u, (uint32_t)g_scene.kind[i],
+					 g_meshbuf, sizeof g_meshbuf);
+		if (!len) continue;
+		mesh_run(&g_kindmesh[i], g_meshbuf, len);
+		g_kindok[i] = g_kindmesh[i].npoly > 0;
+		ok += g_kindok[i];
+	}
+	return ok;
+}
+
+static int scene_kind(int model)
+{
+	int i;
+
+	for (i = 0; i < g_scene.nkind; i++)
+		if (g_scene.kind[i] == model) return i;
+	return -1;
+}
+
+static struct raster g_sceneframe;
+
+/* Draw the whole map. Each object carries its own position, heading and scale,
+ * so one decoded model is drawn many times - which is what the display list
+ * does too, and why the rasteriser takes a placement rather than a merged
+ * mesh. */
+static int scene_draw(float turn, float pitch, float zoom)
+{
+	struct ras_cam cam;
+	float floor;
+	int i, drawn = 0;
+
+	{
+		/* Pad the frame by the biggest model the map uses, at its
+		 * largest scale, so nothing at the edge is cut and a one-object
+		 * scene still has somewhere to stand. */
+		float pad = 0.0f;
+		int i;
+		for (i = 0; i < g_scene.n; i++) {
+			int k = scene_kind(g_scene.obj[i].model);
+			float r;
+			if (k < 0 || !g_kindok[k]) continue;
+			r = g_kindmesh[k].box[6] * g_scene.obj[i].at.scale;
+			if (r > pad) pad = r;
+		}
+		scene_frame(&g_scene, &cam, &floor, pad);
+	}
+	cam.turn = turn;
+	cam.pitch = pitch;
+	cam.dist *= zoom;
+	ras_background(&g_sceneframe, (int)(RAS_H * 0.52f));
+	for (i = 0; i < g_scene.n; i++) {
+		int k = scene_kind(g_scene.obj[i].model);
+		if (k < 0 || !g_kindok[k]) continue;
+		drawn += ras_draw_at(&g_sceneframe, &g_kindmesh[k], &cam,
+				     &g_scene.obj[i].at, floor, 0);
+	}
+	return drawn;
+}
+
+static void scene_report(void)
+{
+	int i, drew;
+
+	if (!scene_load(&g_scene, g_scenefile)) {
+		printf("\ncannot read scenario %s\n", g_scenefile);
+		return;
+	}
+	drew = scene_prepare();
+	printf("\nscenario %s\n", g_scenefile);
+	printf("scenario objects placed  : %d\n", g_scene.n);
+	printf("scenario models used     : %d\n", g_scene.nkind);
+	printf("scenario models decoded  : %d\n", drew);
+	printf("  models used:");
+	for (i = 0; i < g_scene.nkind; i++)
+		printf(" %d%s", g_scene.kind[i], g_kindok[i] ? "" : "(no geometry)");
+	printf("\n");
+
+	if (g_sceneout) {
+		int poly = scene_draw(0.7f, -0.28f, 0.9f);
+		FILE *f = fopen(g_sceneout, "wb");
+		if (f) {
+			fwrite(g_sceneframe.px, 1, sizeof g_sceneframe.px, f);
+			fclose(f);
+			printf("  %s: %dx%d, %d polygons drawn\n",
+			       g_sceneout, RAS_W, RAS_H, poly);
+		}
+	}
+}
 
 /* ------------------------------------------------------------ live windows */
 
@@ -1949,6 +2055,8 @@ int main(int argc, char **argv)
 			g_peeks++;
 		}
 		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
+		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
+		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
 		else if (!strcmp(a, "--rig") && i + 1 < argc)
 			g_rig_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 #ifdef BATTLEPOD_SDL
@@ -2183,6 +2291,7 @@ int main(int argc, char **argv)
 	}
 
 	if (g_peeks) peek_report();
+	if (g_scenefile) scene_report();
 	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();

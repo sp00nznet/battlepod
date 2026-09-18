@@ -169,15 +169,37 @@ static void ras_frame_on(const struct mesh *m, struct ras_cam *cam, float zoom, 
 	*floor = lo[1];
 }
 
-static int ras_draw(struct raster *f, const struct mesh *m, const struct ras_cam *cam,
-		    float floor, int shadow)
+/* Where an object stands in the world: a position, a heading about the
+ * vertical, and a scale. A scenario file gives all three per object, so one
+ * model resource is drawn many times in one scene. */
+struct ras_place {
+	float x, y, z;			/* world position; z is height */
+	float heading;			/* radians about the vertical */
+	float scale;
+};
+
+static const struct ras_place RAS_HERE = { 0, 0, 0, 0, 1.0f };
+
+/* Model space has Y up; the world puts its ground plane in x/y and height in
+ * z, which is how the scenario files are written. This is the one place the
+ * two conventions meet. */
+static void ras_to_world(const struct ras_place *p, float mx, float my, float mz,
+			 float *o)
+{
+	float c = cosf(p->heading), s = sinf(p->heading);
+
+	o[0] = p->x + p->scale * (mx * c - mz * s);
+	o[1] = p->z + p->scale * my;
+	o[2] = p->y + p->scale * (mx * s + mz * c);
+}
+
+/* One object into an already-prepared frame. Split out of ras_draw so a scene
+ * can put hundreds of them in without a merged mesh the size of a map. */
+static int ras_draw_at(struct raster *f, const struct mesh *m, const struct ras_cam *cam,
+		       const struct ras_place *at, float floor, int shadow)
 {
 	int i, k, drawn = 0;
 
-	ras_background(f, (int)(RAS_H * 0.52f));
-
-	/* The footage puts a hard dark shadow under every mech: flatten the model
-	 * onto the ground plane and draw that first, so the model paints over it. */
 	for (k = shadow ? 0 : 1; k < 2; k++) {
 		for (i = 0; i < m->npoly; i++) {
 			const struct mesh_poly *p = &m->poly[i];
@@ -187,8 +209,10 @@ static int ras_draw(struct raster *f, const struct mesh *m, const struct ras_cam
 
 			for (j = 0; j < p->n; j++) {
 				int v = p->v[j];
+				float w[3];
 				if (v >= MESH_VERTS || !m->vset[v]) { ok = 0; break; }
-				ras_view(cam, m->vx[v], k == 0 ? floor : m->vy[v], m->vz[v], cpt[j]);
+				ras_to_world(at, m->vx[v], m->vy[v], m->vz[v], w);
+				ras_view(cam, w[0], k == 0 ? floor : w[1], w[2], cpt[j]);
 				if (!ras_project(cpt[j], scr[j])) { ok = 0; break; }
 			}
 			if (!ok || p->n < 3) continue;
@@ -207,12 +231,9 @@ static int ras_draw(struct raster *f, const struct mesh *m, const struct ras_cam
 				len = sqrtf(nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2]);
 				if (len < 1e-9f) continue;
 				for (j = 0; j < 3; j++) nrm[j] /= len;
-				/* Backface cull on the sign of the dot product, which is
-				 * what the pod's own renderer does. */
 				facing = nrm[0] * cpt[0][0] + nrm[1] * cpt[0][1] + nrm[2] * cpt[0][2];
-				if (facing > 0) {
+				if (facing > 0)
 					for (j = 0; j < 3; j++) nrm[j] = -nrm[j];
-				}
 				{
 					int mi = p->mat < MESH_MATS ? p->mat : 0;
 					float r = m->mset[mi] ? m->mr[mi] : 0.7f;
@@ -227,6 +248,13 @@ static int ras_draw(struct raster *f, const struct mesh *m, const struct ras_cam
 		}
 	}
 	return drawn;
+}
+
+static int ras_draw(struct raster *f, const struct mesh *m, const struct ras_cam *cam,
+		    float floor, int shadow)
+{
+	ras_background(f, (int)(RAS_H * 0.52f));
+	return ras_draw_at(f, m, cam, &RAS_HERE, floor, shadow);
 }
 
 #endif /* BATTLEPOD_RASTER_H */

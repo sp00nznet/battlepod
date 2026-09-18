@@ -644,6 +644,45 @@ bounding boxes reached from the other direction. With no pose to supply, every
 node composes to identity and 516's 1035 polygons pile up at the origin. That
 is not our tooling failing; it is what the data says on its own.
 
+### Whole maps, from the release's own scenario files
+
+`Console Files/Game Files/Scenarios` holds eleven of them - BadLands, Nazca,
+Twycross, Outreach, Arena and the rest - and they are **plain text**. The
+grammar is not guessed: it came out of the operator console, which parses them
+with `scanf` and logs what each line becomes, and `tools/opscon.py --formats`
+recovers both:
+
+```
+GROUND_CLASS    %d %d %f %f %f %f %f %d %d
+TERRAIN_CLASS   %d %d %f %f %f %f %f %d
+```
+
+Read against the console's own `thing, class, shape, x, y, z` log line, the
+columns are a class, a **model resource id**, a position, a heading in degrees
+and a scale. The id column is what makes this worth having: it names a type 1
+resource, which this project already decodes and draws. **A scenario is a list
+of models to place.**
+
+```
+scenario objects placed  : 882      BadLands-16, the largest
+scenario models used     : 19
+scenario models decoded  : 16
+```
+
+`battlepod --scene FILE --scene-out FILE.rgb` draws the lot - 9,308 polygons
+for BadLands - with `src/scene.h` reading the file and `ras_draw_at` placing
+each object by its own heading and scale. One decoded model is drawn hundreds
+of times, which is what the display list does too, and is why the rasteriser
+takes a placement rather than a merged mesh the size of a map.
+
+The maps are thousands of units across where a mech is nine tall, so from above
+the objects are small: what the picture shows is the shape of the terrain
+rather than any one building. Three of the nineteen models BadLands names
+decode to no geometry, which is not yet explained.
+
+This needs no game running, which is why it was worth doing now: it is the
+first thing in this project to draw a whole world rather than one object.
+
 ## Drawing it
 
 `tools/render.py` takes a model and draws it: z-buffered flat-shaded triangles,

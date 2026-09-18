@@ -313,6 +313,14 @@ python tools/vehicles.py "$GF/Cockpit Software/ROM3_0" --check
 `--check` decodes the three loadouts that a spreadsheet in the release also
 writes out in English, and compares them weapon for weapon.
 
+**Draw a whole map.** The release's scenario files place models by id, and the
+grammar came from the operator console that parses them:
+
+```
+./build/battlepod.exe "$GF/Full_Load_3_0" --scene "$GF/Scenarios/BadLands-16" --scene-out out/map.rgb
+./build/view.exe out/map.rgb
+```
+
 **Run the whole cockpit.** `make cockpit` builds the emulator with its windows
 - lamps, displays, bar graphs and the main view - in one process, drawing its
 own geometry in C as the firmware runs:
