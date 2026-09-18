@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod's identity is something it is told, not something it works out.**
+  `0x0218AEB0` is this cockpit's `(net, node)` and `0x02179D32` the game's, and
+  across a whole boot they are read **273,621 times and written zero times**.
+  The startup clears the bss they live in and they stay zero until the operator
+  console puts an address there - which is why `Net_Configuration` carries a
+  node number per cockpit.
+- **While they are zero, no network packet can reach the game path at all.**
+  The receive at `0x02146004` returns -1 on its first comparison, before
+  touching a device, a buffer or a byte. Supplying an address once the pod is
+  running gets past it and the receive body then runs every time round the main
+  loop. Two new checkpoints; the harness is at **69/69**.
+- It then sits in **state 0 of an eight-state machine** at `0x0239DD9A` and
+  touches no hardware - no new address appears in the unmapped log - so the
+  received data is software-buffered rather than read from the ARCNET
+  controller at that point. States 1 to 7 are the next question.
+- **`--peek ADDR:N`** reads memory when a run ends, which is how the zeros were
+  found, and **`--set-at PC ADDR=HEX`** writes a longword the first time
+  execution reaches an address - the only way to supply configuration that the
+  firmware's own startup would otherwise wipe.
 - **Nothing dispatches a game message at receive time, and that was the wrong
   question.** The dispatch at `0x02122FBC` discards opcodes `0x01`-`0x07`, so
   the plan was to find the other dispatch that handles them. There is no other

@@ -218,6 +218,27 @@ static char *unescape(const char *s)
 
 static struct rio_panel g_panel;
 static const char *g_riodump;
+/* Look at memory when the run ends. --watch says what touched an address and
+ * --tap says what the registers held somewhere; this just reads, which is what
+ * checking a configuration byte wants. */
+#define PEEKS 8
+static uint32_t g_peek[PEEKS], g_peekn[PEEKS];
+static int g_peeks;
+
+static void peek_report(void)
+{
+	int i;
+	uint32_t j;
+
+	for (i = 0; i < g_peeks; i++) {
+		printf("peek %08X:", g_peek[i]);
+		for (j = 0; j < g_peekn[i]; j++) {
+			if (j % 16 == 0) printf("\n  %04X ", j);
+			printf(" %02X", (unsigned)m68k_read_memory_8(g_peek[i] + j));
+		}
+		printf("\n");
+	}
+}
 static const char *g_liveframes;
 
 static void rio_report(void)
@@ -263,6 +284,15 @@ static void rio_dump(const char *path)
  * at the door when it goes out. */
 
 #define TAPS 8
+/* Write a longword the first time execution reaches an address. The pod's
+ * own network identity is cleared by the firmware's startup and then never
+ * written again - it is configuration, and it arrives from outside - so
+ * supplying it before the run is useless and supplying it after is what a
+ * configured pod looks like. */
+static uint32_t g_setat_pc[TAPS], g_setat_addr[TAPS], g_setat_val[TAPS];
+static uint8_t g_setat_done[TAPS];
+static int g_setats;
+
 static uint32_t g_tap[TAPS];
 static uint32_t g_taphit[TAPS];
 static int g_taps;
@@ -272,6 +302,14 @@ static int32_t  g_tapoff;
 static void tap_check(uint32_t pc)
 {
 	int i;
+
+	for (i = 0; i < g_setats; i++) {
+		if (pc != g_setat_pc[i] || g_setat_done[i]) continue;
+		m68k_write_memory_32(g_setat_addr[i], g_setat_val[i]);
+		g_setat_done[i] = 1;
+		printf("set %08X = %08X at pc %08X\n",
+		       g_setat_addr[i], g_setat_val[i], pc);
+	}
 
 	for (i = 0; i < g_taps; i++) {
 		if (pc != g_tap[i]) continue;
@@ -1904,6 +1942,12 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--mesh") && i + 1 < argc)
 			g_mesh_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 		else if (!strcmp(a, "--mesh-all")) g_mesh_all = 1;
+		else if (!strcmp(a, "--peek") && i + 1 < argc && g_peeks < PEEKS) {
+			char *c;
+			g_peek[g_peeks] = (uint32_t)strtoul(argv[++i], &c, 16);
+			g_peekn[g_peeks] = (*c == ':') ? (uint32_t)strtoul(c + 1, NULL, 0) : 16;
+			g_peeks++;
+		}
 		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
 		else if (!strcmp(a, "--rig") && i + 1 < argc)
 			g_rig_id = (uint32_t)strtoul(argv[++i], NULL, 0);
@@ -1913,6 +1957,13 @@ int main(int argc, char **argv)
 			if (i + 1 < argc && argv[i + 1][0] != '-') g_liveframes = argv[++i];
 		}
 #endif
+		else if (!strcmp(a, "--set-at") && i + 2 < argc && g_setats < TAPS) {
+			char *c;
+			g_setat_pc[g_setats] = (uint32_t)strtoul(argv[++i], NULL, 16);
+			g_setat_addr[g_setats] = (uint32_t)strtoul(argv[++i], &c, 16);
+			g_setat_val[g_setats] = (*c == '=') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0;
+			g_setats++;
+		}
 		else if (!strcmp(a, "--tap") && i + 1 < argc && g_taps < TAPS)
 			g_tap[g_taps++] = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--tap-dump") && i + 2 < argc) {
@@ -2050,7 +2101,7 @@ int main(int argc, char **argv)
 			if (slot == MON_SLOT_RECV) mon_recv_polled();
 		}
 
-		if (g_taps) tap_check(pc);
+		if (g_taps || g_setats) tap_check(pc);
 
 #ifdef BATTLEPOD_SDL
 		if (g_live && step % LIVE_EVERY == 0) {
@@ -2131,6 +2182,7 @@ int main(int argc, char **argv)
 			       g_placed[i].at[1], g_placed[i].at[2]);
 	}
 
+	if (g_peeks) peek_report();
 	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();

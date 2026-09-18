@@ -832,6 +832,59 @@ it names where to look when a game does start, and it says that writing the
 operator console does not need a second dispatch to be found first.
 
 
+### The pod's identity is something it is told, not something it works out
+
+`0x0218AEB0` holds this cockpit's address as a `(net, node)` byte pair, and
+`0x02179D32` holds the game's. Watching them across a whole boot:
+
+```
+  address    size     reads   writes  first pc
+  0218AEB0   b       273621        0  02122B50
+  0218AEB1   b       273621        0  02122B5E
+```
+
+**Two hundred and seventy-three thousand reads and not one write.** The
+firmware never sets them; its startup clears the bss they live in and they stay
+zero until something outside puts an address there. That something is the
+operator console, which is why `Net_Configuration` carries a node number per
+cockpit and why `COCKPIT_CONFIG_MSG` exists.
+
+While they are zero, nothing can happen. The network receive at `0x02146004`
+opens with
+
+```
+if (peer == game identity)      return -1      ; both zero: taken
+if (mine != peer)               return -1
+```
+
+so an unconfigured pod returns "nothing received" before touching a device, a
+buffer or a byte. Every network packet in the game path is behind that gate.
+
+Supplying an address once the pod is running - which is what a configured
+cockpit looks like - gets past it:
+
+```
+--set-at 02122D9C 0218AEB0=01020000 --set-at 02122D9C 0218AEB4=00000102 \
+--tap 0214604E
+
+  set 0218AEB0 = 01020000 at pc 02122D9C
+  tap 0214604E hit 1
+  tap 0214604E hit 2
+```
+
+The receive body now runs every time round the main loop. What it does there is
+a jump table on a state at `0x0239DD9A`, eight states wide, and the state is
+**0** - where it touches no hardware at all. No new address appears in the
+unmapped log, so the received data is software-buffered rather than read from
+the ARCNET controller at this point, and states 1 to 7 are the next question.
+
+Two small tools came out of this and are worth keeping. `--peek ADDR:N` reads
+memory when the run ends, which is how the zeros were found; `--set-at PC
+ADDR=HEX` writes a longword the first time execution reaches an address, which
+is the only way to supply configuration that the firmware's own startup would
+otherwise wipe.
+
+
 ### The protocol, from the operator console's own log
 
 The release carries a `Console Log` from a working BattleTech Center, running
