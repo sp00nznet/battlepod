@@ -58,6 +58,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A packet injected from outside reaches the game's event queue** - the first
+  time anything has. The path: a byte-0 opcode the low-level dispatch does not
+  claim falls through to the router at `0x0212300A`, passes a second identity
+  filter at `0x02123062` which accepts **two** addresses (`0x02179D32` and
+  `0x0218AEB2`), and is handed to `Post_Event` at `0x021230C8` as an **event of
+  kind 3**. Three taps, three hits. Three new checkpoints; the harness is at
+  **86/86**.
+- **This corrects "the low opcodes are discarded, so game messages cannot get
+  in".** They are discarded, but a game message does not use one - byte 0 is a
+  low-level type and the game's own opcode is at byte `0x13`. The dispatch knows
+  only `0`, `1`-`7`, `0x20`, `0x21`, `0xC7`, `0xE4`; everything else is routed.
+- What still does not happen is the draining: `0x02139E64` is never reached
+  during a boot, so the event sits in the queue. **The message pump is part of a
+  mission, not of coming up.**
+- Also corrected: `--packet` takes the message **body**, not a framed packet -
+  the stub writes the four-byte header itself. An hour went into a packet whose
+  opcode was reading as `0` because of that.
 - **The SecCom block is a 32-slot message ring, and the arithmetic closes it.**
   The enqueue at `0x0212C1EC` gives up the whole layout: a write index at
   `+0x12A`, a read index at `+0x12E`, `& 0x1F` for 32 slots, and a slot stride

@@ -898,6 +898,44 @@ opcode means - the console's own log gives names and fields for the messages it
 sends, and those names now have a numbering to be matched against.
 
 
+### A game message, followed all the way in
+
+An earlier reading here said the low opcodes are discarded and left it there.
+That was incomplete in a way that mattered: **a game message does not use one of
+them.** Byte 0 carries a low-level type, and anything the dispatch at
+`0x02122FBC` does not claim - it knows only `0`, `1`-`7`, `0x20`, `0x21`,
+`0xC7`, `0xE4` - falls through to the router at `0x0212300A`. What the router
+does not consume reaches a second identity filter at `0x02123062`:
+
+```
+if buf[6..7] == [$2179D32..33]   ours, the game identity
+if buf[6..7] == [$218AEB2..B3]   ours as well, a second address
+else                             forward it
+```
+
+and anything ours is handed to `Post_Event` at `0x021230C8` as an **event of
+kind 3**.
+
+That path has now been walked with a real packet. Handing the pod a body whose
+first byte is `0x30` - claimed by nothing - and whose byte `0x13` is a game
+opcode gets all three taps:
+
+```
+--packet '30 00 ... 00 21'
+
+  tap 0212300A hit 1      the router fall-through
+  tap 02123062 hit 1      the identity filter
+  tap 021230C8 hit 1      Post_Event, kind 3
+```
+
+**This is the first time anything injected from outside has reached the game's
+event queue**, and it is the inbound half of what an operator console does.
+
+What does not happen is the other half: the event sits in the queue because the
+**message pump does not run**. `0x02139E64`, the dispatch that reads byte `0x13`
+and turns it into an event of kind `0xB1`, is never reached during a boot. The
+loop that drains the queue is part of a mission, not of coming up.
+
 ### Two receive paths, and which is which
 
 The question left over from the identity reply was where opcodes `0x01`-`0x07`
