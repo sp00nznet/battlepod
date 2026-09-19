@@ -150,6 +150,11 @@ tap 021492D8 hit 1
 02139084  move.l
 JJoint 1 Angle 0.000000
 Type 0, Color 0, Flags 7
+tap 0214465C hit 1
+tap 02144724 hit 1
+  0010  00 00 00 01 FF FF FF FF 00 00 00 08 00 00 00 0A
+  0020  00 00 00 00 00 00 00 00 00 00 01 DF 00 00 01 67
+  0030  00 00 01 E0 00 00 01 68 00 00 00 EF 00 00 00 B3
 Course 1.00000, Speed 90.00000, X 100.00000, Y 200.00000, Z 5.40000
 QProfile Cleared
 02139328  subq.l
@@ -359,6 +364,11 @@ done
 # cockpit's own code. Speed comes back scaled by 360, which is what the dump
 # does to +0x114, so 0.25 prints as 90.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --packet 'EC 00 00 00 00 00 00 00 00 00 00 00 42 C8 00 00 43 48 00 00 40 AC CC CD 3F 80 00 00 00 00 00 00 3E 80 00 00 00 00 00 00'     --duart-in 'd' --steps 90000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4x: the pod builds a frame. With entity 0 a Mech in the thirty-slot
+# table, both display-list emitters run and the buffer holds a 480x360 viewport
+# and a draw-object record. The taps are the evidence that it draws at all.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --tap 0214465C --tap 02144724 --peek 0218AF14:96     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

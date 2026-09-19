@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod does build a frame.** With entity 0 a `Mech` in the thirty-slot
+  table, both display-list emitters run and the buffer holds a **480x360
+  viewport** and a **type 1 draw-object with one item and an identity
+  transform**. The cockpit is drawing; nothing was reading it.
+- **The display list is double-buffered.** `0x0218AF04` is a descriptor, not
+  the list: two buffer pointers at `+0x00` and `+0x04` (`0x0218AF14` and
+  `0x0218B024`), the 9000-byte size at `+0x08`, a cursor at `+0x0C`. The first
+  render posts the buffer the emitters were *not* filling, which is why the
+  list reaching the stub decoded as a type 0 record and a terminator.
+- **Only one frame is ever rendered.** In 900 million instructions the stub
+  sees exactly one command 6: the game builds the next frame and waits, because
+  the stub acknowledges commands but never *completes* a render.
+  `Async_Render` is `0x0214D302`.
+- Five more checkpoints. **163/163.**
+
 - **A mech driven from the wire, reported by the pod.** Make entity 0 a `Mech`,
   send it an `0xEC` movement packet, type `d` at the in-game console:
 

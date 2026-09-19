@@ -2531,6 +2531,53 @@ So the 68020 hands the renderer a **transform matrix**, not transformed
 vertices. The TMS34082 does the transform, which is why the coprocessor is on
 that board at all.
 
+### The pod does build a frame
+
+With entity 0 a `Mech` in the thirty-slot table, both display-list emitters
+run:
+
+```
+tap 0214465C hit 1     emit type 8, viewport
+tap 02144724 hit 1     emit type 1, draw object
+tap 0213A53A hit 1     the main loop's render call
+tap 021444E8 hit 1     the list crosses into the renderer
+tap 0214465C hit 2     and the next frame starts being built
+```
+
+and the buffer holds exactly what the format says it should:
+
+```
+0218AF14  00000048              count: 72 longwords
+0218AF18  00000000 00000002 00000002 00000001    a type 0 record
+0218AF28  FFFFFFFF              terminator
+0218AF2C  00000008 0000000A     type 8, viewport, 10 longwords
+0218AF34  00000000 00000000     x0, y0
+0218AF3C  000001DF 00000167     x1 = 479, y1 = 359
+0218AF44  000001E0 00000168     width 480, height 360
+0218AF4C  000000EF 000000B3     centre 239, 179
+0218AF5C  00000001 00000028     type 1, draw object, 40 longwords = 7n+33, n=1
+0218AF64  3F800000 00000000 ...  the identity matrix
+```
+
+**480 x 360, one object, an identity transform.** The cockpit is drawing.
+
+Two things stand between that and a picture.
+
+**The list is double-buffered.** `0x0218AF04` is a descriptor, not the list:
+`+0x00` and `+0x04` are two buffer pointers, `0x0218AF14` and `0x0218B024`,
+`+0x08` is the 9000-byte size that command 2 allocated, and `+0x0C` is a
+cursor. The first render posts the buffer the emitters were *not* filling,
+which is why the list that reaches the renderer stub decodes as a type 0
+record and a terminator with the real frame sitting after it.
+
+**Only one frame is ever rendered.** In 900 million instructions the stub sees
+exactly one command 6. The game builds the next frame and then waits, because
+nothing tells it the last one finished - the stub acknowledges commands but
+never completes a render. `Async_Render` itself is `0x0214D302`.
+
+So the next move is not to decode anything. It is to make the renderer stub
+**finish a frame**, and then read the list it is handed.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and
