@@ -145,6 +145,10 @@ tap 021492D8 hit 1
 'TI_FPUPC         0x%x'
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
 0211E0D8  cmpi.l
+02106CC6  cmpi.l
+0211D62C  cmpi.l
+02150BA0  cmpi.l
+02150CF6  cmpi.l
 0211DC80  pea    'Mech'
 0211DCCC  pea    'Camship'
 0211DDFE  pea    'Hovercraft'
@@ -262,6 +266,11 @@ fi
 # 0 to 18, and six of its arms push a name before they build anything, so the
 # numbering comes out of the ROM rather than out of a guess.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211E0D8:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# Create_Thing is one of seven sites with the same five-instruction class
+# switch; the other six are here so a change to any of them shows up.
+for a in 02106CC6 02106E08 0211D62C 0211D7F0 02150BA0 02150CF6; do
+    "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis "$a":5 --steps 1 --top 0         >> "$OUT" 2>&1 || true
+done
 if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211DC76:500 >> "$OUT" 2>&1 || true
 fi

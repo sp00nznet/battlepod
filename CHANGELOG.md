@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Seven class dispatchers, not one.** `Create_Thing`'s five-instruction class
+  switch appears identically at six more sites, all nineteen wide. Reading
+  every table gives a class-by-operation matrix: `1`, `8`-`12`, `17` and `18`
+  implement all seven; `2`-`6`, `14` and `15` implement the wide operations
+  only; **`0`, `7` and `13` implement nothing anywhere**, which fits `0` being
+  a free slot. So the entity system is class-polymorphic with nineteen slots
+  and at least seven virtual operations.
+- **Classes `4`, `5` and `15` are implemented elsewhere but rejected by
+  `Create_Thing`**, so something other than `Create_Thing` makes them.
+- Four more checkpoints, and the six new dispatch sites are now pinned so a
+  change to any of them shows. **133/133.**
+
 - **The class numbers, from the ROM's own create-thing dispatcher.** A dense
   switch over classes 0 to 18, six of whose arms push a name before they build
   anything: **1 `Mech`, 8 `Escape pod`, 9 `Camship`, 10 `Hovercraft`,

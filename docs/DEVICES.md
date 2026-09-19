@@ -1267,6 +1267,47 @@ treats class 8 and class 10 differently - an escape pod and a hovercraft - and
 19: `Mech`, `Camship`, `Hovercraft`, `VTV` and three that the creator does not
 build, including 19, which is past the end of this table altogether.
 
+### Seven class dispatchers, and a matrix
+
+`Create_Thing` is not the only operation that switches on the class. Six more
+sites carry the identical five-instruction shape:
+
+```
+0C80 00000013   cmpi.l #$13, D0     nineteen classes
+640A            bcc    +10          out of range: do nothing
+D040            add.w  D0, D0
+303B 00CE       move.w ($ce,PC,D0.w), D0
+4EFB 0000       jmp    (PC,D0.w)
+```
+
+at `0x02106CC6`, `0x02106E08`, `0x0211D62C`, `0x0211D7F0`, `0x02150BA0` and
+`0x02150CF6`. Reading each table gives which classes implement which
+operation:
+
+| classes implemented | sites |
+|---|---|
+| 1 2 3 4 5 6 8 9 10 11 12 14 15 17 18 | `02106CC6`, `0211D62C` |
+| 1 2 3 4 5 6 8 9 10 11 12 14 15 16 17 18 | `02150BA0` |
+| 1 2 3 6 8 9 10 11 12 14 16 17 18 | `0211E0D8` (`Create_Thing`) |
+| 1 8 9 10 11 12 17 18 | `02106E08`, `0211D7F0` |
+| 1 8 9 10 11 12 16 17 18 | `02150CF6` |
+
+So the entity system is **class-polymorphic with nineteen slots and at least
+seven virtual operations**, and the shape of the matrix is informative on its
+own: `1`, `8`-`12`, `17` and `18` implement everything, which is the set that
+includes every named class except `Copter`; `2`-`6`, `14` and `15` implement
+the wide operations but not the narrow ones; and **`0`, `7` and `13` implement
+nothing anywhere**, which fits `0` being a free slot.
+
+Three classes - `4`, `5` and `15` - are implemented by other dispatchers but
+**rejected by `Create_Thing`**, so something other than `Create_Thing` makes
+them.
+
+And one loose end that is worth stating rather than smoothing over: `0xE8`,
+which removes a thing, has a teardown arm for **class 19**, reached by
+`subq.l #6` after 13. Every dispatcher here stops at 18. Nothing else read so
+far uses class 19.
+
 ### An ordering guard
 
 `0xD2` opens with one before it does anything:
