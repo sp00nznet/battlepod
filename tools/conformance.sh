@@ -309,6 +309,12 @@ if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         02139660:100 0213A146:40 >> "$OUT" 2>&1 || true
 fi
 
+# Scenario 4r: the command the README tells a reader to run. It had rotted -
+# it named an option the binary does not have - and nothing here was checking
+# it, because every other scenario is written against the flags rather than
+# against the documentation. Now the front page is a test.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --astub --set 40000100=1234567     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a

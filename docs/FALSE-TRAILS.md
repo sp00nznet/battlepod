@@ -161,6 +161,14 @@ heredoc becomes a real newline, which produces unterminated string literals in C
 and Python alike. It cost time on at least five occasions. Use the `Write` tool,
 or build the escape with `chr(92)`.
 
+**The quickstart in README.md did not run.** It told the reader to pass
+`--tty 11016`, an option the binary does not have and, as far as the history
+goes, never had under that name; the working flag is `--duart 11000`. Nobody
+noticed because everyone working on this had the real command in their shell
+history. **The conformance harness never touches the documented command**,
+which is exactly the gap that lets a front-page example rot. Checked by running
+it.
+
 **A checkpoint beginning with a dash was read by `grep` as an option.** Five
 checkpoints - `----- PERIODIC -----` and its siblings - failed while the text
 they were looking for sat in the output file. `grep -qF -- "$check"` fixes it.

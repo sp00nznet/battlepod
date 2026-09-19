@@ -52,6 +52,23 @@ flat-shaded triangles, cast shadows, a graded sky, at the pod's own 480x360.
 Terrain mesas, towers, buildings and mech parts all come out recognisable
 against period footage.
 
+**Phase 8 — the protocol, both ends.** The game's message table is a 71-entry
+jump on packet byte 0; the senders are 45 call sites that each write their own
+opcode. 38 opcodes sent, 46 handled, and where a message is both sent and
+received the two ends agree on 44 field pairs and disagree on none.
+
+**Phase 9 — the entity system.** A thousand-slot arena built on every boot, a
+thirty-slot table of participants, nineteen classes with six of them named from
+the ROM, and seven class-dispatched operations. A packet injected at the wire
+moves real fields; `tools/entityfields.py` maps which, by difference, on the
+running firmware. Eleven fields named, nine of them by the firmware's own
+printf labels.
+
+**Phase 10 — the pod reports on itself.** All four subsystem checks pass, the
+audio board is modelled rather than poked, and setting one flag gets the
+firmware's own frame-rate, culling, router and event statistics out of a booted
+cockpit. That is the measurement to beat.
+
 ## Next
 
 **The four draw opcodes.** `$200` puts down a single pixel at a vertex, `$220`
@@ -101,10 +118,19 @@ MadCat skeleton has no shoulder nodes at all, which it visibly needs, so at
 least one mount is supplied rather than stored. Animation beyond the rest pose
 is likewise per-frame from the 68020.
 
-**Starting a game.** Still the oldest blocker. The firmware consumes packets
-and the opcode dispatch is mapped, but the byte encoding of each message is
-not, and the sender — the Macintosh console — is behind THINK C's `CREL`/`DREL`
-relocations.
+**Starting a game.** Still the oldest blocker, but no longer for the reason
+this file used to give. It said the byte encoding of each message was unknown
+and that the sender — the Macintosh console — was behind THINK C's
+`CREL`/`DREL` relocations. **The encoding is mapped**, from the pod's own two
+ends rather than from the console: 44 field pairs agreeing, the entity
+structure behind them, and a way to measure any message's effect on the running
+firmware.
+
+What is actually missing is the *sequence*: which messages, in which order,
+take a booted pod from idle to a mission. The console's own log names them —
+`COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG`, `FINAL_LAUNCH_MSG` — and the `0xF6`-`0xFF`
+block is where they land, but which number is which is not settled, and neither
+is what a pod does when it gets them in the wrong order.
 
 **Two coprocessor operations.** Short-form `CEXEC` splits its command across
 two words, and one mode 3 routine is unidentified. The scanned TMS34082

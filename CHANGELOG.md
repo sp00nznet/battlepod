@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- ROADMAP.md brought up to date: phases 8, 9 and 10 written down, and the
+  quickstart in README.md is now a conformance scenario so the front page
+  cannot rot again.
+
 - **The whole entity map, across eight classes.** Sweeping 0, 1, 2, 9, 10, 12,
   16 and 18 and taking the union: **16 opcodes, 57 field slots, 467 of the
   1716 bytes** an entity occupies. Class 1, `Mech`, sees the most - 16 against
@@ -60,6 +64,18 @@ All notable changes to this project are documented here. The format follows
 - Nine more checkpoints. **142/142.**
 
 ### Fixed
+
+- **The quickstart in README.md did not run.** It told the reader to pass
+  `--tty 11016`, an option the binary does not have; the working flag is
+  `--duart 11000`. Nobody noticed because everyone working on this had the real
+  command in their shell history, and the harness was written against the flags
+  rather than against the documentation. Fixed, and the documented command is
+  now scenario 4r.
+- **ROADMAP.md's account of what blocks a game was out of date and flattering
+  in the wrong direction.** It said the byte encoding of each message was
+  unknown and that the sender was behind THINK C's relocations. The encoding is
+  mapped, from the pod's own two ends. What is actually missing is the
+  *sequence* - which messages, in which order, take a booted pod to a mission.
 
 - **A conformance checkpoint that begins with a dash was being read as a grep
   option**, so `----- PERIODIC -----` and its four siblings failed no matter

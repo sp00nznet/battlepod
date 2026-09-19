@@ -14,7 +14,7 @@ monitor can be driven interactively over the modelled serial port.
 ```
 make
 ./build/battlepod.exe "<release>/Console Files/Game Files/Full_Load_3_0" \
-    --tty 11016 --rstub 3FF00000 --poke 50001000=55000000 --set 40000100=1234567
+    --duart 11000 --rstub 3FF00000 --astub --set 40000100=1234567
 ```
 
 ---
