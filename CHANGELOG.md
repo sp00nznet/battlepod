@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The class numbers, from the ROM's own create-thing dispatcher.** A dense
+  switch over classes 0 to 18, six of whose arms push a name before they build
+  anything: **1 `Mech`, 8 `Escape pod`, 9 `Camship`, 10 `Hovercraft`,
+  12 `VTV`, 16 `Copter`.** Out of range logs
+  `Create unknown thing %d, class %d received`.
+- That joins the operator console's taxonomy to numbers: `MECH_CLASS` is 1,
+  `HOVER_CLASS` 10, `VTV_CLASS` 12, `COPTER_CLASS` 16 by name, and `POD_CLASS`
+  8 and `CAMERAMAN_CLASS` 9 on the strength of `Escape pod` and `Camship`
+  being the only candidates. Seven more arms build something without naming it,
+  and `EXPLOSION_CLASS` and `ANIMATOR_CLASS` have to be among them.
+- It also explains the switches already found in the handlers: `0xDF` treats
+  class 8 and 10 differently - an escape pod and a hovercraft - and `0xE8`'s
+  teardown arms for 1, 9, 10, 11, 12, 13 and 19 are `Mech`, `Camship`,
+  `Hovercraft`, `VTV` and three the creator does not build, including 19,
+  which is past the end of the table.
+- Eight more checkpoints. **129/129.**
+
 - **The renderer's fixed error area, named by the ROM.** `TI ERROR!` dumps
   fifteen labelled longwords from `0x3FFFE164`: `TI_RoutineID`,
   `TI_ErrorNumber`, `TI_ProfileSP`, `TI_FPUStatus`, `TI_FPUPC`,

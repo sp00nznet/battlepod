@@ -144,6 +144,14 @@ tap 021492D8 hit 1
 'TI_ErrorNumber   0x%x'
 'TI_FPUPC         0x%x'
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
+0211E0D8  cmpi.l
+0211DC80  pea    'Mech'
+0211DCCC  pea    'Camship'
+0211DDFE  pea    'Hovercraft'
+0211DE5A  pea    'VTV'
+0211DEA6  pea    'Copter'
+0211E044  pea    'Escape pod'
+'Create unknown thing %d, class %d received'
 02138CE2  move.l
 02139B4E  move.l
 02122184  jsr
@@ -248,6 +256,14 @@ fi
 # image instead, by the same tool that names handlers from their strings.
 if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         02138CB8:200 02139B20:60 >> "$OUT" 2>&1 || true
+fi
+
+# Scenario 4o: the class numbering. Create_Thing is a dense switch over classes
+# 0 to 18, and six of its arms push a name before they build anything, so the
+# numbering comes out of the ROM rather than out of a guess.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211E0D8:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
+    python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211DC76:500 >> "$OUT" 2>&1 || true
 fi
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds

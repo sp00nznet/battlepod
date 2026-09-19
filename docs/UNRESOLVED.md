@@ -157,12 +157,13 @@ move.*
   The rest are located but not named; that still needs a game running to watch
   a field change against something visible.
 
-- **Which class numbers are which.** The firmware distinguishes **1, 8, 9, 10,
-  11, 12, 13 and 19** across the handlers read so far, and **0 is a free
-  slot** - measured, by sweeping the class and watching `0xE8` return the
-  entity to the pool. The console's taxonomy has the names - `MECH_CLASS`,
-  `VTV_CLASS`, `HOVER_CLASS` and the rest - and nothing measured yet joins a
-  name to a number.
+- **Which of the seven unnamed classes is `EXPLOSION_CLASS` and which is
+  `ANIMATOR_CLASS`.** Six classes are now named from the ROM's create-thing
+  dispatcher - 1 `Mech`, 8 `Escape pod`, 9 `Camship`, 10 `Hovercraft`,
+  12 `VTV`, 16 `Copter` - see DEVICES.md. Seven more arms build something
+  without logging a name (2, 3, 6, 11, 14, 17, 18), and the console's remaining
+  class names have to be among them. Settled by: a string on one of those seven
+  constructors, or a scenario that creates one.
 - **The input report format.** The receive interrupt hands each byte to a state
   machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
   past the firmware's decoder produced nothing.

@@ -1224,6 +1224,49 @@ The class numbers the firmware distinguishes so far are **1, 8, 9, 10, 11, 12,
 `ANIMATOR_CLASS`, `POD_CLASS`, `EXPLOSION_CLASS` and the map classes - and
 nothing measured yet joins a name to a number.
 
+### The class numbers, from the ROM's own create-thing dispatcher
+
+`0x0211DC40` creates a thing of a given class, and it is a dense switch:
+
+```
+0211E0D8  cmpi.l #$13, D0        nineteen classes, 0 to 18
+0211E0DE  bcc    $211e092        out of range
+0211E0E2  move.w (-$32,PC,D0.w), D0
+0211E0E6  jmp    (PC,D0.w)
+```
+
+with the out-of-range arm logging
+`Create unknown thing %d, class %d received`. Six of the arms push a name
+before they build anything, and those names sit in one block right after the
+jump table:
+
+```
+Mech  Camship  Hovercraft  VTV  Copter  Escape pod
+```
+
+Walking the table and reading the string each arm pushes gives the numbering:
+
+| class | | class | | class | |
+|---|---|---|---|---|---|
+| **1** | `Mech` | **9** | `Camship` | **12** | `VTV` |
+| **8** | `Escape pod` | **10** | `Hovercraft` | **16** | `Copter` |
+
+Seven more arms create something without naming it - 2, 3, 6, 11, 14, 17 and
+18, each calling a different constructor - and 0, 4, 5, 7, 13 and 15 are
+rejected as unknown.
+
+**This joins the console's taxonomy to numbers.** `MECH_CLASS` is 1,
+`HOVER_CLASS` 10, `VTV_CLASS` 12 and `COPTER_CLASS` 16 by name; `POD_CLASS` is
+8 and `CAMERAMAN_CLASS` 9 on the strength of `Escape pod` and `Camship` being
+the only candidates. `EXPLOSION_CLASS` and `ANIMATOR_CLASS` are presumably
+among the seven unnamed arms, and nothing says which.
+
+It also lines up with the switches found in the message handlers. `0xDF`
+treats class 8 and class 10 differently - an escape pod and a hovercraft - and
+`0xE8`, which removes a thing, has teardown arms for 1, 9, 10, 11, 12, 13 and
+19: `Mech`, `Camship`, `Hovercraft`, `VTV` and three that the creator does not
+build, including 19, which is past the end of this table altogether.
+
 ### An ordering guard
 
 `0xD2` opens with one before it does anything:
