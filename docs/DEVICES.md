@@ -833,10 +833,38 @@ neighbourhood.
 02139E76  bra     $213A332        33 arms
 ```
 
-**The opcode is at byte `0x13` of the packet, not byte 0.** That is the single
-fact that made the earlier reading wrong: byte 0 carries the low-level type the
-boot monitor's dispatch switches on, and the game's own type sits nineteen
-bytes in, past the header the sender writes and past whatever follows it.
+**This is not a packet at all.** It was read here as a second network dispatch
+over byte `0x13` of a message, which is wrong. `(8,A6)` is the **event
+buffer**, the event is **kind `0x0A`**, and kind `0x0A` is posted from exactly
+one site in the whole ROM:
+
+```
+02122D60  pea    (-$1,A6)
+02122D66  jsr    $215dafa.l        read one byte from the console
+02122D6E  move.b (-$1,A6), D0
+02122D78  pea    $a.w
+02122D7C  jsr    $21228d6.l        Post_Event(kind 0x0A, 0, 0, byte)
+```
+
+Byte `0x13` of the event is the **low byte of that longword parameter**. So
+the 33 "opcodes" are **33 keystrokes**, and their values say so: `0x4A` is
+`J`, `0x51` is `Q`, `0x64` is `d`, `0x73` is `s`, `0x78` is `x`. This is the
+pod's **in-game console**, and it answers.
+
+Typing at the modelled serial port proves it. With the game running and no
+firmware patched, every key that does something does it:
+
+```
+J   Joint 1 Angle 0.000000 ... the skeleton's joint angles
+Q   Profile Cleared
+q   021bb1ac 00000000 00000000, then Profile Cleared - a hex dump
+s   the whole status report: 68681, CULLING, RENDERER, ROUTER, EVENTS
+x   BattleTech 2 Test Program - it drops to the diagnostic monitor
+```
+
+**`x` is how you leave a game.** Every monitor result in this project so far
+came from a cockpit with `RTS` patched over the game's entry, because the boot
+runs the game and never returns. It returns if you ask it to.
 
 The dispatch is 33 arms wide and covers `0x21` to `0x7A`:
 

@@ -91,8 +91,11 @@ understood rather than cargo-culted, but it is still us pretending to be a board
 we do not emulate.
 
 **`--set 2138A64=4E754E75`** patches an `RTS` over the game init so the
-diagnostic monitor is reachable. Every result obtained through the monitor is
-therefore from a cockpit that has been prevented from starting a game.
+diagnostic monitor is reachable, and every result obtained through the monitor
+so far is from a cockpit prevented from starting a game. **This is now
+avoidable**: typing `x` at the in-game console leaves the game and reaches the
+same menu with nothing patched. The existing scenarios have not been rewritten
+to use it, so the caveat still applies to them.
 
 **The audio board's ring is drained by us, not by a DSP.** `--astub` writes
 the 68020's head index straight into the tail and raises the signature's low

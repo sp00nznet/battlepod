@@ -148,6 +148,8 @@ tap 021492D8 hit 1
 02104EC4  lea
 0213CE58  lea
 02139084  move.l
+JJoint 1 Angle 0.000000
+QProfile Cleared
 02139328  subq.l
 0211EB74  addi.l
   0000  52 6F 74 61 74 65 20 43 61 6D 65 72 61 00 4D 6F
@@ -339,6 +341,15 @@ fi
 # else to the byte-0x13 dispatch.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213907E:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02139328:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# Scenario 4v: the in-game console. The "second dispatch over packet byte 0x13"
+# is a keyboard: kind 0x0A is posted from one site, a one-byte console read, and
+# byte 0x13 is the low byte of its parameter. Typing at the modelled serial port
+# with nothing patched gets answers - and `x` leaves the game for the monitor,
+# which is how the monitor is supposed to be reached.
+for key in J Q s x; do
+    "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"         --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808         --set 40000100=1234567 --duart-in "$key"         --steps 90000000 --top 0 >> "$OUT" 2>&1 || true
+done
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

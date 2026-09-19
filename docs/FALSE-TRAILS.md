@@ -70,6 +70,16 @@ Found by working backwards from the *sending* side: 43 call sites, 31 distinct
 opcodes from `0xBA` to `0xED`, which said the game protocol lived nowhere near
 the `0x01`-`0x07` being searched for.
 
+**The "second dispatch over packet byte `0x13`" is the in-game keyboard.**
+It was found by looking for a network dispatch, so a network dispatch is what
+it was called: 33 opcodes at byte `0x13` of a message. `(8,A6)` is the event
+buffer, the event is kind `0x0A`, kind `0x0A` is posted from exactly one site
+in the ROM - a one-byte read from the console - and byte `0x13` is the low byte
+of that longword parameter. The 33 opcodes are 33 **keystrokes**, and their
+values were shouting it: `0x4A` is `J`, `0x51` is `Q`, `0x64` is `d`, `0x73` is
+`s`. Settled by typing them at the modelled serial port and watching the pod
+answer.
+
 **`0x0218AEE4` is not a message queue.** It was written up as one, with `+2`
 as a message type and `0x0C` as "a type it sends somewhere of its own". It is
 `My_Mech_Ptr`, `+2` is `Class_ID`, and `0x0C` and `0x10` are classes 12 and 16

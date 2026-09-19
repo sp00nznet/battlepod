@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod has an in-game console, and it answers.** Typing at the modelled
+  serial port with nothing patched: `J` dumps the skeleton's joint angles, `Q`
+  clears the profiler, `q` prints a hex dump, `s` prints the whole status
+  report, and **`x` leaves the game for the diagnostic monitor**.
+- **`x` is how the monitor is supposed to be reached.** Every monitor result in
+  this project so far came from a cockpit with `RTS` patched over the game's
+  entry, because the boot runs the game and never returns. It returns if you
+  ask it to.
+- `Post_Event` is `0x021228D6`, with **49 call sites** posting kinds 2, 3,
+  `0x0A`, `0x64`, `0xB0`, `0xB1`, `0xC0`, `0xD0`, `0xFFFE`, `0xFFFF` - and kind
+  `0x0A` from exactly one of them.
+- Three more checkpoints. **155/155.**
+
 - **Event kind `0x0A` is an in-game message**, and its arm routes by the class
   of the pod's own mech: a VTV handles them in its own code, a Copter ignores
   them, anything else takes them to the byte-`0x13` dispatch. So what happens
@@ -100,6 +113,14 @@ All notable changes to this project are documented here. The format follows
 - Nine more checkpoints. **142/142.**
 
 ### Fixed
+
+- **The "second dispatch over packet byte `0x13`" is the in-game keyboard.** It
+  was found by looking for a network dispatch, so a network dispatch is what it
+  was called. `(8,A6)` is the event buffer, the event is kind `0x0A`, kind
+  `0x0A` is posted from one site - a one-byte console read - and byte `0x13` is
+  the low byte of its longword parameter. The 33 "opcodes" are 33 keystrokes,
+  and their values were shouting it: `0x4A` is `J`, `0x73` is `s`, `0x78` is
+  `x`. Settled by typing them and watching the pod answer.
 
 - **`0x0218AEE4` is not a message queue.** It was written up as one, with `+2`
   as a message type and `0x0C` as a type it "sends somewhere of its own". It is
