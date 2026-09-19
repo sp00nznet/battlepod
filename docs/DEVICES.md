@@ -1461,6 +1461,46 @@ a table of names, and the names are `Loading File...`, `Saving File...` and
 editor** the firmware ships with - see below. The console's setup messages land
 somewhere else, and where is not settled.
 
+### `0xBE` names an owner, and there are two of them
+
+The largest receive-only handler turns out to be short and specific. It takes
+an index from the packet, refuses anything but 0 or 1, and writes into a
+42-byte record:
+
+```
+0213CE32  move.l ($c,A0), (-$6c,A6)   the index
+0213CE3E  cmpi.l #$2, (-$6c,A6)       0 or 1 only
+0213CE58  lea    $21b74c2.l, A0       42 bytes per record
+0213CE6C  move.b ($10,A0), (A1)       packet+0x10 -> record+0, a key
+0213CE70  pea    $27.w
+0213CE88  jsr    $215d9f4.l           strncpy(record+1, packet+0x11, 39)
+0213CE92  clr.b  ($28,A0)             and terminate it
+```
+
+So each record is **a key byte and a 40-byte name**, and there are exactly
+two. `0x0213B7B2` initialises both with key `0xFF`, which is the empty marker.
+
+What the key is matched against settles what the pair are for.
+`0x0211EA58` walks the two records looking for one whose key equals
+**the first byte of an entity** - which the `TI ERROR!` dump calls
+`Last Object Owner` - and hands the matching name back:
+
+```
+0211EB58  move.b (A0), D0            the record's key
+0211EB5A  cmp.b  (-$13,A6), D0       against the entity's Owner
+0211EB60  addq.l #1, A0              matched: the name is at record+1
+0211EB74  addi.l #$2a, (-$18,A6)     next record, 42 bytes on
+0211EB7C  cmpi.l #$2, (-$8,A6)       two of them
+```
+
+**`0xBE` names an owner.** Two owners, each with a forty-character name, looked
+up by whatever owns an entity. Two owners in a BattleTech Center is two sides,
+which fits the `R1_Red_Planet_1` and `B1_BattleTech_1` strings in `0xED`'s
+handler - an `R` and a `B` side. The console's `SITELINK_NAME_MSG`
+(`to net long, node long, site long, name string`) is the obvious candidate,
+and it is a candidate, not a decode: nothing here says whether an owner is a
+side, a centre or a console.
+
 ### The firmware ships with an animation editor
 
 `0x0215DCF7` holds a state byte, and `0x02104EBA` uses it as a subscript:

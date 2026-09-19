@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`0xBE` names an owner.** The largest receive-only handler writes a key byte
+  and a 40-character name into one of exactly **two** 42-byte records at
+  `0x021B74C2`, and `0x0211EA58` looks a record up by matching its key against
+  **the first byte of an entity** - the field the `TI ERROR!` dump calls
+  `Last Object Owner`. Two owners, each with a name. In a BattleTech Center
+  that is two sides, which fits the `R1_...` and `B1_...` strings in `0xED`'s
+  handler. `SITELINK_NAME_MSG` is the candidate and is labelled as one.
+- Three more checkpoints. **151/151.**
+
 - **The cockpit firmware ships with an animation editor.** A state byte at
   `0x0215DCF7` subscripts a table of names at `0x021698EA`, and the names are
   `Rotate Camera`, `Move Camera`, `Move Focus`, `Rotate Object`, `Move Object`,

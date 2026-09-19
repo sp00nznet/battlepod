@@ -146,6 +146,8 @@ tap 021492D8 hit 1
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
 ----- PERIODIC -----
 02104EC4  lea
+0213CE58  lea
+0211EB74  addi.l
   0000  52 6F 74 61 74 65 20 43 61 6D 65 72 61 00 4D 6F
 'Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f'
 'Type %d, Color %d, Flags %d'
@@ -323,6 +325,12 @@ fi
 # save. The F6-FF message block writes exactly the load, save and append states.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02104EBA:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --peek 0210108F:80 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+
+# Scenario 4t: 0xBE names an owner. Two 42-byte records, each a key byte and a
+# forty-character name, initialised with key 0xFF and looked up by matching the
+# key against an entity's Owner byte.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213CE3E:10 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211EB74:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
