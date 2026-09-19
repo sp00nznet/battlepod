@@ -23,14 +23,6 @@ splitting exactly where the ROM puts the boundary - but not proven. Settled by:
 any table binding a part id to a chassis, which does not exist anywhere in the
 cockpit software.
 
-**The three longwords every entity message carries after the entity id.**
-That they are `+0x26`, `+0x2A` and `+0x2E` of the entity structure is now
-confirmed from both ends - the sender reads them out and the handler writes
-them back to the same offsets. Reading them as **x, y, z** is still inference,
-from the console logging `x float, y float, z float` in exactly that place and
-from `+0x2E` being independently known to hold a float. Settled by: a running
-game, where a moving pod would make the numbers say it themselves.
-
 **Which of `0xF6`-`0xFF` is which console setup message.** The block is
 identified as the pod's mode machine and each handler's effect on the ROM's
 globals is written down, but the console's names - `COCKPIT_CONFIG_MSG`,

@@ -145,6 +145,11 @@ tap 021492D8 hit 1
 'TI_FPUPC         0x%x'
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
 ----- PERIODIC -----
+'Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f'
+'Type %d, Color %d, Flags %d'
+'Joint %d Angle %f'
+021396CE  adda.l
+02139670  lea
 ----- CULLING -----
 ----- RENDERER -----
 ----- ROUTER -----
@@ -291,6 +296,18 @@ fi
 # the renderer's culling counters, frame-rate statistics, the router's traffic
 # high-water marks and the event queues'.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567 --set-at 02122154 21BB1A0=00000001     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4q: the mech dump names the position fields. Its printf arguments are
+# pushed right to left, so the last push is the first conversion: Course from
+# +0xF8, Speed from +0x114, then X, Y and Z from +0x26, +0x2A and +0x2E. That
+# is the firmware saying what those three longwords are, rather than us
+# inferring it from the console's field lists.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 021396CA:12 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# and the thirty-slot mech table it walks, which is not the entity table.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213966A:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
+    python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         02139660:100 0213A146:40 >> "$OUT" 2>&1 || true
+fi
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

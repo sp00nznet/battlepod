@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`+0x26`, `+0x2A` and `+0x2E` are X, Y and Z** - the firmware's own words,
+  not an inference from the console's field lists. In-game message `0x64` dumps
+  every mech with `Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f`, and
+  its arguments are pushed right to left from `+0xF8`, `+0x114` (scaled by
+  360), `+0x26`, `+0x2A`, `+0x2E`. The oldest assumption in the entity work
+  leaves UNRESOLVED.md.
+- With it, **`+0xF8` Course, `+0x114` Speed, `+0x7E` Type, `+0x82` Color**.
+- **A second table: `0x021943DA` holds thirty entity pointers**, cleared at
+  boot by the same routine that builds the arena. The thousand-slot arena holds
+  everything in the world; this holds the **participants**, and thirty is the
+  number of mechs a game can have.
+- **Five more in-game messages with names**, from what their arms log: `0x4A`
+  dumps the skeleton's joint angles, `0x51` clears the profiler, `0x64` dumps
+  every mech, `0x71` is a hex dump, `0x73` the periodic report. All operator
+  and developer commands, which is what a console sends a pod mid-game.
+- Five more checkpoints. **147/147.**
+
 - **The pod now reports on itself.** `0x021BB1A0` is a request flag the main
   loop tests, acts on and clears; setting it gets the firmware's whole status
   report out of a booted cockpit - the DUART's own view of itself, six named

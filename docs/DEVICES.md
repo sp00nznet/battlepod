@@ -1931,6 +1931,66 @@ Class_ID=%d, Number=%d, Thing_Flags=0x%08x
 The pod keeps its own frame-rate statistics and prints them on the console,
 which will be the measurement to beat when any of this runs.
 
+### The in-game messages start to have names
+
+With the arms of the byte-`0x13` dispatch mapped one-to-one to opcodes, the
+ones that log something name themselves:
+
+| | |
+|---|---|
+| `0x4A` | `Joint %d Angle %f` - dump the skeleton's joint angles |
+| `0x51` | `Profile Cleared` |
+| `0x64` | dump every mech: `Mech %d`, `Type %d, Color %d, Flags %d`, `Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f` |
+| `0x71` | a hex dump |
+| `0x73` | the periodic status report |
+
+These are operator and developer commands, which is what one would expect of a
+message type a console sends to a pod mid-game.
+
+### `+0x26`, `+0x2A` and `+0x2E` are X, Y and Z
+
+`0x64`'s dump settles the oldest assumption in the entity work. The arguments
+to `Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f` are pushed
+right-to-left:
+
+```
+021396CE  adda.l #$2e, A0    fmove.s (A0), FP0   push     Z
+021396E0  adda.l #$2a, A0    fmove.s (A0), FP0   push     Y
+021396F2  adda.l #$26, A0    fmove.s (A0), FP0   push     X
+02139704  adda.l #$114, A0   fmul.d #360.0       push     Speed
+02139722  adda.l #$f8, A0    fmove.s (A0), FP0   push     Course
+02139730  pea    "Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f"
+```
+
+so the three longwords every entity message carries after the id are **X at
+`+0x26`, Y at `+0x2A` and Z at `+0x2E`** - the firmware's own words, not an
+inference from the console's field lists. Two more fields come with them:
+**`+0xF8` Course** and **`+0x114` Speed**, the latter scaled by 360 on the way
+out, which is what turns a fraction of a revolution into degrees.
+
+### A second table: thirty mechs
+
+The same dump walks a table that is not the entity table:
+
+```
+0213966A  move.l (-$4,A6), D0
+0213966E  asl.l  #2, D0
+02139670  lea    $21943da.l, A0      thirty slots
+02139676  move.l (A0,D0.l), (-$8,A6)
+0213967C  tst.l  (-$8,A6)            empty: skip
+0213968A  tst.l  ($a,A0)             Thing_Flags zero: skip
+02139742  cmpi.l #$1e, (-$4,A6)
+```
+
+**`0x021943DA` holds thirty entity pointers**, and the boot clears all thirty
+in the same routine that builds the entity arena - `clr.l (A0,D0.l)` with
+`cmpi.l #$1e`. So the thousand-slot arena holds everything in the world and
+this holds the **participants**: thirty is the number of mechs a game can have,
+and it is the table an operator's "show me every mech" walks.
+
+Two more fields are named by that dump as well: **`+0x7E` Type** and
+**`+0x82` Color**, both words.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.
