@@ -8,6 +8,28 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mech driven from the wire, reported by the pod.** Make entity 0 a `Mech`,
+  send it an `0xEC` movement packet, type `d` at the in-game console:
+
+  ```
+  dMech 0
+  Type 0, Color 0, Flags 7
+  Course 1.00000, Speed 90.00000, X 100.00000, Y 200.00000, Z 5.40000
+  ```
+
+  Every step between the wire and that print is the cockpit's own code.
+  **Speed comes back as 90 from a packet carrying 0.25**, because the dump
+  scales `+0x114` by 360 - the field map and the argument order both right at
+  once.
+- **`tools/musashi_fpu.py`.** The moment an entity is a `Mech` the firmware
+  reaches **FTAN**, opmode `0x0F`, which Musashi does not implement - it covers
+  a subset of the 68881's transcendentals and calls `fatalerror()` on the rest.
+  The script adds the missing sixteen as one-line libm calls in the shape the
+  existing `FSIN` and `FCOS` cases use. It is a script rather than a patch
+  because `third_party/musashi` is cloned by `make deps`; it is idempotent, and
+  `make deps` runs it.
+- Three more checkpoints. **158/158.**
+
 - **The pod has an in-game console, and it answers.** Typing at the modelled
   serial port with nothing patched: `J` dumps the skeleton's joint angles, `Q`
   clears the profiler, `q` prints a hex dump, `s` prints the whole status

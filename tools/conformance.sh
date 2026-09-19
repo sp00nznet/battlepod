@@ -149,6 +149,8 @@ tap 021492D8 hit 1
 0213CE58  lea
 02139084  move.l
 JJoint 1 Angle 0.000000
+Type 0, Color 0, Flags 7
+Course 1.00000, Speed 90.00000, X 100.00000, Y 200.00000, Z 5.40000
 QProfile Cleared
 02139328  subq.l
 0211EB74  addi.l
@@ -351,6 +353,13 @@ for key in J Q s x; do
     "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"         --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808         --set 40000100=1234567 --duart-in "$key"         --steps 90000000 --top 0 >> "$OUT" 2>&1 || true
 done
 
+# Scenario 4w: the whole loop. Make entity 0 a Mech and put it in the thirty-slot
+# table, send it a movement packet at the wire, then type `d` and let the pod
+# say where it thinks it is. Everything between the wire and the print is the
+# cockpit's own code. Speed comes back scaled by 360, which is what the dump
+# does to +0x114, so 0.25 prints as 90.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --packet 'EC 00 00 00 00 00 00 00 00 00 00 00 42 C8 00 00 43 48 00 00 40 AC CC CD 3F 80 00 00 00 00 00 00 3E 80 00 00 00 00 00 00'     --duart-in 'd' --steps 90000000 --top 0 >> "$OUT" 2>&1 || true
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -537,7 +546,7 @@ fi
 
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

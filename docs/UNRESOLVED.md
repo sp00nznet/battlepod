@@ -104,6 +104,12 @@ complaining. Nothing plays a sound and `btAudio.dld` is thrown away. If the
 real board ever needed to be *slower* than instant - a game that paces itself
 against the audio FIFO - this would hide it.
 
+**Sixteen 68881 transcendental opmodes are host `libm` calls**, added to
+Musashi by `tools/musashi_fpu.py` because it implements a subset and dies on
+the rest. A real 68881 rounds to its own 80-bit extended format and sets
+exception bits these do not; nothing here has needed that, and if a result ever
+looks wrong in the last few digits this is where to look.
+
 **The renderer, audio and Amiga boards are stubbed** rather than modelled. The
 display list is intercepted on the 68020 side by design - see ARCHITECTURE.md -
 but that is a decision, not an emulation.

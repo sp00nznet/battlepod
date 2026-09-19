@@ -2182,6 +2182,58 @@ and it is the table an operator's "show me every mech" walks.
 Two more fields are named by that dump as well: **`+0x7E` Type** and
 **`+0x82` Color**, both words.
 
+## Driving a mech and asking the pod where it is
+
+Everything the last few sections found can be put in one line, and it closes a
+loop this project has been working towards from the beginning.
+
+Make entity 0 a `Mech` and put it in the thirty-slot table:
+
+```
+--set-at 02122154 21F99AE=00000001    Class_ID = 1
+--set-at 02122154 21943DA=021F99AC    slot 0 -> entity 0
+```
+
+send it a movement packet at the wire - opcode `0xEC`, entity id 0, then X, Y,
+Z, Course and Speed where the field map says they go - and type `d` at the
+in-game console. The pod answers:
+
+```
+dMech 0
+Type 0, Color 0, Flags 7
+Course 1.00000, Speed 90.00000, X 100.00000, Y 200.00000, Z 5.40000
+```
+
+Every step between the wire and that print is the cockpit's own code: the
+low-level dispatch, the router, the identity filter, `Post_Event`, the event
+pump, the byte-0 message table, `0xEC`'s handler, the entity structure, the
+in-game keyboard, and the dump routine. Nothing is faked except giving the
+entity a class.
+
+**Speed comes back as 90 from a packet that carried 0.25**, because the dump
+multiplies `+0x114` by 360 on its way out - which is the field map and the
+printf argument order both being right at once. And `Z` is 5.4, which is the
+height every scenario drop point in the release uses.
+
+### One emulator gap had to be closed first
+
+The moment an entity is a `Mech`, the firmware reaches an FPU operation
+Musashi does not implement:
+
+```
+fpgen_rm_reg: unimplemented opmode 0F at 0212E37A
+```
+
+Opmode `0x0F` is **FTAN**. Musashi implements a useful subset of the 68881's
+transcendentals and calls `fatalerror()` on the rest, and the mech code needs a
+tangent. `tools/musashi_fpu.py` adds the missing sixteen - `FSINH`, `FLOGNP1`,
+`FETOXM1`, `FTANH`, `FATAN`, `FASIN`, `FATANH`, `FTAN`, `FETOX`, `FTWOTOX`,
+`FTENTOX`, `FLOGN`, `FLOG10`, `FLOG2`, `FCOSH`, `FACOS` - each a one-line libm
+call in the shape the existing `FSIN` and `FCOS` cases already use. It is a
+script rather than a patch file because `third_party/musashi` is cloned by
+`make deps` and a context diff rots against upstream; it is idempotent and
+`make deps` runs it.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

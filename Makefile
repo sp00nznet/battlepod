@@ -52,8 +52,11 @@ $(BUILD)/m68kmake.exe: $(MUSASHI)/m68kmake.c | $(BUILD)
 $(BUILD):
 	mkdir -p $(BUILD)/tmp
 
+# Musashi's 68881 is missing the transcendental opmodes the cockpit's mech code
+# reaches; tools/musashi_fpu.py adds them and is idempotent.
 deps:
 	@test -d $(MUSASHI) || git clone --depth 1 https://github.com/kstenerud/Musashi $(MUSASHI)
+	@python tools/musashi_fpu.py $(MUSASHI)/m68kfpu.c
 
 test: $(BUILD)/battlepod.exe $(BUILD)/paneltest.exe $(BUILD)/viewtest.exe
 	./$(BUILD)/battlepod.exe --selftest
