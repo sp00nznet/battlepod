@@ -855,9 +855,10 @@ two sections above. So a game message is not acted on where it arrives; it is
 translated into an event and queued, exactly as the modem path does with its
 own traffic.
 
-The dispatch is reached from a message pump at `0x0213909E`, which takes a
-message from `0x0218AEE4`, reads a type at its `+2`, sends type `0x0C`
-somewhere of its own and everything else here. Near it sits the string
+The dispatch is reached from the **kind `0x0A`** arm of the event switch, and
+which handler runs depends on the class of the pod's own mech - see below. An
+earlier reading of that arm as a message pump over a queue at `0x0218AEE4` was
+wrong; `0x0218AEE4` is `My_Mech_Ptr`. Near it sits the string
 `Test Event, message# %d`, which is the firmware naming what it is doing.
 
 ### What these messages are, and what they are not
@@ -1460,6 +1461,42 @@ a table of names, and the names are `Loading File...`, `Saving File...` and
 `Appending File...`. This block is the remote control for the **animation
 editor** the firmware ships with - see below. The console's setup messages land
 somewhere else, and where is not settled.
+
+### Event kind `0x0A` is an in-game message, and your own class routes it
+
+The kind switch resolves to thirteen arms:
+
+```
+  -2  02139CC   1  0213906A   0xB0 0xB1 0xC0 0xD0  02139210
+  -1  02139B8   2  0213911A   0x10000  02138F8E
+              3  02139044     0x10003  02139054
+           0x0A  0213907E     0x10006  02139034
+```
+
+**Kind `0x0A` is where an in-game message arrives**, and the arm does something
+this project had read wrongly:
+
+```
+0213907E  movea.l $218aee4.l, A0      My_Mech_Ptr
+02139084  move.l  ($2,A0), D0         its Class_ID
+021390A6  subi.l #$c, D0   beq ...    class 12, VTV   -> $2153afc
+021390AE  subq.l #4, D0    beq ...    class 16, Copter -> nothing
+021390B2  bra    $213909a             anything else   -> the byte-0x13 dispatch
+```
+
+**An earlier note here called `0x0218AEE4` a message queue, `+2` a message type
+and `0x0C` a type it "sends somewhere of its own".** All three were wrong and
+they were wrong together: `0x0218AEE4` is `My_Mech_Ptr`, `+2` is `Class_ID`,
+and `0x0C` and `0x10` are **classes 12 and 16** - a VTV and a Copter. So what
+happens to an in-game message depends on **what the player is flying**: a VTV
+handles them in its own code, a Copter ignores them, and a Mech takes them to
+the byte-`0x13` dispatch.
+
+That also keeps the two dispatches properly apart, and now names the route.
+The byte-0 table is reached by **kind 3**, a packet off the wire. The
+byte-`0x13` table is reached by **kind `0x0A`**. The `Post_Event(kind 0xB1,
+param)` that so many byte-0 handlers end with goes to neither: kinds `0xB0`,
+`0xB1`, `0xC0` and `0xD0` all land on `0x02139210`.
 
 ### `0xBE` names an owner, and there are two of them
 

@@ -70,6 +70,15 @@ Found by working backwards from the *sending* side: 43 call sites, 31 distinct
 opcodes from `0xBA` to `0xED`, which said the game protocol lived nowhere near
 the `0x01`-`0x07` being searched for.
 
+**`0x0218AEE4` is not a message queue.** It was written up as one, with `+2`
+as a message type and `0x0C` as "a type it sends somewhere of its own". It is
+`My_Mech_Ptr`, `+2` is `Class_ID`, and `0x0C` and `0x10` are classes 12 and 16
+- a VTV and a Copter. Three wrong readings that were wrong *together*, because
+each one propped the others up: once a pointer is called a queue, the field at
+`+2` has to be a type, and then the constants compared against it have to be
+type numbers. The firmware named the pointer itself, in a `printf`, about
+thirty feet away.
+
 **`0xF6`-`0xFF` are not the console's setup messages.** They were written up
 here as "the pod's mode machine, driven from outside... where
 `COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG` and `SHADOW_ROM` have to land", on the

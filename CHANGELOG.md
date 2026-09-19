@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Event kind `0x0A` is an in-game message**, and its arm routes by the class
+  of the pod's own mech: a VTV handles them in its own code, a Copter ignores
+  them, anything else takes them to the byte-`0x13` dispatch. So what happens
+  to an in-game message depends on what the player is flying.
+- That names both routes and keeps them apart: the byte-0 table is **kind 3**,
+  a packet off the wire; the byte-`0x13` table is **kind `0x0A`**; and the
+  `Post_Event(kind 0xB1, ...)` so many byte-0 handlers end with goes to
+  neither - kinds `0xB0`, `0xB1`, `0xC0` and `0xD0` all land on `0x02139210`.
+- Two more checkpoints. **153/153.**
+
 - **`0xBE` names an owner.** The largest receive-only handler writes a key byte
   and a 40-character name into one of exactly **two** 42-byte records at
   `0x021B74C2`, and `0x0211EA58` looks a record up by matching its key against
@@ -90,6 +100,12 @@ All notable changes to this project are documented here. The format follows
 - Nine more checkpoints. **142/142.**
 
 ### Fixed
+
+- **`0x0218AEE4` is not a message queue.** It was written up as one, with `+2`
+  as a message type and `0x0C` as a type it "sends somewhere of its own". It is
+  `My_Mech_Ptr`, `+2` is `Class_ID`, and `0x0C` and `0x10` are classes 12 and
+  16. Three readings that were wrong together, because each propped up the
+  others. Corrected in place.
 
 - **`0xF6`-`0xFF` are not the console's setup messages.** They were written up
   as "the pod's mode machine... where `COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG` and
