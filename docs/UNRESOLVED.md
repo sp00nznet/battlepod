@@ -143,12 +143,14 @@ move.*
 - **What each entity field *is*.** The arena is built on an ordinary boot -
   1000 entities of 0x6B4 bytes - and the bytes each message writes are now
   measured on the running firmware rather than read out of the handlers, for
-  sixteen opcodes as a Mech, fourteen as a Hovercraft, twelve
-  unconfigured. Five fields are named, four of them by the firmware's own
-  printf labels - `+0x00` Owner, `+0x02` Class_ID, `+0x06` Number, `+0x0A`
-  Thing_Flags - plus `+0x9C`, the sequence `0xD2` refuses to go backwards on.
-  The rest are located but not named; that still needs a game running to watch
-  a field change against something visible.
+  sixteen opcodes across eight classes - 57 field slots, 467 of the 1716
+  bytes an entity occupies. **Eleven fields are named**, nine of them by the
+  firmware's own printf labels: `+0x00` Owner, `+0x02` Class_ID, `+0x06`
+  Number, `+0x0A` Thing_Flags, `+0x26`/`+0x2A`/`+0x2E` X, Y and Z, `+0x7E`
+  Type, `+0x82` Color, `+0xF8` Course, `+0x114` Speed - plus `+0x9C`, the
+  sequence `0xD2` refuses to go backwards on. The other 46 slots are located
+  but not named; that still needs a game running to watch a field change
+  against something visible.
 
 - **Which of the seven unnamed classes is `EXPLOSION_CLASS` and which is
   `ANIMATOR_CLASS`.** Six classes are now named from the ROM's create-thing

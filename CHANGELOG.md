@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The whole entity map, across eight classes.** Sweeping 0, 1, 2, 9, 10, 12,
+  16 and 18 and taking the union: **16 opcodes, 57 field slots, 467 of the
+  1716 bytes** an entity occupies. Class 1, `Mech`, sees the most - 16 against
+  12 to 14 - which is what one would expect of the class the pod itself is.
+- **`0xEC` is the movement update**: X, Y, Z at `+0x26`, Course at `+0xF8`,
+  Speed at `+0x114`, and a 24-byte block at `+0x694`. Position, heading and
+  speed in one packet, and one of the 29 the pod both sends and receives.
+- **`0xDE` configures a mech**: its 24-byte block at `+0x7E` begins exactly at
+  **Type**, with **Color** at `+0x82` inside it. What a mech is and what colour
+  it is drawn - what a console sends when a player picks a chassis.
+- **Eleven entity fields now have names**, nine of them the firmware's own.
+
 - **`+0x26`, `+0x2A` and `+0x2E` are X, Y and Z** - the firmware's own words,
   not an inference from the console's field lists. In-game message `0x64` dumps
   every mech with `Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f`, and

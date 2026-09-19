@@ -1218,6 +1218,47 @@ The sweep is worth running per class for that reason: what a message does
 depends on what the thing is, and a single run at one class reports a subset
 and gives no sign that it has.
 
+### The whole map, across eight classes
+
+Sweeping classes 0, 1, 2, 9, 10, 12, 16 and 18 and taking the union gives what
+the network can write into an entity: **16 opcodes, 57 field slots, 467 bytes**
+of the 1716 an entity occupies.
+
+```
+B9  +AC/2  +67C/24
+CA  +DB/1  +E4/4  +2B0/12
+CC  +26/12 +72/16 +86/8
+CD  +26/12 +6A/4  +76/12 +8A/4 +A6/1
+D2  +26/12 +9E/2  +B4/4  +C4/24 +E8/12 +100/8 +120/4
+D7  +DC/4
+D9  +6D/1
+DC  +6A/8  +B6/4  +CE/4
+DD  +26/12 +AA/2  +D8/4  +2A4/48 then +40 into 2E0 2F8 310 340 358 370
+DE  +26/12 +56/4  +7E/24
+DF  +26/12 +10C/12
+E0  +BB/1  +C4/4  +CE/4
+E1  +26/12 +AA/16
+E7  +1E8/4 +200/4 +218/4 +230/4 +248/4 +260/4
+E8  +5/1   (cleared - the slot is freed)
+EC  +26/12 +C0/4  +F8/8  +114/4 +694/24
+```
+
+Class 1, `Mech`, sees the most - 16 opcodes against 12 to 14 for the others -
+which is what one would expect of the class the pod itself is.
+
+Two messages become legible now that the fields have names.
+
+**`0xEC` is the movement update.** It carries X, Y, Z at `+0x26`, then
+`+0xF8`-`+0xFF` - which is **Course** and the longword after it - then `+0x114`
+**Speed**, then a 24-byte block at `+0x694`. Position, heading and speed in one
+packet is exactly what a distributed simulation sends thirty times a second,
+and `0xEC` is one of the 29 the pod both sends and receives.
+
+**`0xDE` configures a mech.** Its 24-byte block at `+0x7E` starts exactly at
+**Type**, with **Color** at `+0x82` inside it. A message that sets what a mech
+*is* and what colour it is drawn, which is what a console does when a player
+picks a chassis.
+
 ### Class 0 is a free slot, and `0xE8` makes one
 
 Running the sweep twice, once with the class the boot leaves and once with a
