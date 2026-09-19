@@ -8,6 +8,36 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The pod now reports on itself.** `0x021BB1A0` is a request flag the main
+  loop tests, acts on and clears; setting it gets the firmware's whole status
+  report out of a booted cockpit - the DUART's own view of itself, six named
+  culling counters, frame-rate statistics, the router's traffic high-water
+  marks and the event queues'.
+- **In-game message `0x73` is what normally raises that flag** - its entire arm
+  is `move.l #$1, $21bb1a0.l`. The first of the thirty-three in-game opcodes
+  with a name, and it is a console asking a pod for its statistics.
+- **`My_Mech_Ptr` is entity 0.** The report prints `0x21f99ac`, the base of the
+  arena, with `Thing_Flags=0x00000007` - the value the boot writes into entity
+  0's `+0x0A` and no other's. So the pod's own mech is slot zero, reserved at
+  boot, which is why entity 0 is built differently from the other 999.
+- **`Remaining time = 600`**, a mission clock - ten minutes, if the unit is
+  seconds, which is what a BattleTech Center ran on.
+- **The timebase is hundredths of a second**, pinned by the report's own
+  arithmetic: fps is `100.0` divided by a tick count. Which makes the
+  watchdog's `addi.l #$64` deadline exactly one second.
+- **The culling pipeline is named**: `Total`, `First Distance`,
+  `Second Distance`, `Entering Clip`, `Z Clip`, `Cone Reject`. Six stages of a
+  renderer this project has otherwise had to infer, and they are counters.
+- Nine more checkpoints. **142/142.**
+
+### Fixed
+
+- **A conformance checkpoint that begins with a dash was being read as a grep
+  option**, so `----- PERIODIC -----` and its four siblings failed no matter
+  what the output said. `grep -qF --` fixes it. A harness that can silently
+  fail a checkpoint for a reason unrelated to the firmware is worse than no
+  harness for that checkpoint.
+
 - **The field sweep repeated as a `Mech`** - the pod's own class - raises the
   count from 14 opcodes to **16**, and every difference is a class-sensitive
   arm: `0xE0` writes one byte at `+0xBB` as a Mech where it wrote four at

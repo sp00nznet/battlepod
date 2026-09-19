@@ -161,6 +161,12 @@ heredoc becomes a real newline, which produces unterminated string literals in C
 and Python alike. It cost time on at least five occasions. Use the `Write` tool,
 or build the escape with `chr(92)`.
 
+**A checkpoint beginning with a dash was read by `grep` as an option.** Five
+checkpoints - `----- PERIODIC -----` and its siblings - failed while the text
+they were looking for sat in the output file. `grep -qF -- "$check"` fixes it.
+The failure mode is the bad kind: the harness said the firmware had changed
+when the harness was what was wrong.
+
 **Multi-file edit scripts that abort partway leave the tree inconsistent** and,
 worse, leave a commit message describing changes that were never made. Edit one
 file at a time.

@@ -1931,6 +1931,94 @@ Class_ID=%d, Number=%d, Thing_Flags=0x%08x
 The pod keeps its own frame-rate statistics and prints them on the console,
 which will be the measurement to beat when any of this runs.
 
+## Making the pod report on itself
+
+The firmware has a complete self-diagnostic and it can be turned on.
+`0x021BB1A0` is a request flag: the main loop tests it, calls the status report
+if it is set, and clears it again.
+
+```
+0213A506  tst.l  $21bb1a0.l
+0213A50C  beq    $213a518
+0213A50E  jsr    $21397b2           the report
+0213A512  clr.l  $21bb1a0.l
+```
+
+**In-game message `0x73` is what normally raises it** - its whole arm is
+`move.l #$1, $21bb1a0.l` - so this is a console asking a pod for its
+statistics, and the first of the thirty-three in-game opcodes with a name.
+Setting the flag directly gets the report out of a booted pod:
+
+```
+----- 68681 -----
+68681 ISR ff, Adam's enable 7
+Services 7, TX 7, RX 0, init1 11000000, init2 10000000
+Init took 0 trys
+----- CULLING -----
+Cone stats
+Total          0
+First Distance  0
+Second Distance 0
+Entering Clip   0
+Z Clip          0
+Cone Reject     0
+----- RENDERER -----
+Polygon count 0
+Model Time    0
+
+Averages for 1 frames, 0 polygons and 22.379999 seconds
+Polygons/sec 0.000000, Per Frame 0
+
+Average fps   0.044683
+Worst case    3167 (0.031576 fps)
+Best case     3167 (0.031576 fps)
+Currently     3167 (0.031576 fps)
+
+Maximum Possible Performance
+Average fps   0.032723
+...
+Remaining time = 600
+My_Mech_Ptr = 0x21f99ac
+Class_ID=0, Number=0, Thing_Flags=0x00000007
+----- ROUTER -----
+Maximum Traffic (1 second average) 0 (0)
+Max TX Buff 0
+----- EVENTS -----
+Max Events  0
+Max Timed   2
+Max Network 0
+----- PERIODIC -----
+```
+
+Several things fall out of one report.
+
+**`My_Mech_Ptr` is entity 0.** `0x21f99ac` is the base of the arena, and
+`Thing_Flags = 0x00000007` is the value the arena loop writes into entity 0's
+`+0x0A` and no other entity's. So the pod's own mech is slot zero, reserved at
+boot, which is why the boot bothers to build entity 0 differently from the
+other 999.
+
+**`Remaining time = 600`.** A mission clock, and 600 is the number a BattleTech
+Center ran on - ten minutes, if the unit is seconds.
+
+**The frame-rate maths pins the timebase.** `fps` is computed as `100.0`
+divided by a tick count, so the free-running counter at `0x02000808` is
+**hundredths of a second** - which makes the watchdog's `addi.l #$64` deadline
+exactly one second.
+
+**The culling pipeline is named**: a cone test with a total, two distance
+rejections, an entering-clip count, a Z clip and a cone reject. That is six
+named stages of a renderer this project has otherwise had to infer, and they
+are counters, so once anything draws they can be read.
+
+**The DUART reports on itself** - `ISR ff`, services, TX and RX counts, and
+both init words - which is a cross-check on our model of it from the firmware's
+own point of view rather than from the wire.
+
+The numbers here are all zero or nonsense because nothing is running: one
+frame, no polygons, 22 seconds. That is the point. **This is the measurement to
+beat**, and it exists already.
+
 ## Renderer command 6
 
 With the renderer's memory mapped as real RAM (the firmware reads a fixed error

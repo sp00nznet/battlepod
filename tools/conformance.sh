@@ -144,6 +144,15 @@ tap 021492D8 hit 1
 'TI_ErrorNumber   0x%x'
 'TI_FPUPC         0x%x'
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
+----- PERIODIC -----
+----- CULLING -----
+----- RENDERER -----
+----- ROUTER -----
+----- EVENTS -----
+Cone Reject     0
+Remaining time = 600
+My_Mech_Ptr = 0x21f99ac
+Class_ID=0, Number=0, Thing_Flags=0x00000007
 0211E0D8  cmpi.l
 02106CC6  cmpi.l
 0211D62C  cmpi.l
@@ -275,6 +284,14 @@ if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211DC76:500 >> "$OUT" 2>&1 || true
 fi
 
+# Scenario 4p: make the pod report on itself. 0x021BB1A0 is a request flag -
+# the main loop calls the status report when it is set and clears it again -
+# and the in-game message 0x73 is what normally raises it. Setting it directly
+# gets the whole report out of a booted pod: the DUART's own view of itself,
+# the renderer's culling counters, frame-rate statistics, the router's traffic
+# high-water marks and the event queues'.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --monitor --astub --clock 2000808     --set 40000100=1234567 --set-at 02122154 21BB1A0=00000001     --steps 60000000 --top 0 >> "$OUT" 2>&1 || true
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -289,7 +306,8 @@ echo "== boot checkpoints =="
 while IFS= read -r check; do
     [ -n "$check" ] || continue
     total=$((total + 1))
-    if grep -qF "$check" "$OUT"; then
+    # -- so a checkpoint that begins with a dash is a pattern, not an option.
+    if grep -qF -- "$check" "$OUT"; then
         pass=$((pass + 1))
         printf '  ok    %s\n' "$check"
     else
