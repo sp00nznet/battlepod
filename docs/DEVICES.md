@@ -1453,11 +1453,56 @@ than anything in the world:
 | `F6` | a longword from the packet at `+2` into `0x0215DCFE` |
 | `F7` | a longword from the packet at `+2`, converted to float, into `0x0215DD0E` |
 
-So this is the pod's mode machine, driven from outside - which is what the
-console's setup messages are for, and it is where `COCKPIT_CONFIG_MSG`,
-`PLAYER_CONFIG`, `SHADOW_ROM` and their neighbours have to land. Which is
-which is not settled; that needs the console to say what it puts in a packet,
-not just what it logs.
+**An earlier reading here was wrong.** It said this was the pod's mode machine
+and that `COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG` and `SHADOW_ROM` had to land in
+it. The state numbers give it away: `0x0D`, `0x0E` and `0x0F` are indices into
+a table of names, and the names are `Loading File...`, `Saving File...` and
+`Appending File...`. This block is the remote control for the **animation
+editor** the firmware ships with - see below. The console's setup messages land
+somewhere else, and where is not settled.
+
+### The firmware ships with an animation editor
+
+`0x0215DCF7` holds a state byte, and `0x02104EBA` uses it as a subscript:
+
+```
+02104EBA  move.b $215dcf7.l, D0
+02104EC0  extb.l D0
+02104EC2  asl.l  #2, D0
+02104EC4  lea    $21698ea.l, A0     a table of string pointers
+02104ECA  move.l (A0,D0.l), -(A7)
+```
+
+The table names all fifteen states:
+
+```
+ 1 Rotate Camera     6 Rotate Joint     11 Manual Play
+ 2 Move Camera       7 Move Joint       12 Play Stopped
+ 3 Move Focus        8 Frame Mode       13 Loading File...
+ 4 Rotate Object     9 Delete Frame?    14 Saving File...
+ 5 Move Object      10 Auto Play        15 Appending File...
+```
+
+**The cockpit's own firmware contains an animation editor**: move and rotate a
+camera, a focus point, an object and a joint; step frames; play back
+automatically or by hand; load, save and append files. The function that reads
+the state also prints `Frame %02ld/%02ld` and two triples of floats, which is a
+frame counter and a position-and-rotation readout.
+
+That explains several things that were loose:
+
+- **`ANIMATOR_CLASS`** in the operator console's taxonomy, which had no
+  counterpart anywhere in the pod.
+- **In-game message `0x4A`**, which dumps `Joint %d Angle %f` - the editor's
+  own view of a skeleton.
+- **`0xF6`-`0xFF`**, which set exactly the states `0x0D`, `0x0E` and `0x0F`:
+  load, save and append. They are the editor's remote control.
+- **Why the archive has skeletons with named joints at all.** Somebody posed
+  them, on this hardware, through this tool.
+
+`0x021084E8` carries `Camera positions for map file` in the same region, so the
+animation editor is not the only authoring tool in here - which also explains
+`CAMERA_POSITION` being one of the scenario grammars the console parses.
 
 ### A game message, followed all the way in
 

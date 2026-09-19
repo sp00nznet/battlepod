@@ -70,6 +70,18 @@ Found by working backwards from the *sending* side: 43 call sites, 31 distinct
 opcodes from `0xBA` to `0xED`, which said the game protocol lived nowhere near
 the `0x01`-`0x07` being searched for.
 
+**`0xF6`-`0xFF` are not the console's setup messages.** They were written up
+here as "the pod's mode machine, driven from outside... where
+`COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG` and `SHADOW_ROM` have to land", on the
+strength of being receive-only, arriving in a block, and writing what looked
+like mode bytes. The numbers they write - `0x0D`, `0x0E`, `0x0F` - turn out to
+be subscripts into a table of state *names*, and the names are
+`Loading File...`, `Saving File...`, `Appending File...`. They are the remote
+control for an **animation editor** built into the cockpit firmware. A block of
+opcodes that arrive together and write the same few globals is weak evidence
+for what they mean; the giveaway was there the whole time, one indexed table
+away.
+
 **`SecCom 674 bytes` is hexadecimal.** Four documents here repeated 674 as a
 decimal byte count for months. The code pushes `$674` against a `%x` format:
 **0x674 = 1,652 bytes**. Anything derived from a *printed* value rather than a

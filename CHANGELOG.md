@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The cockpit firmware ships with an animation editor.** A state byte at
+  `0x0215DCF7` subscripts a table of names at `0x021698EA`, and the names are
+  `Rotate Camera`, `Move Camera`, `Move Focus`, `Rotate Object`, `Move Object`,
+  `Rotate Joint`, `Move Joint`, `Frame Mode`, `Delete Frame?`, `Auto Play`,
+  `Manual Play`, `Play Stopped`, `Loading File...`, `Saving File...`,
+  `Appending File...`. The same function prints `Frame %02ld/%02ld` and two
+  triples of floats.
+- Which explains four loose things at once: **`ANIMATOR_CLASS`** in the
+  console's taxonomy, **in-game message `0x4A`** dumping `Joint %d Angle %f`,
+  **`0xF6`-`0xFF`** setting exactly the load/save/append states, and why the
+  archive has posed skeletons with named joints at all - somebody posed them,
+  on this hardware, with this tool.
+- `0x021084E8` carries `Camera positions for map file`, so the editor is not
+  the only authoring tool in the ROM - which also explains `CAMERA_POSITION`
+  being one of the scenario grammars.
+- Two more checkpoints. **149/149.**
+
 - ROADMAP.md brought up to date: phases 8, 9 and 10 written down, and the
   quickstart in README.md is now a conformance scenario so the front page
   cannot rot again.
@@ -64,6 +81,14 @@ All notable changes to this project are documented here. The format follows
 - Nine more checkpoints. **142/142.**
 
 ### Fixed
+
+- **`0xF6`-`0xFF` are not the console's setup messages.** They were written up
+  as "the pod's mode machine... where `COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG` and
+  `SHADOW_ROM` have to land", on the strength of being receive-only, arriving
+  in a block, and writing what looked like mode bytes. The numbers they write -
+  `0x0D`, `0x0E`, `0x0F` - are subscripts into a table of state names, and the
+  names are `Loading File...`, `Saving File...`, `Appending File...`. Corrected
+  in place; where the console's setup messages land is open again.
 
 - **The quickstart in README.md did not run.** It told the reader to pass
   `--tty 11016`, an option the binary does not have; the working flag is

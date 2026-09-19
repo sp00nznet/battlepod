@@ -145,6 +145,8 @@ tap 021492D8 hit 1
 'TI_FPUPC         0x%x'
 'Class_ID=%d, Number=%d, Thing_Flags=0x%08x'
 ----- PERIODIC -----
+02104EC4  lea
+  0000  52 6F 74 61 74 65 20 43 61 6D 65 72 61 00 4D 6F
 'Course %3.5f, Speed %3.5f, X %3.5f, Y %3.5f, Z %3.5f'
 'Type %d, Color %d, Flags %d'
 'Joint %d Angle %f'
@@ -314,6 +316,13 @@ fi
 # it, because every other scenario is written against the flags rather than
 # against the documentation. Now the front page is a test.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --astub --set 40000100=1234567     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4s: the animation editor. A state byte at 0x0215DCF7 subscripts a
+# table of names at 0x021698EA, and the names are an editor's - rotate and move
+# a camera, a focus, an object and a joint, step frames, play back, load and
+# save. The F6-FF message block writes exactly the load, save and append states.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02104EBA:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --peek 0210108F:80 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
