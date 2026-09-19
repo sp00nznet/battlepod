@@ -151,7 +151,8 @@ move.*
 - **What each entity field *is*.** The arena is built on an ordinary boot -
   1000 entities of 0x6B4 bytes - and the bytes each message writes are now
   measured on the running firmware rather than read out of the handlers, for
-  fourteen opcodes. Five fields are named, four of them by the firmware's own
+  sixteen opcodes as a Mech, fourteen as a Hovercraft, twelve
+  unconfigured. Five fields are named, four of them by the firmware's own
   printf labels - `+0x00` Owner, `+0x02` Class_ID, `+0x06` Number, `+0x0A`
   Thing_Flags - plus `+0x9C`, the sequence `0xD2` refuses to go backwards on.
   The rest are located but not named; that still needs a game running to watch

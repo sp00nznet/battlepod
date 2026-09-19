@@ -1187,6 +1187,37 @@ and the messages the static reading could not follow, `B9` `CA` `CC` `CD` `D7`
 The broadcast in `0xDD` shows up exactly as the code said: packet `+0x40` into
 `+0x2E0`, `+0x2F8`, `+0x310`, `+0x340`, `+0x358`, `+0x370`.
 
+### The same sweep as a Mech
+
+Repeating it with entity 1 given **class 1, `Mech`** - the pod's own kind -
+raises the count from 14 to **16 opcodes**, and the differences are all
+class-sensitive arms rather than noise:
+
+- `0xDF` writes only the three position fields, because its extra arms are for
+  classes 8 and 10, an escape pod and a hovercraft.
+- `0xE0` writes **one byte at `+0xBB`** from packet `+0x04` as a Mech, where as
+  a Hovercraft it wrote four bytes at `+0xC4`.
+- `0xEC` writes four more fields - `+0xC0`, `+0xF8`, `+0x114` and 24 bytes at
+  `+0x694`.
+- `0xE7` appears, and it is the most legible result in the sweep:
+
+```
+E7  +1E8  4 from packet+0C    +230  4 from packet+18
+    +200  4 from packet+10    +248  4 from packet+1C
+    +218  4 from packet+14    +260  4 from packet+20
+```
+
+**six consecutive longwords going into six records `0x18` = 24 bytes apart.**
+That is a second array of 24-byte records, at `+0x1E8`, alongside the one
+`0xDD` broadcasts into at `+0x2E0`. One message sets one field of six records
+in order; the other sets one field of six records to the same value. Both are
+24-byte strides, and the entity structure is now known to contain at least two
+arrays of them.
+
+The sweep is worth running per class for that reason: what a message does
+depends on what the thing is, and a single run at one class reports a subset
+and gives no sign that it has.
+
 ### Class 0 is a free slot, and `0xE8` makes one
 
 Running the sweep twice, once with the class the boot leaves and once with a

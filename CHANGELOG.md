@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The field sweep repeated as a `Mech`** - the pod's own class - raises the
+  count from 14 opcodes to **16**, and every difference is a class-sensitive
+  arm: `0xE0` writes one byte at `+0xBB` as a Mech where it wrote four at
+  `+0xC4` as a Hovercraft, `0xEC` writes four more fields, and `0xDF` writes
+  fewer because its extra arms are for classes 8 and 10.
+- **`0xE7` is the clearest result in the sweep**: six consecutive longwords
+  from packet `+0x0C`..`+0x20` into `+0x1E8`, `+0x200`, `+0x218`, `+0x230`,
+  `+0x248`, `+0x260` - **six records `0x18` = 24 bytes apart**. That is a
+  second array of 24-byte records, alongside the one `0xDD` broadcasts into at
+  `+0x2E0`.
+- Which is also a warning about the method: a sweep at one class reports a
+  subset and gives no sign that it has.
+
 - **Seven class dispatchers, not one.** `Create_Thing`'s five-instruction class
   switch appears identically at six more sites, all nineteen wide. Reading
   every table gives a class-by-operation matrix: `1`, `8`-`12`, `17` and `18`
