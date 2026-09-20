@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The game is running.** With `--rirq` the pod's own report says so:
+  `Remaining time` counts **600 -> 597**, `Model Time` goes from 0 to 3, and
+  the event pump turns over - kind `0x10000`, the per-class frame update, runs
+  again and again.
+- **The end-of-frame re-arms itself.** It is scheduled through `0x02122658`
+  with `(0x0C, 0, 0, 0, handler, 0)` at startup and again at the end of every
+  frame, unless `TI_ErrorNumber` is set. So the render is inside a routine that
+  puts itself back on the queue - which is also why it appears in no call site
+  anywhere in the ROM.
+- **`(-$8a,A6)` in the event pump is `+0x14` of the event buffer**, not a
+  separate variable: an event carries its own handler and the pump calls it
+  instead of switching on the kind.
+- The remaining question is now narrow and written down: what `0x02122658`
+  does, and why the second scheduling does not produce an event the way the
+  first did. **165/165.**
+
 - **The renderer's frame-complete interrupt, and `--rirq` to raise it.** The
   board's interrupt is **vectored**, which is why it was never among the
   autovectors: vector 66 (`0x42`) at `0x0214C708`, cause in bits 4-6 of the

@@ -145,12 +145,13 @@ move.*
   the Remote I/O wire, read the status line printed in the same frame - and the
   transport works in both directions. The firmware does not light the panel
   until a game runs. A boot emits exactly one Remote I/O frame.
-- **Why the pod builds one frame and stops.** It builds a real one - a 480x360
-  viewport and a draw object - renders it, and takes the frame-complete
-  interrupt. Then nothing asks for another. The end-of-frame code is reached
-  through the event pump's handler hook rather than by any direct call, so what
-  re-arms that hook is the question; `Max Timed 2` in the status report says
-  the timed-event queue has two entries.
+- **Why the end-of-frame's rescheduled event never comes back.** The game is
+  running - the mission clock counts down, the per-class frame update ticks,
+  the renderer's frame-complete interrupt fires and `Model Time` goes non-zero.
+  The end-of-frame routine re-arms itself through `0x02122658` with
+  `(0x0C, 0, 0, 0, handler, 0)` and takes the not-an-error branch, but the
+  second event never arrives, so the render happens once. Settled by: reading
+  `0x02122658`.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

@@ -2632,6 +2632,53 @@ than by any direct call, so the next question is what re-arms that. `Max Timed
 2` in the status report says the timed-event queue has two entries, which is
 where to look.
 
+### The frame loop is running; the render is not repeating
+
+With `--rirq` the pod's own instrumentation says the game is alive. Typing `s`
+with entity 0 a `Mech`:
+
+```
+Model Time    3                        was 0
+Remaining time = 597                   was 600
+Class_ID=1, Number=0, Thing_Flags=0x00000007
+Averages for 1 frames, 0 polygons and 22.410000 seconds
+```
+
+**The mission clock is counting down.** And the event pump is turning over:
+kind `0x10000` - the per-class frame update, which reads `My_Mech_Ptr`'s
+`Class_ID` and calls a different routine for each class - runs again and again,
+as does the pump's handler hook.
+
+What runs exactly once is the **end-of-frame**, and knowing how it is scheduled
+says why that matters:
+
+```
+02138BA4  pea   ($1874,PC); ($213a41a)      at startup
+02138BAE  pea   $c.w
+02138BB2  jsr   $2122658.l                  schedule it
+
+0213A544  tst.l $3fffe168.l                 TI_ErrorNumber
+0213A54A  bne   $213a566                    an error: do not reschedule
+0213A54E  pea   (-$136,PC); ($213a41a)       otherwise, at the end of
+0213A558  pea   $c.w                         every frame, schedule it
+0213A55C  jsr   $2122658.l                   again
+```
+
+So the end-of-frame **re-arms itself**, and the render is inside it. It ran
+once, it took the not-an-error branch, and it rescheduled - and the rescheduled
+event never came back. The pump's hook is called repeatedly, so events are
+being delivered; this particular one is not.
+
+`(-$8a,A6)` in the pump is **`+0x14` of the event buffer**, not a separate
+variable: an event carries its own handler, and the pump calls it instead of
+switching on the kind. That is how a scheduled routine gets run, and it is why
+the end-of-frame appears in no call site anywhere in the ROM - it is only ever
+reached through `0x02122658`.
+
+**So the open question is narrow**: what `0x02122658` does with `(0x0C, 0, 0,
+0, handler, 0)`, and why the second call does not produce an event the way the
+first did.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and
