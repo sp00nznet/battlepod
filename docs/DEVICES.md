@@ -2679,6 +2679,53 @@ reached through `0x02122658`.
 0, handler, 0)`, and why the second call does not produce an event the way the
 first did.
 
+### Why one frame: the stub was too fast
+
+`0x02122658` turns out not to be a general scheduler. It special-cases two
+kinds into **single dedicated slots**:
+
+```
+02122664  cmpi.l #$c, ($8,A6)          kind 0x0C
+0212266E  move.w #$1, $21bb116.l       one slot, one flag
+02122676  move.l ($8,A6), $21bb0f2.l   ... and six more longwords
+021226BC  cmpi.l #$2, ($8,A6)          kind 2, likewise at 0x021BB118
+0212270A  lea    $21b7566.l, A0        everything else goes in a queue
+```
+
+and `Get_Event` delivers the kind-`0x0C` slot **only when the render has
+finished**:
+
+```
+0212218A  tst.w $21bb116.l      a frame event pending?
+02122192  jsr   $214d45e.l      Render_Done
+021221A0  beq   $21221fe        not done: nothing to deliver
+021221B6  move.l $21bb0f2.l, (A3)   deliver it, handler and all
+```
+
+The handler travels in the event: `(A3+0x14)` gets the fifth argument, which is
+the pointer the end-of-frame passed to the scheduler, and `+0x14` of the event
+buffer is the `(-$8a,A6)` the pump calls.
+
+So the loop is: **end-of-frame renders, reschedules itself, and its event is
+released by the render completing.** Which makes the completion interrupt
+load-bearing, and shows why a stub that is *too fast* breaks it:
+
+```
+0214D3BE  move.l #$1, (A0)              ring the doorbell
+0214D3C4  move.l $2000808.l, $21bb1a4.l
+0214D3CE  clr.l  $217a326.l             clear the render-done flag
+```
+
+`Async_Render` clears the flag **two instructions after** ringing the doorbell.
+An interrupt taken at the doorbell sets the flag and then the clear wipes it,
+and the pod waits for ever for a frame it has already finished. A real board
+took milliseconds. `--rirq` now counts down `RIRQ_DELAY` instructions before
+raising the line, and `--rirq LEVEL:DELAY` makes it a knob rather than a
+constant.
+
+**With that, frames flow.** Six renderer commands in a run become **400** - the
+logger's cap - all of them opcode 6.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and

@@ -152,6 +152,7 @@ JJoint 1 Angle 0.000000
 Type 0, Color 0, Flags 7
 tap 0214465C hit 1
 tap 0214C770 hit 1
+cmd 400  op=00000006
 tap 02138F8E hit 3
 tap 02144724 hit 1
   0010  00 00 00 01 FF FF FF FF 00 00 00 08 00 00 00 0A
@@ -377,6 +378,9 @@ done
 # stamps the timebase into 0x0217A326, which Async_Render clears on the way out
 # and the end-of-frame code waits on. --rirq raises it after every render.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --tap 0214C770 --tap 02138F8E --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
+# and with the completion delayed past the clear that would wipe it, frames flow:
+# 400 renderer commands where there were six.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

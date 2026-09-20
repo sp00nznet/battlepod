@@ -162,6 +162,15 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**A stub that is too fast is as wrong as one that is too slow.** The renderer
+stub completed a render the instant the doorbell was rung, and `Async_Render`
+clears the render-done flag two instructions later - so the completion was
+wiped by the code that requested it, and the pod waited for ever for a frame it
+had already finished. It looked for months like the firmware rendering once and
+stopping, and it was read that way in these documents. Hardware takes time, and
+a model that takes none is not the fastest possible hardware; it is hardware
+that finishes before the caller has stopped talking.
+
 **A string extractor that rejected control characters threw away most of the
 firmware's log lines.** `fnstr.py` accepted only printable ASCII between two
 NULs, and the firmware ends nearly every log line with a newline. So it

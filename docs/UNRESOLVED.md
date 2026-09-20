@@ -110,7 +110,11 @@ the rest. A real 68881 rounds to its own 80-bit extended format and sets
 exception bits these do not; nothing here has needed that, and if a result ever
 looks wrong in the last few digits this is where to look.
 
-**`--rirq` completes a render instantly and always successfully.** A real
+**`--rirq` completes a render after a fixed instruction count and always
+successfully.** The delay exists because the real board could not be instant -
+`Async_Render` clears the render-done flag two instructions after ringing the
+doorbell - but `RIRQ_DELAY` is a number chosen to be comfortably past that, not
+a measurement of any real board. It is a knob: `--rirq LEVEL:DELAY`. A real
 board takes time and can report cause `0x60` - a list of callbacks - as well as
 `0x50`. The stub only ever reports frame-complete, so anything that depends on
 render latency or on the other cause is invisible here.
@@ -145,13 +149,12 @@ move.*
   the Remote I/O wire, read the status line printed in the same frame - and the
   transport works in both directions. The firmware does not light the panel
   until a game runs. A boot emits exactly one Remote I/O frame.
-- **Why the end-of-frame's rescheduled event never comes back.** The game is
-  running - the mission clock counts down, the per-class frame update ticks,
-  the renderer's frame-complete interrupt fires and `Model Time` goes non-zero.
-  The end-of-frame routine re-arms itself through `0x02122658` with
-  `(0x0C, 0, 0, 0, handler, 0)` and takes the not-an-error branch, but the
-  second event never arrives, so the render happens once. Settled by: reading
-  `0x02122658`.
+- **Which display-list buffer reaches the renderer.** Frames now flow - 400
+  renderer commands where there were six - but the list the stub decodes is
+  still a type 0 record and a terminator. `0x0218AF04` is a descriptor with two
+  buffer pointers, and the one being handed over is not the one the emitters
+  filled. Settled by: following the cursor at `+0x0C` and the copy in
+  `0x021444E8`.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

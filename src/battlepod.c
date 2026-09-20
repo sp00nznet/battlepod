@@ -192,8 +192,17 @@ static int duart_write(uint32_t a, unsigned v)
 #define RIRQ_VECTOR 0x42
 #define RIRQ_DONE   0x00D0u	/* bit 7 pending, bits 4-6 cause 0x50 */
 
+/* A render cannot complete instantly. `Async_Render` rings the doorbell and
+ * then, two instructions later, clears the render-done flag the completion
+ * interrupt sets - so an interrupt taken at the doorbell is wiped by the clear
+ * that follows it, and the pod waits for ever for a frame it already finished.
+ * The board took milliseconds; anything past that clear will do. This is a
+ * calibration knob, not a constant: --rirq LEVEL:DELAY sets it. */
+#define RIRQ_DELAY 20000	/* instructions */
+
 static int g_rirq;		/* interrupt level, 0 = off */
-static int g_rirq_pending;
+static int g_rirq_delay = RIRQ_DELAY;
+static int g_rirq_pending;	/* instructions left before the line goes up */
 
 static int rirq_asserted(void);
 
@@ -1436,8 +1445,7 @@ static void rstub_post(void)
 	if (g_rirq && w[0] == RS_OP_RENDER) {
 		/* The handler reads a *word* at the CSR, so the cause has to be in
 		 * the high half of the longword there. */
-		m68k_write_memory_32(RIRQ_CSR, (uint32_t)RIRQ_DONE << 16);
-		g_rirq_pending = 1;
+		g_rirq_pending = g_rirq_delay > 0 ? g_rirq_delay : 1;
 	}
 }
 
@@ -1445,11 +1453,16 @@ static void rstub_post(void)
 static int rirq_asserted(void)
 {
 	uint8_t *p;
-	if (!g_rirq_pending) return 0;
+	if (g_rirq_pending > 1) return 0;		/* still working */
+	if (g_rirq_pending == 1) {			/* just finished */
+		m68k_write_memory_32(RIRQ_CSR, (uint32_t)RIRQ_DONE << 16);
+		g_rirq_pending = -1;
+	}
+	if (g_rirq_pending != -1) return 0;
 	p = g_page[RIRQ_CSR >> PAGE_BITS];
 	if (!p) return 0;
 	if (p[(RIRQ_CSR + 1) & (PAGE_SIZE - 1)] & 0x80) return 1;
-	g_rirq_pending = 0;
+	g_rirq_pending = 0;				/* acknowledged */
 	return 0;
 }
 
@@ -2222,8 +2235,12 @@ int main(int argc, char **argv)
 			g_rstub = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
 		else if (!strcmp(a, "--rirq")) {
-			g_rirq = (i + 1 < argc && argv[i+1][0] != '-')
-			       ? atoi(argv[++i]) : 5;
+			g_rirq = 5;
+			if (i + 1 < argc && argv[i+1][0] != '-') {
+				char *c;
+				g_rirq = (int)strtol(argv[++i], &c, 10);
+				if (*c == ':') g_rirq_delay = (int)strtol(c + 1, NULL, 10);
+			}
 		}
 		else if (!strcmp(a, "--astub")) {
 			g_astub = (i + 1 < argc && argv[i+1][0] != '-')
@@ -2365,6 +2382,7 @@ int main(int argc, char **argv)
 
 		{
 			int lvl = duart_irq() ? irq_level : 0;
+			if (g_rirq_pending > 1) g_rirq_pending--;
 			if (rirq_asserted() && g_rirq > lvl) lvl = g_rirq;
 			m68k_set_irq((unsigned)lvl);
 		}

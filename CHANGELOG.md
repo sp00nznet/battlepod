@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Frames flow. Six renderer commands become 400.** `0x02122658` is not a
+  general scheduler: it special-cases kinds `0x0C` and `2` into single
+  dedicated slots, and `Get_Event` releases the kind-`0x0C` slot **only when
+  the render has finished**. So the end-of-frame renders, reschedules itself,
+  and its own event is released by the render completing - which makes the
+  completion interrupt load-bearing.
+- The handler travels in the event: `(A3+0x14)` gets the scheduler's fifth
+  argument, and `+0x14` of the event buffer is the `(-$8a,A6)` the pump calls.
+- **`--rirq LEVEL:DELAY`** - a calibration knob rather than a constant.
+
+### Fixed
+
+- **The renderer stub was completing a render too fast to be believed.**
+  `Async_Render` clears the render-done flag **two instructions after** ringing
+  the doorbell, so an interrupt taken at the doorbell set the flag and the
+  clear immediately wiped it - and the pod waited for ever for a frame it had
+  already finished. The stub now counts down before raising the line. The bug
+  was ours, not the firmware's, and it is the reason the pod had appeared to
+  render exactly once since the day the stub was written.
+
 - **The game is running.** With `--rirq` the pod's own report says so:
   `Remaining time` counts **600 -> 597**, `Model Time` goes from 0 to 3, and
   the event pump turns over - kind `0x10000`, the per-class frame update, runs
