@@ -2578,6 +2578,60 @@ never completes a render. `Async_Render` itself is `0x0214D302`.
 So the next move is not to decode anything. It is to make the renderer stub
 **finish a frame**, and then read the list it is handed.
 
+### The renderer's frame-complete interrupt
+
+The board has its own interrupt and the firmware installs it as a **vectored**
+one, which is why it was never among the autovectors:
+
+```
+0215B9C6  move.l #$214c708, $2000108.l    vector 66 = 0x42
+0215B9D0  move.l #$215b69a, $200011c.l    vector 71 = 0x47, the DUART
+0215B9E4  move.l #$215b69a, $2000068.l    autovector 2, also the DUART
+0215B9EE  move.l #$215b69a, $200006c.l    autovector 3
+```
+
+`0x47` is the byte the boot writes to the DUART's interrupt vector register at
+`0x11018`, so vector 71 is the DUART from both sides. **Vector 66 is the
+renderer**, and its handler reads the cause out of a word:
+
+```
+0214C70C  move.w $3800001c.l, D0
+0214C712  bclr   #$7, D0                acknowledge
+0214C716  move.w D0, $3800001c.l
+0214C71C  andi.w #$70, D0                the cause, bits 4-6
+0214C720  cmpi.w #$50, D0   beq ...      frame complete
+0214C726  cmpi.w #$60, D0   bne ...      a list of callbacks
+```
+
+and the frame-complete arm is three instructions:
+
+```
+0214C770  move.l $2000808.l, D0
+0214C776  move.l D0, $217a326.l          stamp the timebase
+0214C780  rte
+```
+
+**`0x0217A326` is the render-done flag**, and it closes a loop that was
+previously only half visible: `Async_Render` clears it at `0x0214D3CE` on its
+way out, `Render_Done` at `0x0214D45E` is a bare `tst.l` on it, and the
+end-of-frame code at `0x0213A41A` computes the frame time as
+`0x0217A326 - 0x021BB1A4`, the stamp minus the time the render started. So the
+whole frame-timing story the status report prints comes from this one
+interrupt.
+
+`--rirq` raises it after every render: write `0x00D0` into the CSR word - bit 7
+pending, cause `0x50` - and assert the line at level 5 with vector `0x42`,
+holding it until the handler clears bit 7. With that, **the frame-complete arm
+runs**, which it never did before.
+
+**It is not yet enough.** The pod still builds one frame and stops: the
+end-of-frame code runs once, the render call runs once, and the interrupt
+completes once. Whatever asks for frame two is upstream of all of it - the
+end-of-frame function is reached through the event pump's handler hook rather
+than by any direct call, so the next question is what re-arms that. `Max Timed
+2` in the status report says the timed-event queue has two entries, which is
+where to look.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and

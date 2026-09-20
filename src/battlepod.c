@@ -182,12 +182,27 @@ static int duart_write(uint32_t a, unsigned v)
 	return 1;
 }
 
+/* The renderer finishes a frame by interrupting. Its handler is on vector
+ * 0x42, it reads the cause out of bits 4-6 of the word at 0x3800001C, and it
+ * acknowledges by clearing bit 7 of that word. Cause 0x50 is frame-complete:
+ * the arm stamps the timebase into 0x0217A326, which `Async_Render` clears on
+ * the way out and which the end-of-frame code waits on. Without it the pod
+ * builds one frame and waits for ever. */
+#define RIRQ_CSR    0x3800001Cu
+#define RIRQ_VECTOR 0x42
+#define RIRQ_DONE   0x00D0u	/* bit 7 pending, bits 4-6 cause 0x50 */
+
+static int g_rirq;		/* interrupt level, 0 = off */
+static int g_rirq_pending;
+
+static int rirq_asserted(void);
+
 /* Musashi asks what vector to use when it takes the interrupt. The 68681 is
  * programmed for vectored interrupts, so answer with whatever the firmware
  * wrote to the interrupt vector register. */
 int bp_int_ack(unsigned int level)
 {
-	(void)level;
+	if (g_rirq && (int)level == g_rirq && rirq_asserted()) return RIRQ_VECTOR;
 	return (int)g_ivr;
 }
 
@@ -1414,6 +1429,28 @@ static void rstub_post(void)
 
 	rs_put(4, 0);			/* command complete */
 	m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);	/* renderer ready again */
+
+	/* A real board would take a while and then interrupt. This one takes no
+	 * time at all, which is the fastest a board could be and is the same
+	 * simplification the audio stub makes. */
+	if (g_rirq && w[0] == RS_OP_RENDER) {
+		/* The handler reads a *word* at the CSR, so the cause has to be in
+		 * the high half of the longword there. */
+		m68k_write_memory_32(RIRQ_CSR, (uint32_t)RIRQ_DONE << 16);
+		g_rirq_pending = 1;
+	}
+}
+
+/* The line stays up until the handler acknowledges by clearing bit 7. */
+static int rirq_asserted(void)
+{
+	uint8_t *p;
+	if (!g_rirq_pending) return 0;
+	p = g_page[RIRQ_CSR >> PAGE_BITS];
+	if (!p) return 0;
+	if (p[(RIRQ_CSR + 1) & (PAGE_SIZE - 1)] & 0x80) return 1;
+	g_rirq_pending = 0;
+	return 0;
 }
 
 static void rstub_write(uint32_t off, uint32_t v)
@@ -2032,6 +2069,8 @@ static void usage(void)
 	"  --astub [ADDR]   stand in for the audio board (default 50001000):\n"
 	"                   answer the signature and drain its download ring\n"
 	"                   as fast as the 68020 fills it\n"
+	"  --rirq [LEVEL]   let the renderer finish a frame: raise its vector 0x42\n"
+	"                   interrupt after every render (default level 5)\n"
 	"  --rstub ADDR     stand in for the TMS340 renderer: comm block at ADDR,\n"
 	"                   acknowledge every command, log the queue, serve allocations\n"
 	"  --poke ADDR=HEX  unmapped reads at ADDR return HEX\n"
@@ -2182,6 +2221,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rstub") && i + 1 < argc) {
 			g_rstub = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
+		else if (!strcmp(a, "--rirq")) {
+			g_rirq = (i + 1 < argc && argv[i+1][0] != '-')
+			       ? atoi(argv[++i]) : 5;
+		}
 		else if (!strcmp(a, "--astub")) {
 			g_astub = (i + 1 < argc && argv[i+1][0] != '-')
 			        ? (uint32_t)strtoul(argv[++i], NULL, 16) : 0x50001000u;
@@ -2243,6 +2286,8 @@ int main(int argc, char **argv)
 	if (!script) { usage(); return 1; }
 
 	if (g_astub) ram_add(g_astub, ASTUB_LEN);
+
+	if (g_rirq) ram_add(RIRQ_CSR & ~0xFFu, 0x100);
 
 	if (g_rstub) {
 		ram_add(RSTUB_TI_BASE, RSTUB_TI_LEN);
@@ -2318,7 +2363,11 @@ int main(int argc, char **argv)
 	for (step = 0; step < budget; step++) {
 		pc = m68k_get_reg(NULL, M68K_REG_PC);
 
-		m68k_set_irq(duart_irq() ? (unsigned)irq_level : 0);
+		{
+			int lvl = duart_irq() ? irq_level : 0;
+			if (rirq_asserted() && g_rirq > lvl) lvl = g_rirq;
+			m68k_set_irq((unsigned)lvl);
+		}
 		if ((step % g_clock_div) == 0) clock_tick();
 		if (g_monstub && (pc - g_monstub) < MON_SLOTS * MON_STUB_SZ &&
 		    !((pc - g_monstub) % MON_STUB_SZ)) {

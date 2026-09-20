@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The renderer's frame-complete interrupt, and `--rirq` to raise it.** The
+  board's interrupt is **vectored**, which is why it was never among the
+  autovectors: vector 66 (`0x42`) at `0x0214C708`, cause in bits 4-6 of the
+  word at `0x3800001C`, acknowledged by clearing bit 7. Cause `0x50` is frame
+  complete and its arm stamps the timebase into **`0x0217A326`**.
+- That flag closes a loop only half visible before: `Async_Render` clears it,
+  `Render_Done` is a bare `tst.l` on it, and the end-of-frame code computes the
+  frame time as the stamp minus the time the render started. All the frame
+  timing the status report prints comes from this one interrupt.
+- Vector 71 (`0x47`) is the DUART, confirmed from both sides - `0x47` is the
+  byte the boot writes to its interrupt vector register at `0x11018`.
+- With `--rirq`, **the frame-complete arm runs**, which it never did before.
+  It is not yet enough: the pod still builds one frame and stops, and what
+  re-arms the event pump's handler hook is the open question.
+- One more checkpoint. **164/164.**
+
 - **The pod does build a frame.** With entity 0 a `Mech` in the thirty-slot
   table, both display-list emitters run and the buffer holds a **480x360
   viewport** and a **type 1 draw-object with one item and an identity

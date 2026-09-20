@@ -110,6 +110,11 @@ the rest. A real 68881 rounds to its own 80-bit extended format and sets
 exception bits these do not; nothing here has needed that, and if a result ever
 looks wrong in the last few digits this is where to look.
 
+**`--rirq` completes a render instantly and always successfully.** A real
+board takes time and can report cause `0x60` - a list of callbacks - as well as
+`0x50`. The stub only ever reports frame-complete, so anything that depends on
+render latency or on the other cause is invisible here.
+
 **The renderer, audio and Amiga boards are stubbed** rather than modelled. The
 display list is intercepted on the 68020 side by design - see ARCHITECTURE.md -
 but that is a decision, not an emulation.
@@ -140,8 +145,12 @@ move.*
   the Remote I/O wire, read the status line printed in the same frame - and the
   transport works in both directions. The firmware does not light the panel
   until a game runs. A boot emits exactly one Remote I/O frame.
-- **The display list.** A boot posts one type 0 record and a `0xFFFFFFFF`
-  terminator. There is nothing to draw.
+- **Why the pod builds one frame and stops.** It builds a real one - a 480x360
+  viewport and a draw object - renders it, and takes the frame-complete
+  interrupt. Then nothing asks for another. The end-of-frame code is reached
+  through the event pump's handler hook rather than by any direct call, so what
+  re-arms that hook is the question; `Max Timed 2` in the status report says
+  the timed-event queue has two entries.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
