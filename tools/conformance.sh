@@ -158,6 +158,8 @@ cmd 200  op=00000006
   93  10000.0000  1.0000  60.0000  0.0940  0.0620  0.0940  0  0  0
 tap 0212DB70 hit 1
 tap 0213BB92 hit 1
+tap 021188BE hit 1
+  0000  42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00
 tap 0211786C hit 1
 tap 02117788 hit 1
 0213F35E  fmul.d
@@ -426,6 +428,12 @@ done
 # names - the id is at packet +0x32 - and class 19's arm starts the spawner
 # task, which had never run in any session before this.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21FA062=00000013     --packet 'ED 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --tap 0213BB92 --tap 0211786C --tap 02117788     --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4B: run a mission script. The name goes in the 0xED packet at +0x0A
+# and the entity it names must be class 19, the mission class. The record takes
+# the name, the interpreter's program counter lands in the ROM's bytecode, and
+# the fetch-decode loop runs.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21FA062=00000013     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --tap 021188BE --peek 021A5DBC:16     --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

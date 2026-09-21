@@ -2390,6 +2390,41 @@ So a mission record is about 70 KB, and `0x021A5DBC` holds the one the pod is
 running. The init clears the program counter to **zero** - the bytecode is
 supplied by entering a routine by name, not by loading a file.
 
+### Running a mission script
+
+The last link is short. `0x0211786C` - the mission start that class 19's `0xED`
+arm reaches - ends by calling `0x02117C28`, which enters the interpreter by
+name, and the name it passes is **the `0xED` packet's `+0x0A`**:
+
+```
+021179A4  movea.l ($8,A6), A0
+021179A8  adda.l  #$a, A0        the name, in the packet
+021179B0  move.l  (-$8,A6), -(A7)
+021179B4  jsr     ($272,PC); ($2117c28)
+```
+
+So one message does all of it. Give entity 1 a `Class_ID` of 19, put
+`B1_BattleTech_1` at `+0x0A` of an `0xED` packet and the entity's id at
+`+0x32`, and send it:
+
+```
+peek 021A5DBC:  42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00
+                B  1  _  B  a  t  t  l  e  T  e  c  h  _  1
+script PC:      0216B7F1        in the ROM's bytecode, past the name table
+tap 021188BE    the fetch-decode loop, running
+```
+
+**The mission's bytecode is executing.** The spawner hands the interpreter an
+elapsed time every few ticks, the script sets a wait of `0x4C` hundredths -
+three quarters of a second - and the timer counts down by four per call and is
+set back to `0x4C` again, so the program is **looping on a wait**.
+
+Nothing is created yet. The script runs and waits, and what it is waiting for
+is the next question - a start signal, or players, or a state the pod has not
+been put in. But the machine underneath it is working: a named routine in the
+ROM, entered by a message off the wire, executing on an interpreter, driven by
+a scheduled task, with its own wait timer counting down in real time.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

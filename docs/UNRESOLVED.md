@@ -160,8 +160,10 @@ move.*
   builder and is not being reached. **Settled in outline**: the world is
   populated by a **bytecode program**, the programs are **in the ROM** behind a
   table of thirteen named entry points, and a pod handed no mission has an
-  empty spawn list. What is open is what the 162 opcodes mean, and which
-  message tells a pod to run `B1_BattleTech_1`.
+  empty spawn list. **`0xED` is the message that runs a script**, naming it at
+  packet `+0x0A`, and `B1_BattleTech_1` now executes. What is open is what it
+  is waiting for - it loops on a three-quarter-second wait and creates
+  nothing - and what the 162 opcodes mean.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mission script runs.** `0xED` names the script at packet `+0x0A` and the
+  entity at `+0x32`; class 19's arm starts the mission and enters the
+  interpreter by that name. Put `B1_BattleTech_1` in the packet and the mission
+  record takes the name, the program counter lands at `0x0216B7F1` in the ROM's
+  bytecode, and the fetch-decode loop runs.
+- **The script loops on a wait.** The spawner hands the interpreter an elapsed
+  time every few ticks; the program sets a wait of `0x4C` hundredths - three
+  quarters of a second - and the timer counts down by four per call and is set
+  back again. So a named routine in the ROM, entered by a message off the wire,
+  is executing on an interpreter driven by a scheduled task with its own timer
+  counting down in real time.
+- Nothing is created yet: the script waits, and what for is the next question.
+- Two more checkpoints. **189/189.**
+
 - **The missions are in the ROM.** `0x021186BC` enters the interpreter **by
   name**, looking a routine up in a table at `[0x0216F49C]`. `tools/missions.py`
   reads it - **thirteen routines**:
