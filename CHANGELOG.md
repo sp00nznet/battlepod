@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The missions are in the ROM.** `0x021186BC` enters the interpreter **by
+  name**, looking a routine up in a table at `[0x0216F49C]`. `tools/missions.py`
+  reads it - **thirteen routines**:
+
+  ```
+  B1_BattleTech_1  B2_BattleTech_2
+  FC1..FC8_Follow_Cockp     exitScreen
+  T1_Nose_Only_1   T2_Camera_Only_1
+  ```
+
+  Two scenarios, eight follow-a-cockpit cameras, an exit screen, a nose camera
+  and a camera-only view - a BattleTech Center's whole repertoire, the game and
+  the spectator displays that watched it.
+- **`0xE4` is multiplexed**: packet `+0x0E` selects one of twenty sub-commands,
+  `-1` to `18`. **Sub-command 13 builds a mission record** - a name copied out
+  of the packet, two sub-objects of 31,142 bytes, and the interpreter
+  initialised on the script object that follows them. About 70 KB in all.
+- Four more checkpoints and a new tool. **187/187.**
+
+### Fixed
+
+- **`R1_Red_Planet_1` and `B1_BattleTech_1` are not side identifiers.** Found
+  in the `0xED` handler beside chassis names, they were written up as plausibly
+  an `R` side and a `B` side. They are **mission script names**, and `0xED`
+  names the script to run. The guess was labelled as one, which is the only
+  reason it cost nothing.
+
 - **Missions are bytecode.** Following the spawner down reaches a **fetch,
   decode, dispatch** loop over **162 opcodes** - 94 of them with a handler, 93
   distinct - and the ROM names the machine in its own error messages:

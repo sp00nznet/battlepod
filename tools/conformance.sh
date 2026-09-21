@@ -586,6 +586,18 @@ if [ -f "$OPSCON" ]; then
     check_at_least "file grammars recovered" 27
 fi
 
+# The missions are bytecode routines in the ROM, behind a table of named entry
+# points. Thirteen of them: two scenarios, eight cameras, and three displays.
+if [ -f "$ROM" ]; then
+    echo
+    echo "== mission scripts =="
+    CHECKTEXT=$(python tools/missions.py "$ROM" --check 2>/dev/null)
+    check_at_least "mission routines named" 13
+    check_at_least "entry offsets ascending" 1
+    check_at_least "BattleTech scenarios" 2
+    check_at_least "follow-cockpit cameras" 8
+fi
+
 # The two halves of the game protocol have to agree, and where a message is both
 # sent and received the same field has to appear on both sides - the sender
 # reading it out of the entity structure and the handler writing it back in.
@@ -613,7 +625,7 @@ fi
 
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

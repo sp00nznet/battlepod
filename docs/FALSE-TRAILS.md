@@ -162,6 +162,13 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**`R1_Red_Planet_1` and `B1_BattleTech_1` are not side identifiers.** Found in
+the `0xED` handler alongside chassis names, they were written up here as
+plausibly an `R` side and a `B` side - a BattleTech Center has two. They are
+**mission script names**, entries in the ROM's table of bytecode routines, and
+`0xED` names the script to run. The guess was labelled as one, which is the
+only reason it cost nothing.
+
 **`0xFFFFFFFF` in a display list is a separator, not the end.** The stub's
 walker treated it as a record type and stopped, so every display list this
 project ever decoded read as "a type 0 record and a terminator - nothing to

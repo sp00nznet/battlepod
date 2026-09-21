@@ -2342,6 +2342,54 @@ zero and `+0x1C98` reads `0xFFFFFFFF` - which is the whole reason nothing has
 ever appeared in a frame. Not a missing flag, not an unset field on an entity:
 no program.
 
+### The missions are in the ROM
+
+`0x021186BC` is how the interpreter is entered, and its third argument is a
+**name**: it walks to the NUL, and truncates anything longer than sixteen
+characters. Its second argument is `[0x0216F49C]`, which on a booted pod is
+`0x0216B378` - a table of named entry points in the ROM's own data.
+
+An entry is a NUL-terminated name and a big-endian 16-bit offset, and the table
+has no count; it simply stops. `tools/missions.py` reads it:
+
+```
+B1_BattleTech_1    06FC
+B2_BattleTech_2    0A88
+FC1_Follow_Cockp   113A      FC5_Follow_Cockp   1186
+FC2_Follow_Cockp   114D      FC6_Follow_Cockp   1199
+FC3_Follow_Cockp   1160      FC7_Follow_Cockp   11AC
+FC4_Follow_Cockp   1173      FC8_Follow_Cockp   11BF
+exitScreen         11D2
+T1_Nose_Only_1     13D3
+T2_Camera_Only_1   1499
+```
+
+**Thirteen routines: two BattleTech scenarios, eight follow-a-cockpit cameras,
+an exit screen, a nose camera and a camera-only view.** Which is a BattleTech
+Center's whole repertoire - the game, and the spectator displays that watched
+it.
+
+`B1_BattleTech_1` is one of the strings sitting in the `0xED` handler, beside
+`R1_Red_Planet_1`. An earlier note here guessed those were **side
+identifiers**, an `R` side and a `B` side. They are **script names**, and
+`0xED` names the script to run.
+
+### How a mission is set up
+
+`0xE4` turns out to be multiplexed: its handler reads packet `+0x0E` and
+dispatches twenty ways, `-1` to `18`. **Sub-command 13 builds a mission
+record.** Sending one reaches `0x0211743C`, which:
+
+- copies a **name** out of the packet into the record's first bytes;
+- clears seven words at `+0x450`-`+0x45C` and stamps the timebase at `+0x45E`;
+- initialises **two sub-objects of `0x79A6` = 31,142 bytes** at `+0x466`;
+- and calls the interpreter's init on the script object at `+0xF7B2`, which is
+  exactly where those two sub-objects end.
+
+So a mission record is about 70 KB, and `0x021A5DBC` holds the one the pod is
+running. The init clears the program counter to **zero** - the bytecode is
+supplied by entering a routine by name, not by loading a file.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

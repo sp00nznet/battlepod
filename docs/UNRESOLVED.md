@@ -158,10 +158,10 @@ move.*
   flags, a mech-table slot, the `+0xBB` draw bit and a position from the wire
   changes nothing. Whatever enumerates the world for drawing is inside the
   builder and is not being reached. **Settled in outline**: the world is
-  populated by a **bytecode program**, and a pod that has been handed no
-  mission has an empty spawn list. What is still open is where a mission's
-  bytecode comes from - the archive, or the operator console - and what its
-  162 opcodes mean.
+  populated by a **bytecode program**, the programs are **in the ROM** behind a
+  table of thirteen named entry points, and a pod handed no mission has an
+  empty spawn list. What is open is what the 162 opcodes mean, and which
+  message tells a pod to run `B1_BattleTech_1`.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
