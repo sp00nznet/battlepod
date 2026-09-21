@@ -8,6 +8,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The interpreter's operand stack is typed.** Push writes a **type tag** at
+  `+0x00` and the value at `+0x04` of a 0x4C-byte frame - which is why the
+  readers return `+0x04`, and why there are separate ones for integers and
+  floats. Pushing an integer writes tag `2`. The machine does floating-point
+  arithmetic as well: one arm pops two values, `fadd`s them and pushes.
+- **Five opcodes named**: `0x0B` schedule a routine at a time, `0x24` create a
+  thing, **`0x44` return** (pop the program counter; a null one prints
+  `Popped NULL return address, interpreter stopping.` and halts), `0x61` push a
+  byte, `0x62` push a 16-bit word.
+- `0x61` and `0x62` are over a third of everything a mission executes, which is
+  what a stack machine looks like from the outside.
+- Two more checkpoints. **202/202.**
+
 - **`--vmtrace` - the exact opcode stream a mission runs.** It logs the
   interpreter's dispatch register, which is the only ground truth there is for
   a disassembler working from operand lengths it inferred.

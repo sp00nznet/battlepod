@@ -2628,6 +2628,36 @@ stuck - the opcode mix is wide and changing - it is *waiting for something*,
 in a loop, and whatever it polls is false on a pod with one entity, no
 players and no other cockpits on the wire.
 
+### The stack is typed, and five opcodes have names
+
+`0x02119A50` is the push:
+
+```
+02119A54  movea.l $21b74b6.l, A0
+02119A5A  move.l  #$2, (A0)            a type tag
+02119A66  addi.l  #$4c, $21b74b6.l     one frame on
+02119A72  move.l  ($4,A7), (A0)        the value, at +4
+```
+
+So an operand is a **0x4C-byte frame with a type at `+0x00` and the value at
+`+0x04`** - which is why the readers return `+0x04`, and why there are separate
+ones for integers and floats. Pushing an integer writes tag `2`. The
+interpreter does floating-point arithmetic too: one arm pops two values with
+`0x02119CF6`, `fadd`s them and pushes the result.
+
+With that, five instructions can be named:
+
+| | |
+|---|---|
+| `0x0B` | at time T, enter this routine by name |
+| `0x24` | create a thing - four operands, the ROM's only call to `Create_Thing` |
+| `0x44` | **return** - pop the program counter; a null one prints `Popped NULL return address, interpreter stopping.` and halts |
+| `0x61` | push a byte |
+| `0x62` | push a 16-bit word |
+
+`0x61` and `0x62` between them are over a third of everything a mission
+executes, which is what a stack machine looks like from the outside.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

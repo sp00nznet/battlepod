@@ -173,6 +173,8 @@ tap 02117788 hit 1
 021198A6  cmpi.w
 02118D06  jsr
 02118D3A  jsr
+02119A5A  move.l
+02119426  jsr
 'Interpreter error, bad opcode %02xh at offset 0x%04lx!'
 0212DCF8  fadd.s
        100.0000    8.2000 -200.0000 
@@ -339,6 +341,10 @@ fi
 # Create_Thing has exactly one caller in the whole ROM, and it is bytecode
 # opcode 0x24 - so a thing is only ever made by a mission script.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02118D06:14 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# The operand stack is typed: push writes a tag at +0 and the value at +4, one
+# 0x4C-byte frame at a time. And 0x44 is return.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119A54:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119426:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211972E:80 >> "$OUT" 2>&1 || true
 fi
