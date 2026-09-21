@@ -14,14 +14,17 @@ This is how you find out what it was.
 ## Status
 
 **v0.1.0 — alpha, a research tool, not a game.** Geometry out of the archive
-renders; the cockpit itself does not. Conformance: **147/147** checkpoints.
+renders; the cockpit builds frames but nothing puts them on a screen yet. Conformance: **207/207** checkpoints.
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed, and **all four of its subsystem checks now pass**.
 A packet injected at the wire travels the firmware's own path - dispatch,
 router, identity filter, event queue, message table, handler - and moves real
-state in the cockpit's memory. Ask it to, and it prints its own frame-rate,
-culling and queue statistics. Along the way it parses its resource archive and
+state in the cockpit's memory. It draws frames, and the display list decodes to
+a viewport, a camera and a transform built from a position sent over the wire.
+Ask it to, and it prints its own frame-rate, culling and queue statistics. And
+it turns out to carry a **162-opcode interpreter**: its missions are bytecode
+programs in its own ROM, and one of them runs. Along the way it parses its resource archive and
 prints the index — 418 resources whose format is now decoded, including 130 3D
 models with verified bounding volumes. The graphics processor
 has been identified and its command protocol decoded, and the firmware's own
@@ -418,7 +421,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 147/147). Skips with a clear message if no
+reporting a pass count (currently 207/207). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

@@ -69,6 +69,23 @@ audio board is modelled rather than poked, and setting one flag gets the
 firmware's own frame-rate, culling, router and event statistics out of a booted
 cockpit. That is the measurement to beat.
 
+**Phase 11 — the pod draws, and a mission runs.** The renderer's
+frame-complete interrupt is raised, frames flow, and the display list decodes:
+a 480x360 viewport, a draw object whose transform is built from a position sent
+over the wire, a `$2C0` camera item with a 60-degree field of view, and a
+head-up display. Separately, a mission is started by sending `0xED` to a class
+19 entity, and it runs.
+
+**Phase 12 — missions are bytecode.** The pod carries a **162-opcode
+interpreter** and thirteen named routines in its ROM - two BattleTech
+scenarios, eight cameras, three displays. `tools/missions.py` lists them,
+`tools/mission_dis.py` disassembles them against operand lengths measured from
+each handler, and `--vmtrace` logs what a running mission actually executes.
+The machine is a typed stack machine: 0x4C-byte operand frames carrying a type,
+a locals frame, six value types, a typed load and store, and named control
+flow. A world is populated by a program, instruction by instruction, and
+`Create_Thing` has exactly one caller in the ROM - bytecode opcode `0x24`.
+
 ## Next
 
 **The four draw opcodes.** `$200` puts down a single pixel at a vertex, `$220`
@@ -126,11 +143,17 @@ ends rather than from the console: 44 field pairs agreeing, the entity
 structure behind them, and a way to measure any message's effect on the running
 firmware.
 
-What is actually missing is the *sequence*: which messages, in which order,
-take a booted pod from idle to a mission. The console's own log names them —
-`COCKPIT_CONFIG_MSG`, `PLAYER_CONFIG`, `FINAL_LAUNCH_MSG` — and the `0xF6`-`0xFF`
-block is where they land, but which number is which is not settled, and neither
-is what a pod does when it gets them in the wrong order.
+The *sequence* is now known too, and it works: `0xE5` carries a game length,
+`0xED` names a mission script and the class 19 entity to run it on, and
+`--packet` takes them in order. The mission runs. Its spawn opcode runs.
+
+**What is missing is smaller and stranger than it was.** In eight thousand
+executed instructions a mission never runs `0x24`, the only instruction in the
+machine that creates anything. It is not stuck - the opcode mix is wide and
+changing - it is polling, and whatever it polls is false on a pod with one
+entity, no players and nothing else on the wire. Settling that means naming
+more of the 94 opcodes, and in particular what the typed loads in its loop are
+reading.
 
 **Two coprocessor operations.** Short-form `CEXEC` splits its command across
 two words, and one mode 3 routine is unidentified. The scanned TMS34082
