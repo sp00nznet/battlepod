@@ -2823,6 +2823,61 @@ from inside it. Giving a second entity a class, a number, flags and a slot in
 the thirty-strong mech table is not enough to make it appear - the per-class
 draw operation, one of the seven class dispatchers, wants more than that.
 
+### The draw pass, and why it only ever sees one entity
+
+The frame is built by `0x0212DB70`, and how it is reached matters more than
+what it does. Event **kind 2** dispatches on `My_Mech_Ptr`'s `Class_ID` and
+calls a different builder per class:
+
+```
+0213912E  jsr $213eea4.l      one class
+02139140  jsr $212db70.l      class 1, a Mech
+02139152  jsr $2104374.l
+02139164  jsr $210b9ca.l
+```
+
+each with `My_Mech_Ptr` as its only argument. **Rendering is per-viewer, not
+per-entity**: the pod draws the world *from* its own mech, and what kind of
+thing you are flying decides which builder runs - the same shape as the
+in-game console's dispatch and the seven class-dispatched operations.
+
+The builder opens by clearing six longwords at `0x02194054`-`0x02194068`, which
+identifies them: they are the **`Cone stats`** the status report prints -
+`Total`, `First Distance`, `Second Distance`, `Entering Clip`, `Z Clip`,
+`Cone Reject`. Then it gates on the viewer:
+
+```
+0212DBA4  btst #$0, ($bb,A3)    the viewer's +0xBB, bit 0
+0212DBAE  btst #$2, ($ba,A3)    +0xBA, bit 2
+0212DBB6  lea  ($2e,A3), A0     Z, against -10.0
+```
+
+and `+0xBB` is the byte **message `0xE0` writes** - which the field sweep found
+without knowing what it was for.
+
+The list itself is built through the descriptor:
+
+```
+0212DC7C  pea $218af14.l        the buffer
+0212DC78  pea $2328.w           its size, the 9000 bytes command 2 allocated
+0212DC72  pea $218af04.l        the descriptor
+0212DC82  jsr $2144592.l        start a list
+0212DC92  jsr $21445fa.l        (descriptor, 2)
+0212DC98  movea.l $218af10.l, A0   the cursor, descriptor+0x0C
+0212DC9E  addq.l #4, $218af10.l    every record is written through it
+```
+
+So `0x0218AF04` is `{buffer, second buffer, size, cursor}` and the two buffers
+alternate, which is what the earlier reading called double buffering and got
+right.
+
+**Making another entity draw needs more than we have.** Giving entity 1 a
+class, a number, flags, a mech-table slot, the `+0xBB` draw bit and a position
+from the wire changes nothing: tapping the builder shows it called sixteen
+times and **always with entity 0**. Whatever enumerates the world for drawing
+is inside the builder and is not reached, so the missing ingredient is
+something the builder looks for rather than something the entity lacks.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and

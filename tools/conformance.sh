@@ -156,6 +156,7 @@ cmd 200  op=00000006
     viewport  (0,0)-(479,359)  480x360  centre (239,179)
         pick (16,16) -> entity 0 part 0
   93  10000.0000  1.0000  60.0000  0.0940  0.0620  0.0940  0  0  0
+tap 0212DB70 hit 1
        100.0000    8.2000 -200.0000 
 tap 02138F8E hit 3
 tap 02144724 hit 1
@@ -390,7 +391,7 @@ done
 # Z 5.4 with an 0xEC packet and let the frames run: the display list's transform
 # comes back as (X, Z + 2.8, -Y) with a one-degree yaw from Course 1.0, and the
 # item stream carries real drawing opcodes. Wire to picture, in one run.
-"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --packet 'EC 00 00 00 00 00 00 00 00 00 00 00 42 C8 00 00 43 48 00 00 40 AC CC CD 3F 80 00 00 00 00 00 00 3E 80 00 00 00 00 00 00'     --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --packet 'EC 00 00 00 00 00 00 00 00 00 00 00 42 C8 00 00 43 48 00 00 40 AC CC CD 3F 80 00 00 00 00 00 00 3E 80 00 00 00 00 00 00'     --tap 0212DB70 --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

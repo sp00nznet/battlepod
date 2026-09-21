@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Rendering is per-viewer, not per-entity.** The frame builder is
+  `0x0212DB70`, reached from event **kind 2**, which dispatches on
+  `My_Mech_Ptr`'s `Class_ID` and calls a different builder per class - each
+  with `My_Mech_Ptr` as its only argument. The pod draws the world *from* its
+  own mech, and what you are flying decides which builder runs.
+- **The six `Cone stats` globals are named**: the builder opens by clearing
+  `0x02194054`-`0x02194068`, which are the `Total`, `First Distance`,
+  `Second Distance`, `Entering Clip`, `Z Clip` and `Cone Reject` the status
+  report prints.
+- **`entity+0xBB` bit 0 gates drawing** - and `+0xBB` is the byte message
+  `0xE0` writes, which the field sweep had found without knowing what it was
+  for.
+- **The display-list descriptor is confirmed** as `{buffer, second buffer,
+  size, cursor}`: `0x02144592(buffer, 0x2328, descriptor)` starts a list and
+  every record is written through the cursor at `descriptor+0x0C`.
+- One more checkpoint. **171/171.**
+
 - **Items print their payload, not their length.** The lengths were already
   known and the meanings were not, which is a gap a log line can close.
 - **`$2C0` sets the camera**: `93, far 10000.0, near 1.0, FOV 60 degrees,

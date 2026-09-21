@@ -152,11 +152,13 @@ move.*
 - **What the leading type 0 record is.** Every frame opens with
   `{0, 2, 2, 1}` followed by a `0xFFFFFFFF` separator, and nothing read so far
   says what it configures.
-- **What it takes to make a second entity draw.** Frames flow and carry the
-  scene and the HUD, but no mech geometry. Giving another entity a class, a
-  number, flags and a slot in the thirty-strong mech table is not enough. The
-  per-class draw operation - one of the seven class dispatchers - wants
-  something else first, most likely a shape bound to the entity's `Type`.
+- **What it takes to make a second entity draw.** The frame builder is
+  `0x0212DB70`, reached per-viewer from event kind 2, and it is called sixteen
+  times in a run **always with entity 0**. Giving entity 1 a class, a number,
+  flags, a mech-table slot, the `+0xBB` draw bit and a position from the wire
+  changes nothing. Whatever enumerates the world for drawing is inside the
+  builder and is not being reached, so the missing ingredient is something the
+  builder looks for rather than something the entity lacks.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
