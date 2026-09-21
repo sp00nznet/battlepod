@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`tools/mission_dis.py` - the mission bytecode disassembles.** Both things
+  it needs come out of the ROM: the program counter is `table + offset`,
+  because the name lookup adds the table's own address, and an instruction's
+  operand length is **counted from its handler's own program-counter steps**
+  rather than taken from a table anyone typed in.
+- **It is a stack machine.** 94 opcodes have handlers; **81 take no operand**,
+  12 take one byte, 1 takes two.
+- **The disassembly matches the running pod.** `B1_BattleTech_1` begins
+  `49 01, 49 01, 49 01, 4B 01, 4B 01, 47 01, 47 01, 47 01, 4A 08, 65 08, 45,
+  42`, and tapping the interpreter's dispatch on a live mission gives exactly
+  `49 49 49 4B 4B 47 47 47 4A 65 45 42`. Two independent readings of the same
+  program, agreeing - which is the only check available on either.
+- The walk stops after `42` because the program branches, and the tool says so
+  rather than printing rubbish past the point where it stopped being right.
+- Four more checkpoints. **193/193.**
+
 - **A mission script runs.** `0xED` names the script at packet `+0x0A` and the
   entity at `+0x32`; class 19's arm starts the mission and enters the
   interpreter by that name. Put `B1_BattleTech_1` in the packet and the mission

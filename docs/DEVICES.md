@@ -2425,6 +2425,51 @@ been put in. But the machine underneath it is working: a named routine in the
 ROM, entered by a message off the wire, executing on an interpreter, driven by
 a scheduled task, with its own wait timer counting down in real time.
 
+### Reading a mission
+
+`tools/mission_dis.py` disassembles one, and both things it needs come out of
+the ROM rather than out of a guess.
+
+**Where a routine starts.** The name lookup at `0x021186FC` reads the entry's
+16-bit value and *adds the table's own address*, so the program counter is
+`table + offset` and the name table sits at the front of the blob it indexes.
+
+**How long an instruction is.** Every handler that takes an operand begins by
+stepping the interpreter's program counter, and that step is one instruction -
+`addq.l #1,(-$10e,A6)`. Counting those in a handler gives the operand length,
+measured rather than assumed:
+
+```
+opcodes with a handler: 94
+  taking 0 operand bytes: 81
+  taking 1 operand bytes: 12
+  taking 2 operand bytes: 1
+```
+
+So it is a **stack machine**: four fifths of the instruction set takes no
+operand at all.
+
+`B1_BattleTech_1` begins:
+
+```
+0216BA74  49 01      0216BA80  47 01
+0216BA76  49 01      0216BA82  47 01
+0216BA78  49 01      0216BA84  4A 08
+0216BA7A  4B 01      0216BA86  65 08
+0216BA7C  4B 01      0216BA88  45
+0216BA7E  47 01      0216BA89  42
+```
+
+and that is **exactly the opcode sequence the running pod executes** - tapping
+the interpreter's dispatch on a live mission gives
+`49 49 49 4B 4B 47 47 47 4A 65 45 42 ...`. The disassembler and the machine
+agree, which is the only check available on either.
+
+It stops after `42`, because the next byte is not an opcode: the program has
+branched. A linear walk cannot follow control flow, and the tool says
+`<unknown>` and stops rather than printing rubbish past the point where it
+stopped being right.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

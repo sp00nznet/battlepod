@@ -604,6 +604,12 @@ if [ -f "$ROM" ]; then
     check_at_least "entry offsets ascending" 1
     check_at_least "BattleTech scenarios" 2
     check_at_least "follow-cockpit cameras" 8
+    # Operand lengths are counted from each handler's own program-counter
+    # steps, not from a table anyone typed in.
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" --lengths 2>/dev/null)
+    check_at_least "opcodes with a handler" 94
+    check_at_least "taking 0 operand bytes" 81
+    check_at_least "taking 1 operand bytes" 12
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both
@@ -633,7 +639,7 @@ fi
 
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py tools/mission_dis.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))
