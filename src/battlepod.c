@@ -1331,6 +1331,15 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 	}
 	while (at < count + 1 && records < 64) {
 		uint32_t type = dl_word(ti_byte_addr, at);
+		/* 0xFFFFFFFF is a separator, not the end: a real frame has one
+		 * after the leading record and carries on with the viewport.
+		 * Reading it as a record type was what made every list here
+		 * look like it held nothing. */
+		if (type == 0xFFFFFFFFu) {
+			rslog("    ----\n");
+			at++;
+			continue;
+		}
 		/* The renderer's walker skips the type and length, then takes the
 		 * length in longwords as what follows - so a record is 2 + len. */
 		uint32_t len = 2 + dl_word(ti_byte_addr, at + 1);

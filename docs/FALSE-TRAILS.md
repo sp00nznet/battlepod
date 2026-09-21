@@ -162,6 +162,14 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**`0xFFFFFFFF` in a display list is a separator, not the end.** The stub's
+walker treated it as a record type and stopped, so every display list this
+project ever decoded read as "a type 0 record and a terminator - nothing to
+draw", and that sentence went into the documentation as a fact about the
+cockpit. A real frame has one after the leading record and carries straight on
+with the viewport, the object and its item stream. One longword, misread, hid
+every frame the pod ever built.
+
 **A stub that is too fast is as wrong as one that is too slow.** The renderer
 stub completed a render the instant the doorbell was rung, and `Async_Render`
 clears the render-done flag two instructions later - so the completion was

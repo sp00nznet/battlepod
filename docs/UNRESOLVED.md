@@ -149,12 +149,9 @@ move.*
   the Remote I/O wire, read the status line printed in the same frame - and the
   transport works in both directions. The firmware does not light the panel
   until a game runs. A boot emits exactly one Remote I/O frame.
-- **Which display-list buffer reaches the renderer.** Frames now flow - 400
-  renderer commands where there were six - but the list the stub decodes is
-  still a type 0 record and a terminator. `0x0218AF04` is a descriptor with two
-  buffer pointers, and the one being handed over is not the one the emitters
-  filled. Settled by: following the cursor at `+0x0C` and the copy in
-  `0x021444E8`.
+- **What the leading type 0 record is.** Every frame opens with
+  `{0, 2, 2, 1}` followed by a `0xFFFFFFFF` separator, and nothing read so far
+  says what it configures.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

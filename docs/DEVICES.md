@@ -2726,6 +2726,56 @@ constant.
 **With that, frames flow.** Six renderer commands in a run become **400** - the
 logger's cap - all of them opcode 6.
 
+### The frame, decoded
+
+The list the renderer receives was the right one all along; the stub's walker
+was wrong about one longword. `0xFFFFFFFF` is a **separator**, not the end: a
+real frame has one after the leading record and carries straight on. Reading it
+as a record type is what made every display list in this project look empty.
+
+With that fixed, and with entity 0 placed by an `0xEC` packet at X 100, Y 200,
+Z 5.4 with Course 1.0:
+
+```
+display list at TI 100007D0: 104 longwords
+  type 0, 4 longwords
+  ----
+  viewport  (0,0)-(479,359)  480x360  centre (239,179)
+  object    1 picks, 42 longwords, viewport 1, items from record 2, screen 480x360
+       0.9998    0.0000   -0.0175
+       0.0000    1.0000    0.0000
+       0.0175    0.0000    0.9998
+     100.0000    8.2000 -200.0000
+      pick (16,16) -> entity 0 part 0
+  type 6, 5 longwords
+  items     22 longwords
+      item $0E0, 1 longwords      a vector
+      item $100, 3 longwords
+      item $280, 1 longwords
+      item $240, 2 longwords      draw polygon
+      item $2A0, 1 longwords
+      item $0C0, 1 longwords      a run of vertices
+      ...
+```
+
+Three things to read off it.
+
+**The transform is built from the position we sent.** The translation row is
+`(100.0, 8.2, -200.0)` for a packet carrying X 100, Y 200, Z 5.4 - that is
+**(X, Z + 2.8, -Y)**. The renderer's world is Y-up with the sign of the third
+axis flipped, and `2.8` is an eye height added on top of the mech's own Z.
+
+**Course is in degrees.** The rotation is `cos 1 deg = 0.9998` and
+`sin 1 deg = 0.0175`, from a packet that carried Course `1.0`.
+
+**The item stream is real geometry.** `$0E0`, `$0C0`, `$100`, `$240`, `$280`,
+`$2A0` are the model interpreter's own opcodes - vectors, vertex runs, draw
+polygon, the markers - the same language `tools/model.py` already runs.
+
+So the chain is complete end to end: **a packet arrives at the wire, moves an
+entity, and shows up as the transform of a frame the pod builds for its
+renderer.**
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and

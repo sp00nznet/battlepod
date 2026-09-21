@@ -8,6 +8,37 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The frame decodes, and it has the mech in it.** With the walker fixed and
+  entity 0 placed by an `0xEC` packet at X 100, Y 200, Z 5.4, Course 1.0:
+
+  ```
+  viewport  (0,0)-(479,359)  480x360  centre (239,179)
+  object    1 picks, 42 longwords, screen 480x360
+       0.9998    0.0000   -0.0175
+       0.0000    1.0000    0.0000
+       0.0175    0.0000    0.9998
+     100.0000    8.2000 -200.0000
+        pick (16,16) -> entity 0 part 0
+  items     22 longwords
+        item $0E0 ... $240 ... $2A0 ...
+  ```
+- **The transform is built from the position we sent**: the translation row is
+  **(X, Z + 2.8, -Y)**, so the renderer's world is Y-up with the third axis
+  negated and `2.8` is an eye height on top of the mech's own Z.
+- **Course is in degrees** - `cos 1 deg` and `sin 1 deg` from a packet carrying
+  `1.0`.
+- **The item stream is real geometry**, in the model interpreter's own opcode
+  language - the one `tools/model.py` already runs.
+- Four more checkpoints. **169/169.**
+
+### Fixed
+
+- **`0xFFFFFFFF` in a display list is a separator, not the end.** The stub's
+  walker treated it as a record type and stopped, so every display list this
+  project ever decoded read as "a type 0 record and a terminator - nothing to
+  draw" - and that sentence went into the documentation as a fact about the
+  cockpit. One longword, misread, hid every frame the pod ever built.
+
 - **Frames flow. Six renderer commands become 400.** `0x02122658` is not a
   general scheduler: it special-cases kinds `0x0C` and `2` into single
   dedicated slots, and `Get_Event` releases the kind-`0x0C` slot **only when
