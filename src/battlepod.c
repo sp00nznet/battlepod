@@ -1311,7 +1311,19 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
 			rslog("        item $%03X \"%s\"\n", op, text);
 			len = 1 + used;
 		} else {
-			rslog("        item $%03X, %u longwords\n", op, len);
+			uint32_t k;
+			rslog("        item $%03X", op);
+			/* The lengths are known and the meanings are not, so
+			 * print the payload: a shape id or a small integer is
+			 * recognisable where a bare length is not. */
+			for (k = 1; k < len && k < room; k++) {
+				uint32_t v = dl_word(ti_byte_addr, at + k);
+				if (v > 0x30000000u && v < 0x50000000u)
+					rslog("  %.4f", as_float(v));
+				else
+					rslog("  %u", v);
+			}
+			rslog("\n");
 		}
 		if (op == 0 || len > room) return;
 		at += len;
@@ -2014,9 +2026,11 @@ static int selftest_dlist(void)
 		printf("FAIL: object record not decoded\n%s", g_rslog + mark);
 		return 1;
 	}
-	if (!strstr(g_rslog + mark, "item $040, 8 longwords") ||
+	/* Items now print their payload rather than their length, because the
+	 * lengths were known and the meanings were not. */
+	if (!strstr(g_rslog + mark, "item $040  0  0  0  0  0  0  0") ||
 	    !strstr(g_rslog + mark, "item $1E0 \"HELLO\"") ||
-	    !strstr(g_rslog + mark, "item $000, 1 longwords")) {
+	    !strstr(g_rslog + mark, "item $000\n")) {
 		printf("FAIL: item stream not decoded\n%s", g_rslog + mark);
 		return 1;
 	}

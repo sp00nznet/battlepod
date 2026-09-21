@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Items print their payload, not their length.** The lengths were already
+  known and the meanings were not, which is a gap a log line can close.
+- **`$2C0` sets the camera**: `93, far 10000.0, near 1.0, FOV 60 degrees,
+  colour (0.094, 0.062, 0.094)`. The first type 7 record in a frame is the
+  scene.
+- **The second type 7 record is the head-up display**: `$100` takes a screen
+  position and `$240` a number, so the stream is *move here, draw that*, one
+  pair per glyph. The object record names record 2 through its `+0x58` - the
+  pod is drawing its instruments.
+- **There is no mech geometry in the frame, and there should not be**: the only
+  entity in the world is the player's own, and you do not see your own cockpit
+  from inside it. Giving a second entity a class, a number, flags and a slot in
+  the mech table is not enough to make it draw - written down as an open
+  question rather than guessed at.
+- One more checkpoint. **170/170.**
+
 - **The frame decodes, and it has the mech in it.** With the walker fixed and
   entity 0 placed by an `0xEC` packet at X 100, Y 200, Z 5.4, Course 1.0:
 

@@ -2776,6 +2776,53 @@ So the chain is complete end to end: **a packet arrives at the wire, moves an
 entity, and shows up as the transform of a frame the pod builds for its
 renderer.**
 
+### What the items say, now that they print their payloads
+
+The item lengths were known and the meanings were not, which is a gap a log
+line can close: printing each item's payload makes a shape id or a field of
+view recognisable where a bare length is not.
+
+A frame's first type 7 record is **the scene**:
+
+```
+item $2C0  93  10000.0000  1.0000  60.0000  0.0940  0.0620  0.0940  0  0  0
+item $000
+```
+
+**`$2C0` sets the camera**: a far plane of 10000, a near plane of 1.0, a
+**60-degree field of view**, and a colour triple of `(0.094, 0.062, 0.094)` -
+a very dark violet, which is the ground or the sky. The leading `93` is not
+identified.
+
+The second type 7 record is **the head-up display**:
+
+```
+item $0E0
+item $100  16  16      position
+item $280
+item $240  72          draw 72
+item $2A0
+item $0C0
+item $280
+item $100  0  0
+item $240  96
+item $100  0  0
+item $240  95
+item $2A0
+item $000
+```
+
+`$100` takes a screen position and `$240` a number, so this is *move here,
+draw that* - a HUD glyph or symbol per pair. The object record names which type
+7 record to run through its `+0x58`, and it names record 2: the pod is drawing
+its instruments.
+
+**There is no mech geometry in the frame, and there should not be.** The only
+entity in the world is the player's own, and you do not see your own cockpit
+from inside it. Giving a second entity a class, a number, flags and a slot in
+the thirty-strong mech table is not enough to make it appear - the per-class
+draw operation, one of the seven class dispatchers, wants more than that.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and
