@@ -24,14 +24,27 @@ All notable changes to this project are documented here. The format follows
   `$FF`-terminated byte list. So **`0x60` pushes a fixed-point constant** and
   takes four operand bytes, not zero, and **`0x09` takes a terminated list**
   whose length is in the stream.
-- **`0x64` pushes a label.** Its helper reads one byte, pushes the address of
-  the instruction after it onto the typed stack as a type 0 value, and returns
-  that address plus the byte - so the opcode pushes a label and skips the block
-  the label points at, which is how the bytecode hands an inline routine to
-  something. The target rule agrees with the trace **127 times out of 127**, and
-  static reachability across the thirteen routines goes from 211 instructions to
-  over a thousand.
-- Six checkpoints. **214/214.**
+- **`0x64` pushes a string literal**: a length byte, that many bytes of
+  NUL-terminated text, then execution resumes after them. Twenty-one literals
+  appear across the thirteen routines - `'exitScreen'`, `'VGL Universe 34933'`,
+  `'STATS (kills/deaths)'`, `'Transition at T - %0t'`, `'Speed %1d'`,
+  `"('NoseCam')"`. The resume address agrees with the trace **127 times out of
+  127**.
+- **`0x0A` is the interpreter's `printf`** - it follows a `0x64` in 70 cases out
+  of 70, and `0x0211A89A` has the `%` test, the `*` test, a ctype table at
+  `0x0218247F` and a 39-byte buffer at `0x021827BC`. **`0x0B` takes a pushed
+  name**: `B1_BattleTech_1` pushes `'exitScreen'` and then runs `0x0B`, which is
+  why the routine name table exists.
+- **`xref.py --calls`** finds every site that calls or jumps to an address,
+  across all four call forms - `bsr.b` included, which is two bytes where the
+  others are four and which a word-stepping scanner walks straight over. An
+  under-reported caller list reads as a finding.
+- **The slot allocator** at `0x0211E15E`: 16 slots of stride 0x6C0 from a base
+  the caller passes, free bit at `+0x0D` bit 0, and on a free slot it writes the
+  class to `+0x02`, the index to `+0x06` and `7` to `+0x0A`. Both constructors
+  use it, each has exactly one caller, and both callers are unused mission
+  opcodes. `0x20`'s handler is the matching reset.
+- Twelve checkpoints. **220/220.**
 
 ### Fixed
 
