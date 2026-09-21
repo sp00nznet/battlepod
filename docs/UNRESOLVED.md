@@ -164,10 +164,12 @@ move.*
   **spawn opcode `0x0B` runs**. The **game length** turned out to be
   `0xE5`'s packet `+0x3C`, seconds times a hundred into the mission clock, and
   sending it before `0xED` sets the clock and starts the mission - and still
-  nothing is created. `0x0B`, the opcode that looked like a spawn, turns out to
-  schedule **another script routine** by name, so what creates a thing is
-  inside one of those. Settled by: naming more of the 94 opcodes, or tracing
-  which routine a running mission schedules.
+  nothing is created. **Opcode `0x24` is the one that creates a
+  thing**, and `Create_Thing` has exactly one caller in the ROM - so a world is
+  populated instruction by instruction by a mission program, and by nothing
+  else. `B1_BattleTech_1`'s body has no `0x24` in its first 56 instructions, so
+  whatever makes this mission's mechs is further in or in a routine it
+  schedules. Settled by: following the program.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

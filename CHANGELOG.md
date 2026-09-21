@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A thing is only ever made by a script.** `Create_Thing` is called from
+  **exactly one place in the whole ROM**, and that place is a bytecode opcode
+  handler: **`0x24`**, which takes four operands off the script's stack - two
+  raw, two as integers - and calls it. The opcode before it calls a sibling
+  constructor, so a script has more than one way to make something.
+- That settles the shape of the system, and explains why an empty pod stays
+  empty however much is written into its entity table by hand: **nothing has
+  executed a `0x24`**. A scenario loader, a console broadcast, an entity flag -
+  every route considered here was looking in the wrong place.
+- `B1_BattleTech_1`'s body disassembles for 56 instructions before reaching an
+  opcode with no handler, and there is no `0x24` among them, so whatever makes
+  this mission's mechs is further in or in a routine it schedules.
+- Two more checkpoints. **199/199.**
+
 - **`--packet` takes up to eight, delivered in order.** A mission needs a
   *sequence* - a game length, then a mission, then a start - and one packet
   could never have expressed that.

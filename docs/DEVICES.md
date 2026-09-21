@@ -2567,6 +2567,36 @@ opcode executes, and **still nothing is created** - so there is at least one
 more input, and the honest thing is to say that rather than to keep forcing
 values into globals until something moves.
 
+### A thing is only ever made by a script
+
+`Create_Thing` is called from **exactly one place in the whole ROM**, and that
+place is a bytecode opcode handler:
+
+```
+02118D06  jsr $2119d48.l      pop
+02118D0E  jsr $2119d48.l      pop
+02118D16  jsr $2119d16.l      pop, as an integer
+02118D1E  jsr $2119d16.l      pop, as an integer
+02118D26..02118D36            push all four, and the script
+02118D3A  jsr $211dc1e.l      Create_Thing
+```
+
+**Opcode `0x24` creates a thing**, taking four operands off the script's stack
+- two raw, two as integers. The opcode immediately before it calls
+`0x0211DC14`, a sibling constructor, so there is more than one way for a script
+to make something.
+
+That settles the shape of the whole system. The pod does not populate a world
+from a file or from a message; **a mission program does it, instruction by
+instruction**, and every other route considered here - a scenario loader, a
+console broadcast, an entity flag - was looking in the wrong place. It also
+explains why an empty pod stays empty no matter what is written into its
+entity table by hand: nothing has executed a `0x24`.
+
+`B1_BattleTech_1`'s body disassembles for 56 instructions before reaching an
+opcode with no handler, and there is no `0x24` among them - so whatever creates
+this mission's mechs is further in, or in one of the routines it schedules.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.
