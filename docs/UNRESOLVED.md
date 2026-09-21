@@ -157,8 +157,10 @@ move.*
   times in a run **always with entity 0**. Giving entity 1 a class, a number,
   flags, a mech-table slot, the `+0xBB` draw bit and a position from the wire
   changes nothing. Whatever enumerates the world for drawing is inside the
-  builder and is not being reached, so the missing ingredient is something the
-  builder looks for rather than something the entity lacks.
+  builder and is not being reached - and the builder never touches the entity
+  table or the mech table at all, so the world is enumerated somewhere else
+  entirely. Settled by: finding what fills the list between the object record
+  and the item streams.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

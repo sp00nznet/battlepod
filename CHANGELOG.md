@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The view heading is `Course + the field after it`**, wrapped at 360 -
+  which settles the units from the code rather than from an observation, and
+  names **`+0xFC`** as something added to Course to get where the pilot is
+  looking. A torso twist is what a BattleTech pod has that a heading alone
+  does not.
+- The two matrix builders confirm it: `0x0213F30C` and `0x0213F350` each take
+  an angle in **degrees**, multiply by pi/180, `fsincos` it and fill a 3x3.
+- **The scene's colours come from the game definition.** The `$2C0` camera
+  item's field of view and far plane are constants; its colour is six
+  longwords from `[0x02193BB4]+0x30`. `0x02193BB4` is set at startup from
+  `0x02179A10 + id * 0x84`, so each game has a 132-byte definition record.
+- **The frame builder never touches the entity table or the mech table** -
+  neither address appears in its 0x1466 bytes. The world is enumerated
+  somewhere else entirely, which rules out a family of guesses about why a
+  second mech does not appear: not that the builder skips it, but that the
+  builder was never going to look.
+- Two more checkpoints. **173/173.**
+
 - **Rendering is per-viewer, not per-entity.** The frame builder is
   `0x0212DB70`, reached from event **kind 2**, which dispatches on
   `My_Mech_Ptr`'s `Class_ID` and calls a different builder per class - each

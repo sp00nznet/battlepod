@@ -2878,6 +2878,56 @@ times and **always with entity 0**. Whatever enumerates the world for drawing
 is inside the builder and is not reached, so the missing ingredient is
 something the builder looks for rather than something the entity lacks.
 
+### Inside the frame builder
+
+Reading `0x0212DB70` forward gives the frame's construction in order.
+
+**The leading record is written by hand**, not by an emitter: `1` and then
+`0xFFFFFFFF` through the cursor, which is the `{0, 2, 2, 1}` and the separator
+every frame opens with. Then the viewport emitter is called with
+`(0, 0, 479, 359, 0x100, 0x100)` - the 480x360 extent, straight from
+constants.
+
+**The view heading is `Course + a twist`:**
+
+```
+0212DCEC  lea    ($f8,A3), A0        Course
+0212DCF0  lea    ($fc,A3), A1        and the field after it
+0212DCF8  fadd.s (A1), FP0
+0212DD08  fcmp.s #$43b40000, FP0     360.0
+0212DD1A  fadd.s #$c3b40000, FP0     wrap by -360
+0212DD38  fadd.s #$43b40000, FP0     or by +360
+```
+
+The wrap at 360 settles the units from the code rather than from an
+observation, and it names **`+0xFC` as something added to Course to get where
+the pilot is looking** - a torso twist is what a BattleTech pod has that a
+heading alone does not.
+
+The two matrix builders it calls confirm it again:
+
+```
+0213F35E  fmul.d #$3f91df46, FP0     pi / 180
+02133F366 fsincos.x FP0, FP2
+```
+
+`0x0213F30C` and `0x0213F350` each take an angle in **degrees**, convert,
+`fsincos` it and fill a 3x3 - one about one axis, one about another.
+
+**The scene's colours come from the game definition.** After the object record
+the builder reads six longwords from `[0x02193BB4]+0x30`..`+0x44` and pushes
+them with `60.0` and `10000.0`, which is the `$2C0` camera item: the field of
+view and the far plane are constants, the colour is per-game.
+`0x02193BB4` is set at startup from `0x02179A10 + id * 0x84`, so each game -
+BattleTech, Red Planet - has a 132-byte definition record and this is where
+part of it is used.
+
+**And the builder never touches the entity table or the mech table.** Neither
+`0x02189F10` nor `0x021943DA` appears anywhere in its 0x1466 bytes. So the
+world is not enumerated here, which rules out a whole family of guesses about
+why a second mech does not appear: it is not that the builder skips it, it is
+that the builder was never going to look.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and
