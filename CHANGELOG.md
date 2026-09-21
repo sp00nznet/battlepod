@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`0xED`'s class 1 arm is the player-link path, and it is reachable**: entity
+  1 a Mech, entity 2 the mission, three packets in order - a game length, an
+  `0xED` naming the mech, an `0xED` naming the mission - and both arms run.
+- **It changes nothing.** The mission executes **8192 opcodes using 65 distinct
+  ones with and without a linked player, and the two traces are identical** -
+  not similar in shape, the same opcodes in the same order. `0x24` runs neither
+  time.
+- So **the loop is not waiting for a player**, which was the obvious hypothesis.
+  What remains is another pod on the wire, a renderer state the stub does not
+  reach, or something in the mission record we have not learned to fill.
+- One more checkpoint. **208/208.**
+
 - **The control flow, named**, with a real mission's execution counts beside
   it: `0x41` **conditional branch** (114) - a 16-bit displacement, a popped
   condition; `0x42` **unconditional jump** (84); `0x44` **return** (84); `0x40`

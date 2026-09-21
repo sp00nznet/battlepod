@@ -2738,6 +2738,26 @@ is what the end of a routine looks like from a linear disassembler. The tool
 stopping in the same place with a different rule is the evidence that it is
 the routine ending rather than the rule being wrong.
 
+### What the mission is not waiting for
+
+`0xED`'s class 1 arm is the player-link path - the one whose neighbourhood
+carries `Hover_Player_Link()` and the chassis names. It is reachable: give
+entity 1 a `Class_ID` of 1, entity 2 a `Class_ID` of 19, and send three
+packets in order - a game length, an `0xED` naming entity 1, an `0xED` naming
+entity 2 with `B1_BattleTech_1` - and both arms run.
+
+**It changes nothing.** The mission executes **8192 opcodes using 65 distinct
+ones, with and without a linked player, and the two traces are identical** -
+not merely similar in shape, the same opcodes in the same order. `0x24` runs
+neither time.
+
+So the loop is not waiting for a player. That is worth having: it was the
+obvious hypothesis, and it is wrong. What remains is another pod on the wire,
+a renderer state the stub does not reach, or something in the mission record
+this project has not learned to fill - and the way to tell them apart is to
+name what the typed loads in the loop are reading, which is the same job as
+naming the rest of the 94 opcodes.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

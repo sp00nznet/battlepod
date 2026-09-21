@@ -170,9 +170,11 @@ move.*
   else. Traced with `--vmtrace`, a properly started
   `B1_BattleTech_1` executes **8192 opcodes using 65 distinct ones** and runs
   `0x24` **not once**. It is not stuck - the mix is wide and changing - it is
-  waiting, in a loop, for something that is false on a pod with one entity, no
-  players and nothing else on the wire. Settled by: naming the opcodes in its
-  polling loop.
+  waiting, in a loop. **Not for a player**: linking one through `0xED`'s class
+  1 arm leaves the trace byte-for-byte identical. What remains is another pod
+  on the wire, a renderer state the stub does not reach, or something in the
+  mission record we have not learned to fill. Settled by: naming what the
+  typed loads in its loop are reading.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
