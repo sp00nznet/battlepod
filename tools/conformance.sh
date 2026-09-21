@@ -178,6 +178,7 @@ tap 02117788 hit 1
 02119A10  muls.w
 0211A004  cmpi.w
 0211A340  cmpi.w
+02119084  add.l
 '\nderef:Illegal value type %d!'
 'Interpreter error, bad opcode %02xh at offset 0x%04lx!'
 0212DCF8  fadd.s
@@ -354,6 +355,7 @@ fi
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119A10:3 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211A004:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211A340:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211906A:8 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211A306:100 >> "$OUT" 2>&1 || true
 fi
@@ -635,9 +637,10 @@ if [ -f "$ROM" ]; then
     CHECKTEXT=$(python tools/mission_dis.py "$ROM" --lengths 2>/dev/null)
     check_at_least "opcodes with a handler" 94
     check_at_least "opcodes that are control flow" 7
-    check_at_least "taking 0 operand bytes" 75
-    check_at_least "taking 1 operand bytes" 12
+    check_at_least "taking 0 operand bytes" 74
+    check_at_least "taking 1 operand bytes" 13
     check_at_least "taking 2 operand bytes" 7
+
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both

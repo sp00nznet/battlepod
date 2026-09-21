@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The control flow, named**, with a real mission's execution counts beside
+  it: `0x41` **conditional branch** (114) - a 16-bit displacement, a popped
+  condition; `0x42` **unconditional jump** (84); `0x44` **return** (84); `0x40`
+  the other displacement branch (51); `0x07`/`0x08` a matched pair (60/59);
+  `0x64` (127) a PC transform. `0x41` being the busiest branch, and `0x42` and
+  `0x44` running the same number of times, is what a program full of small
+  routines and one polling loop looks like.
+- **One opcode defeats the operand-length rule**, and the exception is listed
+  with its reason rather than hidden in a heuristic: `0x64` hands the program
+  counter to its helper *by value* and takes a new one back, and the helper
+  does the `addq.l #1` on its own copy.
+- With it, `B1_BattleTech_1`'s body walks 55 instructions and stops at the same
+  address as before. **The tool stopping in the same place under a different
+  rule is the evidence that it is the routine ending rather than the rule being
+  wrong.**
+- Two more checkpoints. **207/207.**
+
 - **The interpreter has six value types, and two type-dispatched
   instructions.** `0x73 t` **loads** a value of type `t` - its arms end in the
   push helper - and `0x70 t` **stores** one, its arms beginning with a pop.

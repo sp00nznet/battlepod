@@ -2442,8 +2442,8 @@ measured rather than assumed:
 ```
 opcodes with a handler: 94
 opcodes that are control flow: 7
-  taking 0 operand bytes: 75
-  taking 1 operand bytes: 12
+  taking 0 operand bytes: 74
+  taking 1 operand bytes: 13
   taking 2 operand bytes: 7
 ```
 
@@ -2705,6 +2705,38 @@ its type, `0x73` and `0x70` are the typed load and store, and six of a possible
 eleven types exist. Which also explains why they are among the busiest
 instructions in a mission - they are not calls out to the engine, they are how
 the program reads and writes anything at all.
+
+### The control flow, named
+
+Seven opcodes write the program counter, and a real mission's execution counts
+say which matter:
+
+| | | |
+|---|---|---|
+| `0x64` | 127 | transforms the PC through `0x02119CC4`, which consumes a byte |
+| `0x41` | 114 | **conditional branch** - reads a 16-bit displacement, pops a condition, adds the displacement if it holds |
+| `0x42` | 84 | **unconditional jump**, 16-bit displacement |
+| `0x44` | 84 | **return** - pop the PC; a null one halts the interpreter |
+| `0x40` | 51 | the other 16-bit-displacement branch |
+| `0x07` | 60 | a matched pair with `0x08`, each handing the PC to a helper |
+| `0x08` | 59 | and taking a new one back |
+
+`0x41` being the busiest branch, and `0x42` and `0x44` running the same number
+of times, is what a program full of small routines and one polling loop looks
+like.
+
+**One of them defeats the operand-length rule.** `0x64` hands the program
+counter to its helper *by value* and takes a new one back, and the helper does
+the `addq.l #1` on its own copy - so counting the arm's own steps cannot see
+the operand. There is no general rule for that, so `mission_dis.py` carries a
+one-entry exception table with the reason written next to it rather than a
+heuristic that would mislabel something else.
+
+With it, `B1_BattleTech_1`'s body walks 55 instructions and stops at the same
+address it stopped at before - `0x0216B4D4`, an opcode with no handler - which
+is what the end of a routine looks like from a linear disassembler. The tool
+stopping in the same place with a different rule is the evidence that it is
+the routine ending rather than the rule being wrong.
 
 ## Making the pod report on itself
 

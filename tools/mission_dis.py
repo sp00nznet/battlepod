@@ -112,9 +112,22 @@ def touches_pc(data, handler, base=BASE, span=0x80):
     return False
 
 
+# An arm that hands the program counter to a helper *by value* and takes a new
+# one back consumes its operand inside that helper, where counting the arm's
+# own steps cannot see it. `0x64` is the case in the instruction set: its helper
+# `0x02119CC4` does the `addq.l #1` on its own stack copy. There is no general
+# rule for this - the exception is listed, with the reason, rather than hidden
+# in a heuristic that would mislabel something else.
+EXTRA_OPERAND = {0x64: 1}
+
+
 def lengths(data, base=BASE):
     hs = handlers(data, base)
-    return [operand_len(data, h, base) for h in hs], hs
+    out = [operand_len(data, h, base) for h in hs]
+    for op, n in EXTRA_OPERAND.items():
+        if hs[op] is not None:
+            out[op] += n
+    return out, hs
 
 
 def disassemble(data, entry, base=BASE, table=TABLE, limit=200):
