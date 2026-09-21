@@ -158,9 +158,10 @@ move.*
   flags, a mech-table slot, the `+0xBB` draw bit and a position from the wire
   changes nothing. Whatever enumerates the world for drawing is inside the
   builder and is not being reached - and the builder never touches the entity
-  table or the mech table at all, so the world is enumerated somewhere else
-  entirely. Settled by: finding what fills the list between the object record
-  and the item streams.
+  table or the mech table at all. The Mech builder has **four** draw-object
+  emitter calls and only the first runs, so whatever puts another thing in the
+  world is behind one of `0x0212DFC6`, `0x0212E096` or `0x0212E1C8`. Settled
+  by: reading what guards those three.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

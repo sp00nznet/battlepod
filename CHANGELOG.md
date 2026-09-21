@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The display-list API.** `0x02144592` starts a list, `0x021445FA(desc,
+  type)` begins a record, `0x02144632` ends it, and `0x0214465C`, `0x02144724`,
+  `0x02144978` emit types 8, 1 and 3. Finding it makes every emitter in the ROM
+  readable at a glance.
+- **`record_end` proves the `2 + len` rule** from the writing side: it computes
+  the length as the longwords written **minus two**, which this project had
+  only inferred from the renderer's walker.
+- **41 `record_begin` call sites**, and **21 of them emit type 7**, the item
+  stream. Only four run - the scene and the HUD. The other seventeen live in
+  **other viewers' frame builders**, reached from further arms of the same kind
+  2 class dispatch: every viewer class has its own builder, and the one that
+  runs is chosen by what the pilot is flying.
+- The open question is sharper for it: the Mech builder has **four**
+  draw-object emitter calls and only the first runs, so whatever puts another
+  thing in the world is behind `0x0212DFC6`, `0x0212E096` or `0x0212E1C8`.
+- One more checkpoint. **174/174.**
+
 - **The view heading is `Course + the field after it`**, wrapped at 360 -
   which settles the units from the code rather than from an observation, and
   names **`+0xFC`** as something added to Course to get where the pilot is

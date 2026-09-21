@@ -158,6 +158,7 @@ cmd 200  op=00000006
   93  10000.0000  1.0000  60.0000  0.0940  0.0620  0.0940  0  0  0
 tap 0212DB70 hit 1
 0213F35E  fmul.d
+02144646  asr.l
 0212DCF8  fadd.s
        100.0000    8.2000 -200.0000 
 tap 02138F8E hit 3
@@ -309,6 +310,9 @@ fi
 # matrix builders convert degrees to radians - the units, from the code.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0212DCEC:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0213F35E:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# record_end computes the length as the longwords written minus two, which is
+# the 2 + len rule proved from the writing side.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02144646:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 # Create_Thing is one of seven sites with the same five-instruction class
 # switch; the other six are here so a change to any of them shows up.
 for a in 02106CC6 02106E08 0211D62C 0211D7F0 02150BA0 02150CF6; do

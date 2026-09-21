@@ -2928,6 +2928,49 @@ world is not enumerated here, which rules out a whole family of guesses about
 why a second mech does not appear: it is not that the builder skips it, it is
 that the builder was never going to look.
 
+### The display-list API, and who uses it
+
+The list is not written by hand; there is a small API, and finding it makes
+every emitter in the ROM readable at a glance.
+
+| | |
+|---|---|
+| `0x02144592(buffer, size, desc)` | start a list: `desc[0]` is the buffer, the cursor goes to `buffer+8`, `desc[+8]` is the size |
+| `0x021445FA(desc, type)` | begin a record: remember the start, advance the cursor by 8, write the type |
+| `0x02144632(desc)` | end it: `(cursor - start)/4 - 2` into the record's second longword |
+| `0x0214465C(desc, ...)` | emit a type 8, a viewport |
+| `0x02144724(desc, ...)` | emit a type 1, a draw object |
+| `0x02144978(desc, ...)` | emit a type 3, `0x88` bytes |
+
+`0x02144632` is worth pausing on: it computes the length as **the longwords
+written minus two**, which is the `2 + len` rule this project had inferred from
+the renderer's side, now proved from the writer's.
+
+**`record_begin` has 41 call sites**, and three types are passed to it as
+constants - 2, 6 and **7**, the item stream. There are **21 type 7 emitters**,
+in pairs around the item-writing code.
+
+Only four of them run: `0x0212F108`/`0x0212F17C` and
+`0x0213F074`/`0x0213F0C8` - the scene record with its `$2C0` camera, and the
+head-up display. The other seventeen sit inside **other viewers' frame
+builders**:
+
+```
+0x0214FB1A   <- 0x02139198
+0x0211C802   <- 0x021176CA
+0x0210645C   <- 0x021391A8
+```
+
+and `0x02139198` and `0x021391A8` are further arms of the same kind 2 class
+dispatch that reaches `0x0212DB70`. So **every viewer class has its own frame
+builder**, each with its own item records, and the one that runs is chosen by
+what the pilot is flying. Ours is the Mech's.
+
+Which sharpens the open question rather than answering it. The Mech builder has
+**four** draw-object emitter calls - `0x0212DDD2`, `0x0212DFC6`, `0x0212E096`,
+`0x0212E1C8` - and only the first runs. Whatever puts another thing in the
+world is behind one of the other three.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and
