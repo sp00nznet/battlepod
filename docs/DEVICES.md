@@ -2971,6 +2971,45 @@ Which sharpens the open question rather than answering it. The Mech builder has
 `0x0212E1C8` - and only the first runs. Whatever puts another thing in the
 world is behind one of the other three.
 
+### What the draw bit actually opens
+
+The three unused draw-object emitters are not skipped by a failing test. After
+the scene's camera item the builder jumps straight past them:
+
+```
+0212DE66  jsr $21453a8.l       emit the $2C0 camera item
+0212DE74  bra $212e286         and over everything else
+```
+
+so `0x0212DE78`-`0x0212E1C8`, the block that would emit the second, third and
+fourth object records, is reached only by a branch back into it. Its own head
+tests a global: `btst #$0, $2193c13.l`.
+
+What `entity+0xBB` bit 0 does open is further on:
+
+```
+0212E2E0  btst #$0, ($bb,A3)
+0212E2E8  beq  $212e358        clear: skip
+0212E2EE  pea  $3a.w
+0212E2FA  jsr  $2144978.l      emit a type 3 record
+0212E312  move.l (A0), (A1)    its +0x3C from the entity's X
+0212E31E  move.l #$0, (A0)         +0x40 zero
+0212E33E  fmove.s FP0, (A0)        +0x44 the negated Y
+```
+
+With the bit set, that block runs sixteen times in a run where it ran none
+before. So **`+0xBB` bit 0 places the viewer's own type 3 record** at
+`(X, 0, -Y)` - the same axis flip the object transform uses - and `0x3A` is a
+tag it carries.
+
+**And that is the honest limit of what hand-setting fields can do.** The world
+is empty not because the builder refuses to look at entity 1 but because
+nothing ever *created* anything: `Create_Thing` has never run in any of these
+sessions. Writing a class, a number and flags into an entity's memory is not
+the same as the game making a thing, and the difference is everything the
+constructor does that we have not seen. The next move is to make
+`Create_Thing` run.
+
 ### The renderer reading the same list
 
 All of the above came off the 68020. The renderer's side of it is in R.BIN, and

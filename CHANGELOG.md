@@ -8,6 +8,22 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The three unused draw-object emitters are not skipped by a failing test.**
+  After the scene's camera item the builder jumps straight past them -
+  `bra $212e286` - so that whole block is reached only by a branch back into
+  it, and its head tests a global rather than anything about an entity.
+- **What `entity+0xBB` bit 0 opens** is further on: a **type 3 record** tagged
+  `0x3A` carrying the viewer's own `(X, 0, -Y)` - the same axis flip the object
+  transform uses. Setting the bit makes that block run sixteen times in a run
+  where it ran none.
+- **And that is the limit of what hand-setting fields can do.** The world is
+  empty not because the builder refuses to look at entity 1, but because
+  nothing was ever created: `Create_Thing` has not run in any of these
+  sessions. Writing a class, a number and flags into an entity's memory is not
+  the same as the game making a thing, and the difference is everything the
+  constructor does that we have not seen.
+- Two more checkpoints. **176/176.**
+
 - **The display-list API.** `0x02144592` starts a list, `0x021445FA(desc,
   type)` begins a record, `0x02144632` ends it, and `0x0214465C`, `0x02144724`,
   `0x02144978` emit types 8, 1 and 3. Finding it makes every emitter in the ROM
