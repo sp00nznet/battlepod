@@ -282,3 +282,23 @@ read its operand as zero bytes and desynchronised every walk that reached it.
 distinct opcodes: 65` parses as the integer `8192,` and fails a `-ge` test with a
 shell error, while the text it is checking is correct. The harness printed
 `FAIL` next to a number that matched its own floor.
+
+**`0x64` was read as pushing a code label. It pushes a string.** Its helper
+reads a byte, pushes the address after it, and returns that address plus the
+byte - which is equally consistent with "push a label and skip the routine
+body" and with "push a pointer to inline text and skip the text". The first
+reading was taken, and the trace confirmed the resume address 127 times out of
+127, which made it look checked. It was not: the trace can only confirm where
+execution *resumes*, and both readings predict the same place.
+
+What it cost: `0x25` is `%` and `0x20` is a space, and both are opcodes, so
+every format string in the mission disassembled into what looked like
+object-creating instructions in a branch that never ran. A search for "the
+branch that guards the creation opcodes" returned twenty-three candidates and
+every one was a `printf`. The thing that settled it was reading the bytes as
+text - `'exitScreen'`, `'VGL Universe 34933'`, `'STATS (kills/deaths)'` - which
+takes one line and should have been the first thing tried on any run of bytes
+whose interpretation was in doubt.
+
+The general shape: a check that both hypotheses pass is not a check. Ask what
+the two readings *disagree* about before running anything.

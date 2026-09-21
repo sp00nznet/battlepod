@@ -2810,19 +2810,68 @@ Two things made that harder than it should have been, both recorded in
 FALSE-TRAILS.md: a word-by-word scan reads a 68881 extension word as a branch,
 and `bsr.b` is two bytes where `bsr.w` is four.
 
-### `0x64` pushes a label
+### `0x64` pushes a string literal
 
 `0x64` was the last opcode the disassembler could not follow. Its helper
-`0x02119CC4` reads one byte, pushes the address of the instruction *after* it
-onto the typed stack as a type 0 value, and returns that address plus the
-byte. So the opcode **pushes a label and skips the block the label points
-at** - how the bytecode hands an inline routine to something. The push itself
-is `0x02119AA8`: stack pointer at `[0x021B74B6]`, 0x4C-byte frames, type at
-`+0` and payload at `+4`.
+`0x02119CC4` reads one **length** byte, pushes the address of the bytes *after*
+it onto the typed stack as a type 0 value, and returns that address plus the
+length. The push itself is `0x02119AA8`: stack pointer at `[0x021B74B6]`,
+0x4C-byte frames, type at `+0` and payload at `+4`.
 
-Both halves are code, and the target rule agrees with the trace **127 times
-out of 127**. With it, static reachability across the thirteen routines goes
-from 211 instructions to over a thousand.
+So `0x64` **pushes a string literal** - a length byte, that many bytes of
+NUL-terminated text, and execution resumes after them. The resume address
+agrees with the trace **127 times out of 127**.
+
+What settles it is what the bytes say. Twenty-one literals appear in the
+thirteen routines:
+
+```
+'%*9n %*9L'   '%*9v'      '%1d kills'    '%1d deaths'   'Speed %1d'
+'exitScreen'  'Battletech'  'VGL Universe 34933'
+'STATS (kills/deaths)'     'Transition at T - %0t'
+"('NoseCam')"              '(Cameras only)'
+```
+
+And the opcode that consumes one is `0x0A`, which follows a `0x64` in **70
+cases out of 70**. `0x0A` calls `0x0211A89A`, and that routine is a **printf**:
+a `%` test at `0x0211A8D6`, a `*` test at `0x0211A8E4`, a ctype table at
+`0x0218247F`, a 39-byte output buffer at `0x021827BC`. The mission language has
+formatted output, and the format strings are inline.
+
+`0x0B` takes one too. `B1_BattleTech_1` pushes `'exitScreen'` and then runs
+`0x0B` - so "schedule a routine by name" takes the name as a pushed literal,
+which is why the name table exists at all.
+
+### The blocks were never inline routines
+
+The previous reading of `0x64` - that it pushed a *code* label and skipped the
+routine body - survived because a format string disassembles. `0x25` is `%`
+and `0x20` is a space, and `0x25` and `0x20` are both opcodes; so every
+`printf` in the mission decoded into what looked like object-creating
+instructions sitting in a branch that never ran. A search for "which branch
+guards the creation opcodes" found twenty-three candidates, every one of them
+a string.
+
+With the skipped bytes treated as data, static reachability across the
+thirteen routines is **986 instructions using 59 distinct opcodes**, against
+979 addresses the pod actually executes - and **not one creation opcode among
+them**. The four that exist are `0x21` (creates a class 4 thing, via
+`0x0211DBA2`), `0x22`, `0x23` and `0x24` (`Create_Thing`), and no mission
+script in the ROM reaches any of them.
+
+### The slot allocator
+
+`0x0211E15E` is the allocator both constructors use, and it is not the entity
+arena. It scans **16 slots of stride 0x6C0** from a base its caller passes,
+tests bit 0 of `+0x0D` for free, and on a free slot writes the class to `+0x02`,
+the slot index to `+0x06` and `7` to `+0x0A`. `0x20`'s handler clears `+0x0A`
+across the same 16 slots, which is the matching reset.
+
+Two routines call it: `Create_Thing` at `0x0211DC1E`, which passes a class
+from the script, and `0x0211DBA2`, which passes a constant `4`. `Create_Thing`
+has exactly one caller (`0x02118D3A`, opcode `0x24`'s arm) and `0x0211DBA2`
+has exactly one (`0x02118C9A`, opcode `0x21`'s arm) - both mission opcodes,
+neither of them used.
 
 What remains of the original question is another pod on the wire, or something
 in the mission record this project has not learned to fill - and the way to

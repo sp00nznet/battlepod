@@ -38,11 +38,17 @@ All notable changes to this project are documented here. The format follows
 - **`0x24` was a false lead, and the premise under a week of work with it.** It
   is the ROM's only caller of `Create_Thing` and no mission runs it - but
   walking all thirteen routines from their entries, both arms of every branch,
-  finds **no `0x24` in any mission script in the ROM**. "The mission never
-  executes `0x24`" describes the design rather than a fault: scripts do not
-  create the things in a world. The guard branch that was being searched for
-  does not exist. DEVICES.md and UNRESOLVED.md corrected in place; recorded in
-  FALSE-TRAILS.md.
+  finds **no creation opcode at all in any mission script in the ROM**. "The
+  mission never executes `0x24`" describes the design rather than a fault:
+  scripts do not create the things in a world. The guard branch that was being
+  searched for does not exist. DEVICES.md and UNRESOLVED.md corrected in place;
+  recorded in FALSE-TRAILS.md.
+- **The twenty-three candidate guard branches were all `printf`s.** `0x25` is
+  `%` and `0x20` is a space, and both are opcodes, so every format string in
+  the mission disassembled into what looked like object-creating instructions
+  sitting in a branch that never ran. Reading `0x64`'s skipped bytes as text
+  rather than as code removes every one of them: static reachability drops from
+  an inflated 1034 to **986 instructions, with no creation opcode among them**.
 - **The mission loop is not waiting for the renderer either.** Running the same
   script with and without `--rirq` - frames completing and frames never
   completing - gives an identical trace. It does respond to the script:

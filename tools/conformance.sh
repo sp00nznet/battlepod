@@ -515,6 +515,19 @@ if [ -f "$TI_RES" ]; then
 ' "$1" "${got:-?}" "$2"
         fi
     }
+    # Some evidence is a line of text, not a number: the proof that `0x64`
+    # pushes a string is that the bytes read as one.
+    check_contains() {
+        total=$((total + 1))
+        if echo "$CHECKTEXT" | grep -qF -- "$1"; then
+            pass=$((pass + 1))
+            printf '  ok    %s
+' "$1"
+        else
+            printf '  FAIL  %s
+' "$1"
+        fi
+    }
     check_at_least() {
         got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
         total=$((total + 1))
@@ -662,6 +675,29 @@ if [ -f "$ROM" ]; then
     check_at_least "straight-line lengths confirmed" 7612
     check_exactly "lengths the trace contradicts" 0
     rm -f "$OUT.vm"
+
+    # `0x64` pushes a string literal, and the proof is that the bytes it skips
+    # read as text. This is the check that would have caught the earlier
+    # reading, where they were taken for inline code - the resume address
+    # agreed with the trace either way, so only the content tells them apart.
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" B1_BattleTech_1 --limit 24 2>/dev/null)
+    check_contains "push 'exitScreen'"
+    check_contains "push 'VGL Universe 34933'"
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" T1_Nose_Only_1 --limit 200 2>/dev/null)
+    check_contains "push \"('NoseCam')\""
+fi
+
+# Who else calls this. A routine with one caller is explained by that caller;
+# the reading that entity creation belongs to the mission interpreter rests on
+# `Create_Thing` having exactly one, so the search has to cover every call form
+# a 68k program has - `bsr.b` included.
+if [ -f "$ROM" ]; then
+    echo
+    echo "== call sites =="
+    CHECKTEXT=$(python tools/xref.py "$ROM" 020FFFE4 --calls 0211DC1E 0211DBA2 0211E15E 2>/dev/null)
+    check_exactly "0211DC1E" 1          # Create_Thing, from opcode 0x24's arm
+    check_exactly "0211DBA2" 1          # the class 4 constructor, from 0x21's
+    check_exactly "0211E15E" 2          # the allocator, from both of them
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both

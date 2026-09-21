@@ -228,15 +228,27 @@ def touches_pc(data, handler, base=BASE, span=0x80):
 
 # `0x64` is the one arm that hands the program counter to a helper *by value*
 # and takes a new one back, so counting the arm's own steps sees neither its
-# operand nor its target. Its helper `0x02119CC4` reads one byte, pushes the
-# address of the instruction after it onto the typed stack as a type 0 value
+# operand nor its target. Its helper `0x02119CC4` reads one length byte, pushes
+# the address of the bytes *after* it onto the typed stack as a type 0 value
 # (via `0x02119AA8`, which is the push itself: stack pointer at `[0x021B74B6]`,
 # frame 0x4C, type at +0 and payload at +4), and returns that address plus the
-# byte. So the opcode pushes a label and skips the block the label points at -
-# the bytecode's way of handing an inline routine to something. Both halves are
-# code. The trace agrees with the target 127 times out of 127.
-LABEL_SKIP = 0x64
-EXTRA_OPERAND = {LABEL_SKIP: 1}
+# length.
+#
+# So `0x64` **pushes a string literal**: one length byte, that many bytes of
+# NUL-terminated text, and execution resumes after them. `exitScreen`,
+# `STATS (kills/deaths)`, `Speed %1d` and `VGL Universe 34933` all arrive this
+# way, and `0x0A` - which follows a `0x64` in 70 cases out of 70 - is the
+# interpreter's printf: a `%` test, a `*` test, a ctype table at `0x0218247F`
+# and a 39-byte output buffer at `0x021827BC`.
+#
+# The skipped bytes are *data*. Walking them as code is how the reading that
+# they were inline routines survived as long as it did: `0x25` is `%` and
+# `0x20` is a space, so every format string disassembles into what look like
+# object-creating opcodes. The trace agrees with the resume address 127 times
+# out of 127.
+NUL = bytes(1)
+STRING_PUSH = 0x64
+EXTRA_OPERAND = {STRING_PUSH: 1}
 
 # `0x09`'s reader `0x0211A80C` loops until it reads `$FF`, storing each byte as
 # a longword into the mission record at `+0x1CA0` and padding the rest of a
@@ -270,8 +282,8 @@ def successors(data, pc, lens, hs, base=BASE):
     n = inst_len(data, pc, lens, base)
     if n is None:
         return []
-    if op == LABEL_SKIP:
-        return [pc + 2, pc + 2 + data[pc + 1 - base]]
+    if op == STRING_PUSH:
+        return [pc + 2 + data[pc + 1 - base]]     # the bytes between are text
     out = [pc + n]
     if touches_pc(data, hs[op], base) and lens[op] == 2:
         d16 = struct.unpack(">h", data[pc + 1 - base:pc + 3 - base])[0]
@@ -298,9 +310,13 @@ def disassemble(data, entry, base=BASE, table=TABLE, limit=200):
             return
         args = data[o + 1:o + total]
         note = ""
-        if op == LABEL_SKIP:
-            note = "   push label %08X, skip to %08X" % (pc + 2, pc + 2 + args[0])
-        elif touches_pc(data, hs[op], base):
+        if op == STRING_PUSH:
+            n = args[0]
+            text = data[o + 2:o + 2 + n].split(NUL)[0].decode("latin-1")
+            print("  %08X  %02X  %02X   push %r" % (pc, op, n, text))
+            pc += 2 + n
+            continue
+        if touches_pc(data, hs[op], base):
             note = "   jump"
             if lens[op] == 2:
                 d16 = struct.unpack(">h", args[:2])[0]
@@ -331,12 +347,12 @@ def check_trace(data, path, base=BASE):
         sys.exit("no ADDRESS:OP entries in %s - is that a --vmtrace dump?" % path)
     ok = bad = jumps = 0
     for (pc, op), (nxt, _) in zip(ev, ev[1:]):
-        if op == LABEL_SKIP:
+        if op == STRING_PUSH:
             jumps += 1
             want = pc + 2 + data[pc + 1 - base]
             if want != nxt:
                 bad += 1
-                print("  %08X  %02X  label skip predicts %08X, went %08X" %
+                print("  %08X  %02X  string push predicts %08X, went %08X" %
                       (pc, op, want, nxt))
             continue
         if touches_pc(data, hs[op], base):

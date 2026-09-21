@@ -173,12 +173,15 @@ move.*
   without `--rirq` leaves it identical too. It does respond to the script -
   `B2_BattleTech_2` diverges at the 1418th opcode - so the trace is not a
   constant.
-  **`0x24` was a false lead.** It is the ROM's only caller of `Create_Thing`,
-  but walking all thirteen routines from their entries, both arms of every
-  branch, finds **no `0x24` in any mission script**. "The mission never runs
-  `0x24`" describes the design, not a fault: scripts do not create the things
-  in a world. What does is again open. Settled by: finding the other caller
-  path into the entity arena, or naming what the typed loads in the loop read.
+  **`0x24` was a false lead**, and so was every other creation opcode. Walking
+  all thirteen routines with `0x64` correctly read as a *string* push -
+  986 instructions, 59 distinct opcodes, against 979 the pod executes - finds
+  **no creation opcode in any mission script in the ROM**. There are four
+  (`0x21`-`0x24`), both constructors behind them share one 16-slot allocator
+  at `0x0211E15E`, and each constructor has exactly one caller, which is the
+  unused mission opcode. So scripts do not create the things in a world.
+  What does is open. Settled by: finding what else writes an arena slot's
+  `Class_ID`, or naming what the typed loads in the loop read.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
