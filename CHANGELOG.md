@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The interpreter has six value types, and two type-dispatched
+  instructions.** `0x73 t` **loads** a value of type `t` - its arms end in the
+  push helper - and `0x70 t` **stores** one, its arms beginning with a pop.
+  Type 0 is a **string**: `0x70`'s slot 0 pops and calls `strncpy`. Type 2 is
+  the integer the plain push tags its frames with. Six of a possible eleven
+  types exist.
+- Which is why they are among the busiest instructions a mission runs: they
+  are not calls out to the engine, they are **how the program reads and writes
+  anything at all**.
+- One more checkpoint. **206/206.**
+
+### Fixed
+
+- **`0x70` and `0x73` are not families of built-in calls.** They dispatch on
+  their operand byte eleven ways each, which looked like two tables of engine
+  calls. `0x73`'s own error message settles it - `deref:Illegal value type
+  %d!` - so the operand is a **value type**. Written up as built-ins for one
+  commit on the strength of the shape alone; the string was a hundred bytes
+  away.
+
 - **`0x65 n` pushes local `n`** - its helper multiplies the operand by the
   frame size and adds `0x021B74BE`, so that pointer is a **frame base** and the
   script object's `+0x1C88` is where a routine's locals live, not a second

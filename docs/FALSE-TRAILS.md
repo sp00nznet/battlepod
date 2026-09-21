@@ -162,6 +162,13 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**`0x70` and `0x73` are not families of built-in calls.** They dispatch on
+their operand byte, eleven ways each, which looked like two tables of engine
+calls. `0x73`'s own error message settles it - `deref:Illegal value type %d!` -
+so the operand is a **value type**, and the pair are the typed **load** and
+**store**. Written up as built-ins for one commit on the strength of the shape
+alone; the string was a hundred bytes away.
+
 **Bytecode opcode `0x0B` is not a spawn.** It was named *create this thing, at
 this time* because the field it writes is read by the task that creates
 things - which is true, and not what it means. The task passes that field as

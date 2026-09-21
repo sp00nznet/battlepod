@@ -2682,14 +2682,29 @@ dispatch on it again, and both sub-tables are **eleven wide**:
 0211A340  cmpi.w #$b, D0     0x73's eleven
 ```
 
-`0x73` pops a value first and `0x70` reads one off the operand stack, so they
-are two families of built-in calls - and they are the third and fifth busiest
-instructions a mission runs. No other one-operand opcode does this; for the
-rest the operand is data.
+No other one-operand opcode does this; for the rest the operand is data. What
+the operand *selects* is below - not a built-in, a **type**.
 
-So the effective instruction set is **94 opcodes plus 22 built-ins**, and a
-mission spends most of its time pushing constants, reading locals, and calling
-into those two families.
+### Six value types, and two type-dispatched instructions
+
+Calling `0x70` and `0x73` families of built-ins was the wrong reading. Both
+sub-tables have **eleven slots and six implemented** - 0 to 4, and 10 - and
+`0x73`'s own error message says what the operand is:
+
+```
+deref:Illegal value type %d!
+```
+
+**It is a type code.** `0x73 t` **loads** a value of type `t` - its arms end in
+the push helper - and `0x70 t` **stores** one, its arms beginning with a pop.
+Type 0 is a **string**: `0x70`'s slot 0 pops and then calls `strncpy`. Type 2
+is the integer the plain push tags its frames with.
+
+So the machine is typed all the way through: a 0x4C-byte operand frame carries
+its type, `0x73` and `0x70` are the typed load and store, and six of a possible
+eleven types exist. Which also explains why they are among the busiest
+instructions in a mission - they are not calls out to the engine, they are how
+the program reads and writes anything at all.
 
 ## Making the pod report on itself
 
