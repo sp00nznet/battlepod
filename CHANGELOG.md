@@ -51,6 +51,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **Bytecode opcode `0x0B` is not a spawn.** It was named *create this thing,
+  at this time* because the field it writes is read by the task that creates
+  things - which is true, and not what it means. That task passes the field as
+  the interpreter's **name** argument, walked to its NUL and truncated at
+  sixteen characters. So `0x0B` is **at time T, enter this routine by name** -
+  the same mechanism `0xED` uses to start a mission. A mission program
+  schedules other script routines, and whatever creates a thing is inside one
+  of them. Naming an instruction from what consumes its output, one step
+  removed, got the shape right and the meaning wrong.
+
 - **The operand-length rule missed 16-bit operands.** Some arms read one
   through `0x0211995C` instead of stepping the program counter twice, so
   counting only the byte steps ran the disassembly off the rails at the first

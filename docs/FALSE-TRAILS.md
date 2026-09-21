@@ -162,6 +162,14 @@ an argument to a table search at `0x02122550`. That range is still unidentified.
 
 ## Tooling, twice over
 
+**Bytecode opcode `0x0B` is not a spawn.** It was named *create this thing, at
+this time* because the field it writes is read by the task that creates
+things - which is true, and not what it means. The task passes that field as
+the interpreter's **name** argument, walked to its NUL and truncated at sixteen
+characters, so `0x0B` is *at time T, enter this routine*. Naming an instruction
+from what consumes its output, one step removed, gets the shape right and the
+meaning wrong.
+
 **`R1_Red_Planet_1` and `B1_BattleTech_1` are not side identifiers.** Found in
 the `0xED` handler alongside chassis names, they were written up here as
 plausibly an `R` side and a `B` side - a BattleTech Center has two. They are

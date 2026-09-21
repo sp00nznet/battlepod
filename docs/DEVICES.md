@@ -2495,12 +2495,20 @@ their logic:
 
 | | |
 |---|---|
-| **`0x0B`** | writes the script object's `+0x1C94` and `+0x1C98` - **create this thing, at this time**. It pops the what, then pops the when and multiplies it by 100, which is a script saying *seconds*. |
+| **`0x0B`** | writes the script object's `+0x1C94` and `+0x1C98` - **at this time, run this routine**. It pops the what, then pops the when and multiplies it by 100, which is a script saying *seconds*. |
 | **`0x02`** | writes `+0x1C9C`, clamped to at least 1 and compared against 2 - a small mode or count |
 
 **And `0x0B` executes.** Running `B1_BattleTech_1` with a class 19 entity and
-watching its handler: one hit. The mission program reaches its spawn
-instruction unaided.
+watching its handler: one hit.
+
+**It is not a spawn.** An earlier reading of this called `0x0B` *create this
+thing*, on the strength of the field it writes being consumed by the task that
+creates things. What the task actually does with `+0x1C94` is pass it as the
+**third argument of the interpreter entry** - and that argument is a *string*,
+walked to its NUL and truncated at sixteen characters. So `0x0B` is
+**at time T, enter this routine by name**, the same mechanism `0xED` uses to
+start a mission in the first place. A mission program schedules other script
+routines, and whatever creates a thing is inside one of them.
 
 What still does not happen is the creation. The walker only acts on a queued
 spawn when its due time has passed:

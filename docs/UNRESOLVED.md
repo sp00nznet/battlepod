@@ -164,8 +164,10 @@ move.*
   **spawn opcode `0x0B` runs**. The **game length** turned out to be
   `0xE5`'s packet `+0x3C`, seconds times a hundred into the mission clock, and
   sending it before `0xED` sets the clock and starts the mission - and still
-  nothing is created. So there is at least one more input, and what it is is
-  the open question.
+  nothing is created. `0x0B`, the opcode that looked like a spawn, turns out to
+  schedule **another script routine** by name, so what creates a thing is
+  inside one of those. Settled by: naming more of the 94 opcodes, or tracing
+  which routine a running mission schedules.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
