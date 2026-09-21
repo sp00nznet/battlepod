@@ -8,6 +8,28 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The disassembler follows jumps.** `0x42`'s two-byte operand is a signed
+  displacement: `42 F9 DA` is `jump -1574 -> 0216B466`, the byte immediately
+  after the name table ends - which is where a program's body would start.
+  Disassembling from there gives `61 00, 65 FD, 72, 61 01` against a live trace
+  of `61, 65, 72, 61`. **The two readings agree across a branch as well as
+  along a straight line.**
+- **Seven opcodes are control flow, and they are exactly the seven that take a
+  16-bit operand** - so a two-byte operand is a jump displacement.
+- Two more checkpoints. **195/195.**
+
+### Fixed
+
+- **The operand-length rule missed 16-bit operands.** Some arms read one
+  through `0x0211995C` instead of stepping the program counter twice, so
+  counting only the byte steps ran the disassembly off the rails at the first
+  jump. Six opcodes were being read a byte short.
+- **And the first control-flow detector marked three quarters of the
+  instruction set as branches**, by looking for any instruction touching
+  `(-$10e,A6)`. *Reading* the program counter is how every operand-taking arm
+  starts; only a write is a jump. Both were the tool's fault, not the
+  firmware's.
+
 - **`tools/mission_dis.py` - the mission bytecode disassembles.** Both things
   it needs come out of the ROM: the program counter is `table + offset`,
   because the name lookup adds the table's own address, and an instruction's

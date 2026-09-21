@@ -2441,13 +2441,25 @@ measured rather than assumed:
 
 ```
 opcodes with a handler: 94
-  taking 0 operand bytes: 81
+opcodes that are control flow: 7
+  taking 0 operand bytes: 75
   taking 1 operand bytes: 12
-  taking 2 operand bytes: 1
+  taking 2 operand bytes: 7
 ```
 
 So it is a **stack machine**: four fifths of the instruction set takes no
-operand at all.
+operand at all. And the two counts line up exactly - **the seven opcodes that
+take a 16-bit operand are the seven that write the program counter**, so a
+two-byte operand is a jump displacement.
+
+Two things had to be corrected to get there, and both were the tool's fault
+rather than the firmware's. Some arms read a 16-bit operand through
+`0x0211995C` instead of stepping the counter twice, so counting only the byte
+steps ran the disassembly off the rails at the first jump. And a first attempt
+at spotting control flow looked for any instruction touching `(-$10e,A6)`,
+which marked three quarters of the instruction set as branches - **reading**
+the program counter is how every operand-taking arm starts; only a write is a
+jump.
 
 `B1_BattleTech_1` begins:
 
@@ -2465,10 +2477,16 @@ the interpreter's dispatch on a live mission gives
 `49 49 49 4B 4B 47 47 47 4A 65 45 42 ...`. The disassembler and the machine
 agree, which is the only check available on either.
 
-It stops after `42`, because the next byte is not an opcode: the program has
-branched. A linear walk cannot follow control flow, and the tool says
-`<unknown>` and stops rather than printing rubbish past the point where it
-stopped being right.
+`42` is a jump, and the tool now says where to:
+
+```
+0216BA89  42  F9 DA   jump -1574 -> 0216B466
+```
+
+`0x0216B466` is the byte **immediately after the name table ends**, which is
+where a program's body would start - and disassembling from there gives
+`61 00, 65 FD, 72, 61 01, ...` against a live trace of `61, 65, 72, 61`.
+The two readings agree across a branch as well as along a straight line.
 
 ## Making the pod report on itself
 

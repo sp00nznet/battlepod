@@ -608,8 +608,10 @@ if [ -f "$ROM" ]; then
     # steps, not from a table anyone typed in.
     CHECKTEXT=$(python tools/mission_dis.py "$ROM" --lengths 2>/dev/null)
     check_at_least "opcodes with a handler" 94
-    check_at_least "taking 0 operand bytes" 81
+    check_at_least "opcodes that are control flow" 7
+    check_at_least "taking 0 operand bytes" 75
     check_at_least "taking 1 operand bytes" 12
+    check_at_least "taking 2 operand bytes" 7
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both
