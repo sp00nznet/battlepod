@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The first two bytecode opcodes with names**, from what they write rather
+  than from reading their logic: **`0x0B` is *create this thing, at this time*
+  ** - it writes the script object's `+0x1C94` and `+0x1C98`, popping the what
+  and then the when and multiplying it by 100, which is a script saying
+  *seconds*. **`0x02`** writes `+0x1C9C`, clamped to at least 1 and compared
+  against 2.
+- **And `0x0B` executes.** Running `B1_BattleTech_1` and watching its handler:
+  one hit. The mission program reaches its spawn instruction unaided.
+- **The last missing input is a game length.** The walker acts on a queued
+  spawn only once its due time has passed, and the mission clock at
+  `0x02193C1C` is negative on a pod nobody has told how long the game lasts.
+  Forcing a value into it at the comparison makes things worse rather than
+  better - the interpreter then runs once instead of twice - so the clock is
+  load-bearing somewhere earlier too, and that is written down rather than
+  worked around.
+- One more checkpoint. **196/196.**
+
 - **The disassembler follows jumps.** `0x42`'s two-byte operand is a signed
   displacement: `42 F9 DA` is `jump -1574 -> 0216B466`, the byte immediately
   after the name table ends - which is where a program's body would start.

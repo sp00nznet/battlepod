@@ -2488,6 +2488,41 @@ where a program's body would start - and disassembling from there gives
 `61 00, 65 FD, 72, 61 01, ...` against a live trace of `61, 65, 72, 61`.
 The two readings agree across a branch as well as along a straight line.
 
+### The first opcodes with names
+
+Two of the 94 can be named from what they write, without reading a line of
+their logic:
+
+| | |
+|---|---|
+| **`0x0B`** | writes the script object's `+0x1C94` and `+0x1C98` - **create this thing, at this time**. It pops the what, then pops the when and multiplies it by 100, which is a script saying *seconds*. |
+| **`0x02`** | writes `+0x1C9C`, clamped to at least 1 and compared against 2 - a small mode or count |
+
+**And `0x0B` executes.** Running `B1_BattleTech_1` with a class 19 entity and
+watching its handler: one hit. The mission program reaches its spawn
+instruction unaided.
+
+What still does not happen is the creation. The walker only acts on a queued
+spawn when its due time has passed:
+
+```
+021187E6  movea.l ($1c98,A0), A0     when this thing is due
+021187EA  cmpa.l  $2193c1c.l, A0     against the mission clock
+021187F0  blt     $211880a           not yet
+```
+
+and `0x02193C1C` is **negative** on a pod nobody has given a game length to, so
+nothing is ever due. Forcing a large value into it at the comparison does not
+help - the interpreter then runs once instead of twice, so the clock is load
+bearing somewhere earlier as well, and setting it behind the firmware's back
+breaks more than it fixes.
+
+**So the last missing input is a game length**, and that is something the
+operator console sends: `Game_Setup` in the release carries a time, and
+`FINAL_LAUNCH_MSG` is in the console's vocabulary. The pod has a mission, a
+program, a spawn instruction that runs and a thing waiting to be made; what it
+has not been told is how long the game lasts.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.
