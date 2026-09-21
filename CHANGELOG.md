@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Missions are bytecode.** Following the spawner down reaches a **fetch,
+  decode, dispatch** loop over **162 opcodes** - 94 of them with a handler, 93
+  distinct - and the ROM names the machine in its own error messages:
+  `Interpreter error, bad opcode %02xh at offset 0x%04lx!` and
+  `Popped NULL return address, interpreter stopping.`
+- **The script object at `0x021A5DBC`** holds a saved program counter at `+0`,
+  an operand stack pointer at `+0x1C84`, a return stack pointer at `+0x1C88`, a
+  wait timer at `+0x1C90`, and the pending spawn at `+0x1C94`/`+0x1C98`.
+- The operand stack is a stack of **0x4C-byte frames** at `0x021B74B6`; one
+  reader returns an integer and another multiplies by 100 and truncates, which
+  is how a script says *seconds* and the engine stores hundredths.
+- **Which is why nothing has ever appeared in a frame.** Not a missing flag or
+  an unset entity field: a pod handed no mission has an empty spawn list -
+  `+0x1C94` zero, `+0x1C98` `0xFFFFFFFF` - because the world is populated by
+  running a program and there is no program.
+- Three more checkpoints. **182/182.**
+
 - **A mission starts.** `0xED` is dispatched on the class of the entity it
   names - and the id is at packet `+0x32`, not `+0x08`. Its eight arms cover
   classes 1, 7, 9, 10, 12, 13, 16 and **19**, and class 19's arm calls

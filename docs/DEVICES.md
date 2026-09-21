@@ -2282,6 +2282,66 @@ branch, and creates nothing, because what to create and when is scenario data
 the operator console sends. That is the same gap as the mission sequence in
 ROADMAP.md, now reached from the other end.
 
+## Missions are bytecode
+
+Following the spawner down gives the thing this project had no idea was there.
+
+The task `0x02117788` hands four arguments to `0x021187D0`, one of them a
+structure at `0x021A5DBC`, and that structure is a **script object**:
+
+| | |
+|---|---|
+| `+0x0000` | the script's program counter, saved across calls |
+| `+0x1C84` | the operand stack pointer |
+| `+0x1C88` | a second stack pointer |
+| `+0x1C90` | a wait timer, counted down by the elapsed time |
+| `+0x1C94` | the next thing to create |
+| `+0x1C98` | the mission clock reading at which to create it |
+
+and the loop that runs it is a **bytecode interpreter**:
+
+```
+021188BE  movea.l (-$10e,A6), A0     the script PC
+021188C2  addq.l  #1, (-$10e,A6)
+021188C8  move.b  (A0), D0           fetch one byte
+021188CA  bra     $21198a6
+...
+021198A6  cmpi.w #$a2, D0            162 opcodes
+021198AA  bcc    $211972e             out of range
+021198B0  lea    (-$150,PC), A0       the table, at 02119762
+021198B8  jmp    (PC,D0.w)
+```
+
+**162 opcodes, of which 94 have a handler** and 93 handlers are distinct. The
+ROM names the machine itself in its own error messages:
+
+```
+Interpreter error, bad opcode %02xh at offset 0x%04lx!
+Popped NULL return address, interpreter stopping.
+```
+
+so it has a call stack as well as an operand stack, and the operand stack is a
+stack of **0x4C-byte frames** at `0x021B74B6` - the readers `0x02119D16` and
+`0x02119D48` pop one and return its `+0x04`, one as an integer and one after
+multiplying by 100 and truncating, which is how a script says *seconds* and the
+engine stores hundredths.
+
+The opcode that schedules a spawn is one of the 94:
+
+```
+021189D4  jsr    $2119d48.l           pop: what to create
+021189DC  move.l D0, ($1c94,A0)
+021189E0  jsr    $2119d16.l           pop: when, in seconds
+021189E8  fmul.d #$40590000, FP0      x 100
+02118A00  move.l D0, ($1c98,A0)
+```
+
+**So a mission is a program, and the world is populated by running it.** The
+spawn list is empty on a pod that has been handed no mission - `+0x1C94` reads
+zero and `+0x1C98` reads `0xFFFFFFFF` - which is the whole reason nothing has
+ever appeared in a frame. Not a missing flag, not an unset field on an entity:
+no program.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

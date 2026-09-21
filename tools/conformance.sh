@@ -164,6 +164,9 @@ tap 02117788 hit 1
 02144646  asr.l
 0212DE74  bra
 0212E2E0  btst
+021188C8  move.b
+021198A6  cmpi.w
+'Interpreter error, bad opcode %02xh at offset 0x%04lx!'
 0212DCF8  fadd.s
        100.0000    8.2000 -200.0000 
 tap 02138F8E hit 3
@@ -322,6 +325,13 @@ fi
 # opens a type 3 record carrying the viewer's own position instead.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0212DE74:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0212E2E0:3 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# Missions are bytecode: a fetch-decode loop over 162 opcodes, with the ROM
+# naming the machine in its own error messages.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 021188BE:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 021198A6:5 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
+    python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211972E:80 >> "$OUT" 2>&1 || true
+fi
 # Create_Thing is one of seven sites with the same five-instruction class
 # switch; the other six are here so a change to any of them shows up.
 for a in 02106CC6 02106E08 0211D62C 0211D7F0 02150BA0 02150CF6; do

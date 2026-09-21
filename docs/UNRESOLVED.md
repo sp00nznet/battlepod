@@ -157,12 +157,11 @@ move.*
   times in a run **always with entity 0**. Giving entity 1 a class, a number,
   flags, a mech-table slot, the `+0xBB` draw bit and a position from the wire
   changes nothing. Whatever enumerates the world for drawing is inside the
-  builder and is not being reached. The builder jumps past its other three
-  draw-object emitters entirely, and it never touches the entity table or the
-  mech table. The likeliest answer is now that **nothing was ever created**:
-  `Create_Thing` has not run in any of these sessions, and writing a class, a
-  number and flags into an entity's memory is not the same as the game making
-  a thing. Settled by: making `Create_Thing` run.
+  builder and is not being reached. **Settled in outline**: the world is
+  populated by a **bytecode program**, and a pod that has been handed no
+  mission has an empty spawn list. What is still open is where a mission's
+  bytecode comes from - the archive, or the operator console - and what its
+  162 opcodes mean.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
