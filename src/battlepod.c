@@ -1025,8 +1025,12 @@ static void live_close(void)
 
 static uint32_t g_mon, g_monstub;
 static uint32_t g_moncall[MON_SLOTS];
-static uint8_t  g_pkt[512];
-static uint32_t g_pktlen;
+#define MAX_PKTS 8
+static uint8_t  g_pkt[MAX_PKTS][512];
+static uint32_t g_pktlen[MAX_PKTS];
+static unsigned g_npkts;
+static uint32_t g_monbase;
+static void mon_pkt_arm(uint32_t base, unsigned n);
 static int      g_pkt_delivered;
 
 /* moveq #0,D0 ; suba.l A0,A0 ; rts - returns NULL with Z set, which the
@@ -1046,35 +1050,50 @@ static void mon_install(uint32_t base)
 	ram_add(base, 0x1000);
 	g_mon = base;
 	g_monstub = base + MON_STUB_OFF;
+	g_monbase = base;
 
 	for (i = 0; i < MON_SLOTS; i++) {
 		mon_slot(i, MON_STUB_NULL, sizeof MON_STUB_NULL);
 		m68k_write_memory_32(base + i * 4, g_monstub + i * MON_STUB_SZ);
 	}
 
-	if (!g_pktlen) return;
-
-	/* Hand the firmware one packet. Its header is a word it does not read
-	 * here, then the body length, then the body - the receive path takes the
-	 * length from [pkt+2] and the opcode from [pkt+4]. */
-	{
-		uint32_t buf = base + MON_PKT_OFF;
-		uint8_t  ret[10] = { 0x20,0x7C, 0,0,0,0, 0x4A,0x88, 0x4E,0x75 };
-		m68k_write_memory_32(buf, g_pktlen);	/* [+0] word, [+2] length */
-		for (i = 0; i < g_pktlen; i++) m68k_write_memory_8(buf + 4 + i, g_pkt[i]);
-		ret[2] = (uint8_t)(buf >> 24); ret[3] = (uint8_t)(buf >> 16);
-		ret[4] = (uint8_t)(buf >> 8);  ret[5] = (uint8_t)buf;
-		mon_slot(MON_SLOT_RECV, ret, sizeof ret);	/* movea.l #buf,A0; tst.l A0; rts */
-	}
+	if (!g_npkts) return;
+	mon_pkt_arm(base, 0);
 }
 
-/* Deliver the packet exactly once: on the second poll, put the NULL stub back
- * before it executes. */
+/* Put packet `n` where the firmware will read it. Its header is a word it does
+ * not read here, then the body length, then the body - the receive path takes
+ * the length from [pkt+2] and the opcode from [pkt+4]. */
+static void mon_pkt_arm(uint32_t base, unsigned n)
+{
+	uint32_t buf = base + MON_PKT_OFF, i;
+	uint8_t  ret[10] = { 0x20,0x7C, 0,0,0,0, 0x4A,0x88, 0x4E,0x75 };
+
+	m68k_write_memory_32(buf, g_pktlen[n]);
+	for (i = 0; i < g_pktlen[n]; i++)
+		m68k_write_memory_8(buf + 4 + i, g_pkt[n][i]);
+	ret[2] = (uint8_t)(buf >> 24); ret[3] = (uint8_t)(buf >> 16);
+	ret[4] = (uint8_t)(buf >> 8);  ret[5] = (uint8_t)buf;
+	mon_slot(MON_SLOT_RECV, ret, sizeof ret);	/* movea.l #buf,A0; tst.l A0; rts */
+}
+
+/* One packet per poll, in the order they were given. A mission needs a
+ * sequence - a game length, then a mission, then a start - and one packet
+ * could never express that. When they run out the NULL stub goes back, which
+ * is what tells the firmware the wire is quiet. */
 static void mon_recv_polled(void)
 {
-	if (!g_pktlen) return;
-	if (g_pkt_delivered) mon_slot(MON_SLOT_RECV, MON_STUB_NULL, sizeof MON_STUB_NULL);
-	else g_pkt_delivered = 1;
+	if (!g_npkts) return;
+	/* This runs as the stub is entered, before it executes, so the packet
+	 * armed now is the one this poll reads. Arming the next one on the same
+	 * poll would overwrite a packet the firmware has not looked at yet. */
+	if (g_pkt_delivered) {
+		if (g_pkt_delivered < g_npkts)
+			mon_pkt_arm(g_monbase, g_pkt_delivered);
+		else
+			mon_slot(MON_SLOT_RECV, MON_STUB_NULL, sizeof MON_STUB_NULL);
+	}
+	g_pkt_delivered++;
 }
 
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
@@ -2172,17 +2191,22 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--vbr") && i + 1 < argc)     vbr = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--packet") && i + 1 < argc) {
 			const char *h = argv[++i];
-			g_pktlen = 0;
-			while (*h && g_pktlen < sizeof g_pkt) {
+			if (g_npkts >= MAX_PKTS) {
+				fprintf(stderr, "too many --packet options\n");
+				return 1;
+			}
+			g_pktlen[g_npkts] = 0;
+			while (*h && g_pktlen[g_npkts] < sizeof g_pkt[0]) {
 				char *e;
 				long b;
 				while (*h == ' ' || *h == ',') h++;
 				if (!*h) break;
 				b = strtol(h, &e, 16);
 				if (e == h) { fprintf(stderr, "--packet wants hex bytes\n"); return 1; }
-				g_pkt[g_pktlen++] = (uint8_t)b;
+				g_pkt[g_npkts][g_pktlen[g_npkts]++] = (uint8_t)b;
 				h = e;
 			}
+			g_npkts++;
 		}
 		else if (!strcmp(a, "--watch") && i + 1 < argc) {
 			char *c;

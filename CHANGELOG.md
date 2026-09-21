@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--packet` takes up to eight, delivered in order.** A mission needs a
+  *sequence* - a game length, then a mission, then a start - and one packet
+  could never have expressed that.
+- **`0xE5` carries the game length** at packet `+0x3C`, multiplied by a hundred
+  into the mission clock at `0x02193C1C`. And the main loop **drains** that
+  clock, so it counts down - which is why it is negative on an idle pod, for
+  the plainest reason there is.
+- With `0xE5` then `0xED`, all three landmarks fire in order: the forwarder,
+  the clock write, the mission handler. The mission runs and its spawn opcode
+  executes, and **still nothing is created**, so there is at least one more
+  input. Said plainly rather than by forcing values into globals until
+  something moves.
+- One more checkpoint. **197/197.**
+
 - **The first two bytecode opcodes with names**, from what they write rather
   than from reading their logic: **`0x0B` is *create this thing, at this time*
   ** - it writes the script object's `+0x1C94` and `+0x1C98`, popping the what

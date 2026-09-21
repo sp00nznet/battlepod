@@ -2523,6 +2523,42 @@ operator console sends: `Game_Setup` in the release carries a time, and
 program, a spawn instruction that runs and a thing waiting to be made; what it
 has not been told is how long the game lasts.
 
+### The game length, and a sequence of packets
+
+`0xE5` - the one that prints `WELCOME %s` - carries the game length:
+
+```
+0210E21E  move.l ($3c,A0), D0        the packet's +0x3C
+0210E224  lsl.l  #1, D0              x 2
+0210E226  add.l  D1, D0              x 3
+0210E228  lsl.l  #3, D0              x 24
+0210E22A  add.l  D1, D0              x 25
+0210E22C  lsl.l  #2, D0              x 100
+0210E22E  move.l D0, $2193c1c.l      the mission clock
+```
+
+**seconds times a hundred**, which is the hundredths the rest of the engine
+counts in. And the main loop drains it:
+
+```
+02138F40  sub.l D0, $2193c1c.l
+```
+
+so the mission clock counts **down**, and it is negative on an idle pod for the
+plainest reason there is - it has been draining from zero since the machine
+booted.
+
+That needed a second packet before the `0xED` that starts a mission, and
+`--packet` could only hold one, so it now takes up to eight and delivers them
+in order. A mission needs a *sequence* - a game length, then a mission, then a
+start - and one packet could never have expressed that.
+
+With `0xE5` and then `0xED`, all three landmarks fire in order: the `0xE5`
+forwarder, the clock write, the `0xED` handler. The mission runs, its spawn
+opcode executes, and **still nothing is created** - so there is at least one
+more input, and the honest thing is to say that rather than to keep forcing
+values into globals until something moves.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

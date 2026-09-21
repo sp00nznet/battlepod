@@ -161,11 +161,11 @@ move.*
   populated by a **bytecode program**, the programs are **in the ROM** behind a
   table of thirteen named entry points, and a pod handed no mission has an
   empty spawn list. `0xED` runs a script, `B1_BattleTech_1` executes, and its
-  **spawn opcode `0x0B` runs**. What is missing is a **game length**: the
-  walker only creates a queued thing once its due time has passed, and the
-  mission clock at `0x02193C1C` is negative on a pod nobody has told how long
-  the game lasts. Settled by: whichever message carries the game length -
-  `Game_Setup` in the release has a time in it.
+  **spawn opcode `0x0B` runs**. The **game length** turned out to be
+  `0xE5`'s packet `+0x3C`, seconds times a hundred into the mission clock, and
+  sending it before `0xED` sets the clock and starts the mission - and still
+  nothing is created. So there is at least one more input, and what it is is
+  the open question.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
