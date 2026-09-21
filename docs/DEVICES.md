@@ -2658,6 +2658,39 @@ With that, five instructions can be named:
 `0x61` and `0x62` between them are over a third of everything a mission
 executes, which is what a stack machine looks like from the outside.
 
+### Locals, and two families of built-ins
+
+**`0x65 n` pushes local `n`.** Its helper multiplies the operand byte by the
+frame size and adds a second base pointer:
+
+```
+02119A10  muls.w #$4c, D0
+02119A14  add.l  $21b74be.l, D0
+```
+
+So `0x021B74BE` is a **frame base**, not a second stack in the loose sense, and
+the script object's `+0x1C88` - saved beside the operand stack pointer when the
+interpreter yields - is where a routine's locals live. `0x65` is the
+second-busiest instruction in a running mission, which is what reading
+variables looks like.
+
+**Two opcodes are multiplexed.** `0x70` and `0x73` take an operand byte and
+dispatch on it again, and both sub-tables are **eleven wide**:
+
+```
+0211A004  cmpi.w #$b, D0     0x70's eleven
+0211A340  cmpi.w #$b, D0     0x73's eleven
+```
+
+`0x73` pops a value first and `0x70` reads one off the operand stack, so they
+are two families of built-in calls - and they are the third and fifth busiest
+instructions a mission runs. No other one-operand opcode does this; for the
+rest the operand is data.
+
+So the effective instruction set is **94 opcodes plus 22 built-ins**, and a
+mission spends most of its time pushing constants, reading locals, and calling
+into those two families.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

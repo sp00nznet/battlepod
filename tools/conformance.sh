@@ -175,6 +175,9 @@ tap 02117788 hit 1
 02118D3A  jsr
 02119A5A  move.l
 02119426  jsr
+02119A10  muls.w
+0211A004  cmpi.w
+0211A340  cmpi.w
 'Interpreter error, bad opcode %02xh at offset 0x%04lx!'
 0212DCF8  fadd.s
        100.0000    8.2000 -200.0000 
@@ -345,6 +348,11 @@ fi
 # 0x4C-byte frame at a time. And 0x44 is return.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119A54:6 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119426:4 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+# 0x65 pushes a local - operand times the frame size, plus a frame base - and
+# 0x70 and 0x73 dispatch again on their operand, eleven ways each.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 02119A10:3 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211A004:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0" --dis 0211A340:2 --steps 1 --top 0     >> "$OUT" 2>&1 || true
 if [ -f "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" ]; then
     python tools/fnstr.py "${VWE_GAME_FILES}/Cockpit Software/ROM3_0" 020FFFE4         0211972E:80 >> "$OUT" 2>&1 || true
 fi

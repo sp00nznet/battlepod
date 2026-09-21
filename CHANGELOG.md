@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`0x65 n` pushes local `n`** - its helper multiplies the operand by the
+  frame size and adds `0x021B74BE`, so that pointer is a **frame base** and the
+  script object's `+0x1C88` is where a routine's locals live, not a second
+  stack in the loose sense. It is the second-busiest instruction a mission
+  runs, which is what reading variables looks like.
+- **`0x70` and `0x73` are multiplexed**: each takes an operand byte and
+  dispatches on it again, **eleven ways each**. They are the third and fifth
+  busiest instructions. No other one-operand opcode does this - for the rest
+  the operand is data.
+- So the effective instruction set is **94 opcodes plus 22 built-ins**, and a
+  mission spends most of its time pushing constants, reading locals and calling
+  into those two families.
+- Three more checkpoints. **205/205.**
+
 - **The interpreter's operand stack is typed.** Push writes a **type tag** at
   `+0x00` and the value at `+0x04` of a 0x4C-byte frame - which is why the
   readers return `+0x04`, and why there are separate ones for integers and
