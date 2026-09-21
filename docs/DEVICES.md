@@ -2234,6 +2234,54 @@ script rather than a patch file because `third_party/musashi` is cloned by
 `make deps` and a context diff rots against upstream; it is idempotent and
 `make deps` runs it.
 
+## Starting a mission
+
+`0xED` is dispatched on the class of the entity it names - and the id is at
+packet `+0x32`, not `+0x08`:
+
+```
+0213BA74  move.l ($32,A0), D0     the entity id
+0213BA7A  lea    $2189f10.l, A0
+0213BA8A  move.l ($2,A0), D0      its Class_ID
+0213BA8E  bra    $213bbae         eight arms
+```
+
+The arms cover classes **1, 7, 9, 10, 12, 13, 16 and 19**, and the last one is
+the interesting one:
+
+```
+0213BB9A  jsr $213fa0e.l
+0213BBA4  jsr $211786c.l          start the mission
+```
+
+`0x0211786C` schedules `0x02117788` as a **kind `0x10000` event three ticks
+out**, and `0x02117788` reschedules itself the same way every time it runs. It
+is the task that creates things.
+
+**So a mission is started by sending `0xED` to a class 19 entity.** Give
+entity 1 a `Class_ID` of 19 and send one:
+
+```
+tap 0213BB92 hit 1     the class 19 arm
+tap 0211786C hit 1     mission start
+tap 02117788 hit 16    the spawner, ticking
+```
+
+where the spawner had never run at all before. **Class 19 is the mission
+itself**, not a vehicle - which is why `Create_Thing` refuses to build it, its
+table stopping at 18, and why `0xE8` carries a teardown arm for a class no
+constructor makes.
+
+`0x02193C1C` is the **mission clock in hundredths of a second** - the spawner
+divides it by 100.0 - and it is negative on a pod with no mission. Setting it
+to 60000 makes the spawner take its active branch at `0x02117802` instead of
+the idle one.
+
+**What is still missing is the script.** The spawner runs, takes the active
+branch, and creates nothing, because what to create and when is scenario data
+the operator console sends. That is the same gap as the mission sequence in
+ROADMAP.md, now reached from the other end.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

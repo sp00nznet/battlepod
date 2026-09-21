@@ -8,6 +8,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A mission starts.** `0xED` is dispatched on the class of the entity it
+  names - and the id is at packet `+0x32`, not `+0x08`. Its eight arms cover
+  classes 1, 7, 9, 10, 12, 13, 16 and **19**, and class 19's arm calls
+  `0x0211786C`, which schedules the thing-creating task `0x02117788` as a kind
+  `0x10000` event three ticks out. Send `0xED` to a class 19 entity and the
+  spawner ticks - 16 times in a run where it had never run at all.
+- **Class 19 is the mission itself**, not a vehicle. That is why
+  `Create_Thing`'s table stops at 18 and refuses to build it, and why `0xE8`
+  carries a teardown arm for a class no constructor makes - two loose ends from
+  earlier, both explained by the same fact.
+- **`0x02193C1C` is the mission clock in hundredths of a second**, negative on
+  a pod with no mission; setting it to 60000 makes the spawner take its active
+  branch instead of its idle one.
+- What is still missing is the **script**: the spawner runs, takes the active
+  branch and creates nothing, because what to create and when is scenario data
+  the console sends. The same gap as the mission sequence, reached from the
+  other end.
+- Three more checkpoints. **179/179.**
+
 - **The three unused draw-object emitters are not skipped by a failing test.**
   After the scene's camera item the builder jumps straight past them -
   `bra $212e286` - so that whole block is reached only by a branch back into

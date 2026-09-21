@@ -157,6 +157,9 @@ cmd 200  op=00000006
         pick (16,16) -> entity 0 part 0
   93  10000.0000  1.0000  60.0000  0.0940  0.0620  0.0940  0  0  0
 tap 0212DB70 hit 1
+tap 0213BB92 hit 1
+tap 0211786C hit 1
+tap 02117788 hit 1
 0213F35E  fmul.d
 02144646  asr.l
 0212DE74  bra
@@ -408,6 +411,11 @@ done
 # comes back as (X, Z + 2.8, -Y) with a one-degree yaw from Course 1.0, and the
 # item stream carries real drawing opcodes. Wire to picture, in one run.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001 --set-at 02122154 21943DA=021F99AC     --packet 'EC 00 00 00 00 00 00 00 00 00 00 00 42 C8 00 00 43 48 00 00 40 AC CC CD 3F 80 00 00 00 00 00 00 3E 80 00 00 00 00 00 00'     --tap 0212DB70 --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4A: start a mission. 0xED is dispatched on the class of the entity it
+# names - the id is at packet +0x32 - and class 19's arm starts the spawner
+# task, which had never run in any session before this.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21FA062=00000013     --packet 'ED 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --tap 0213BB92 --tap 0211786C --tap 02117788     --steps 300000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
