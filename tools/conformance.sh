@@ -643,10 +643,25 @@ if [ -f "$ROM" ]; then
     CHECKTEXT=$(python tools/mission_dis.py "$ROM" --lengths 2>/dev/null)
     check_at_least "opcodes with a handler" 94
     check_at_least "opcodes that are control flow" 7
-    check_at_least "taking 0 operand bytes" 74
+    check_at_least "taking 0 operand bytes" 72
     check_at_least "taking 1 operand bytes" 13
     check_at_least "taking 2 operand bytes" 7
+    check_at_least "taking 4 operand bytes" 1
+    check_exactly "opcodes whose operand length depends on the stream" 1
 
+    # Lengths inferred from handlers are a reading, not a measurement, so hold
+    # them up against the interpreter itself: --vmtrace logs the bytecode
+    # program counter and the opcode dispatched at it, and consecutive entries
+    # give the length of every instruction the pod actually executed. This is
+    # what caught `0x09` and `0x60`, both of which read their operand through a
+    # helper rather than stepping the counter themselves.
+    sed -n '/mission opcodes executed/,/^$/p' "$OUT" > "$OUT.vm"
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" --trace "$OUT.vm" 2>/dev/null)
+    check_at_least "trace entries" 8192
+    check_at_least "distinct opcodes" 65
+    check_at_least "straight-line lengths confirmed" 7612
+    check_exactly "lengths the trace contradicts" 0
+    rm -f "$OUT.vm"
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both

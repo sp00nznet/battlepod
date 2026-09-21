@@ -2586,16 +2586,13 @@ place is a bytecode opcode handler:
 `0x0211DC14`, a sibling constructor, so there is more than one way for a script
 to make something.
 
-That settles the shape of the whole system. The pod does not populate a world
-from a file or from a message; **a mission program does it, instruction by
-instruction**, and every other route considered here - a scenario loader, a
-console broadcast, an entity flag - was looking in the wrong place. It also
-explains why an empty pod stays empty no matter what is written into its
-entity table by hand: nothing has executed a `0x24`.
-
-`B1_BattleTech_1`'s body disassembles for 56 instructions before reaching an
-opcode with no handler, and there is no `0x24` among them - so whatever creates
-this mission's mechs is further in, or in one of the routines it schedules.
+That looked like it settled the shape of the whole system - a mission program
+populating a world instruction by instruction, with every other route
+considered here looking in the wrong place. **It does not.** No mission script
+in this ROM contains a `0x24`: walking all thirteen routines from their
+entries, following both arms of every branch, finds none. `Create_Thing` has
+one caller in the ROM and no script reaches it. See "`0x24` is not what the
+mission was failing to do" below.
 
 ### What a mission actually executes
 
@@ -2622,11 +2619,12 @@ The ten most-used, with counts:
 `0x61` alone is a third of everything executed, which is what a push looks
 like in a stack machine.
 
-**`0x0B` runs once and `0x24` never runs at all.** So the mission schedules one
-routine and, in eight thousand instructions, never creates a thing. It is not
-stuck - the opcode mix is wide and changing - it is *waiting for something*,
-in a loop, and whatever it polls is false on a pod with one entity, no
-players and no other cockpits on the wire.
+**`0x0B` runs once and `0x24` never runs at all.** The second half of that is
+not a finding: no mission script contains a `0x24` to run. The first half
+stands - the mission schedules one routine - and so does the shape of the run:
+it is not stuck, the opcode mix is wide and changing, and it revisits a hot
+address every hundred to two hundred instructions across 979 distinct
+addresses. That is a main loop doing work, not a spin.
 
 ### The stack is typed, and five opcodes have names
 
@@ -2650,7 +2648,11 @@ With that, five instructions can be named:
 | | |
 |---|---|
 | `0x0B` | at time T, enter this routine by name |
-| `0x24` | create a thing - four operands, the ROM's only call to `Create_Thing` |
+| `0x24` | create a thing - four operands, the ROM's only call to `Create_Thing`; no mission script uses it |
+| `0x42` | jump, signed 16-bit displacement from the end of the instruction |
+| `0x60` | push a 16.14 fixed-point constant, four operand bytes |
+| `0x64` | push the address of the next instruction as a value, then skip forward over the block it names |
+| `0x09` | take an `$FF`-terminated byte list into the mission record at `+0x1CA0` |
 | `0x44` | **return** - pop the program counter; a null one prints `Popped NULL return address, interpreter stopping.` and halts |
 | `0x61` | push a byte |
 | `0x62` | push a 16-bit word |
@@ -2752,11 +2754,79 @@ not merely similar in shape, the same opcodes in the same order. `0x24` runs
 neither time.
 
 So the loop is not waiting for a player. That is worth having: it was the
-obvious hypothesis, and it is wrong. What remains is another pod on the wire,
-a renderer state the stub does not reach, or something in the mission record
-this project has not learned to fill - and the way to tell them apart is to
-name what the typed loads in the loop are reading, which is the same job as
-naming the rest of the 94 opcodes.
+obvious hypothesis, and it is wrong.
+
+It is not waiting for the renderer either. Run the same mission with and
+without `--rirq` - with the renderer completing frames and with it never
+completing one - and the traces are again identical, opcode for opcode.
+Run `B2_BattleTech_2` instead of `B1_BattleTech_1` and the trace *does*
+diverge, at the 1418th opcode, so the trace is not a constant: it responds to
+the script and to nothing else we can currently vary.
+
+### `0x24` is not what the mission was failing to do
+
+The premise under all of the above was wrong. Walk every one of the thirteen
+routines from its entry, following both arms of every branch, and **not one of
+them contains a `0x24` anywhere**. The instruction that calls `Create_Thing`
+is not in any mission script in this ROM.
+
+So "the mission runs 8192 opcodes and never executes `0x24`" was never a
+symptom of anything. It describes the design correctly: a mission script does
+not create the things in a world. Whatever does, the scripts are not it, and
+the search for the branch that would have led to a `0x24` was a search for
+something that is not there.
+
+What that walk *does* say is that the script bodies are small - the two
+scenarios reach 70 instructions each, the cameras between 89 and 159 - while a
+run touches 979 distinct addresses. The bulk of what executes is shared code
+the named routines jump into, below the first named entry.
+
+### Reading the interpreter instead of guessing at it
+
+The trace now carries the interpreter's own program counter as well as the
+opcode. It is a pointer in the interpreter's frame at `(-$10e,A6)` - the cell
+every operand-taking arm steps with `addq.l #1` - and logging it turns an
+opcode stream into an instruction map: consecutive entries give the exact
+length of every instruction the pod executed.
+
+Held up against that, the lengths counted from the handlers were wrong in two
+places, and both were the same mistake. An arm that hands the program counter
+to a *reader* consumes its operand in there, where counting the arm's own
+steps cannot see it, and only one reader had been recognised:
+
+| reader | consumes | what it reads |
+|---|---|---|
+| `0x0211995C` | 2 bytes | a big-endian 16-bit operand |
+| `0x021199A8` | 4 bytes | 16.14 fixed point, `hi + lo/16384`, via two calls to the above |
+| `0x0211A80C` | a loop | an `$FF`-terminated byte list, stored as longwords into the mission record at `+0x1CA0` and padded to two entries with `$FFFFFFFF` |
+
+So `0x60` pushes a fixed-point constant and takes four operand bytes, not
+zero, and `0x09` takes a terminated list whose length is in the stream rather
+than in the handler. `tools/mission_dis.py` now reads each reader out of the
+ROM instead of naming one, and the count agrees with the pod on **all 7612
+straight-line steps of an 8192-instruction trace**.
+
+Two things made that harder than it should have been, both recorded in
+FALSE-TRAILS.md: a word-by-word scan reads a 68881 extension word as a branch,
+and `bsr.b` is two bytes where `bsr.w` is four.
+
+### `0x64` pushes a label
+
+`0x64` was the last opcode the disassembler could not follow. Its helper
+`0x02119CC4` reads one byte, pushes the address of the instruction *after* it
+onto the typed stack as a type 0 value, and returns that address plus the
+byte. So the opcode **pushes a label and skips the block the label points
+at** - how the bytecode hands an inline routine to something. The push itself
+is `0x02119AA8`: stack pointer at `[0x021B74B6]`, 0x4C-byte frames, type at
+`+0` and payload at `+4`.
+
+Both halves are code, and the target rule agrees with the trace **127 times
+out of 127**. With it, static reachability across the thirteen routines goes
+from 211 instructions to over a thousand.
+
+What remains of the original question is another pod on the wire, or something
+in the mission record this project has not learned to fill - and the way to
+tell them apart is still to name what the typed loads in the loop are reading.
 
 ## Making the pod report on itself
 

@@ -8,6 +8,51 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--vmtrace` now logs the interpreter's own program counter** alongside the
+  opcode. It is a pointer in the interpreter's frame at `(-$10e,A6)` - the cell
+  every operand-taking arm steps with `addq.l #1` - and it turns an opcode
+  stream into an instruction map: consecutive entries give the exact length of
+  every instruction the pod executed.
+- **`mission_dis.py --trace`** holds the inferred operand lengths up against
+  that map. On an 8192-instruction run it confirms **all 7612 straight-line
+  steps** and contradicts none.
+- **Operand readers are now read out of the ROM instead of listed.** An arm
+  that hands the program counter to a reader consumes its operand in there, and
+  only one reader had been recognised. There are three: `0x0211995C` takes two
+  bytes (a 16-bit operand), `0x021199A8` takes four (16.14 fixed point,
+  `hi + lo/16384`, via two calls to the first), and `0x0211A80C` takes an
+  `$FF`-terminated byte list. So **`0x60` pushes a fixed-point constant** and
+  takes four operand bytes, not zero, and **`0x09` takes a terminated list**
+  whose length is in the stream.
+- **`0x64` pushes a label.** Its helper reads one byte, pushes the address of
+  the instruction after it onto the typed stack as a type 0 value, and returns
+  that address plus the byte - so the opcode pushes a label and skips the block
+  the label points at, which is how the bytecode hands an inline routine to
+  something. The target rule agrees with the trace **127 times out of 127**, and
+  static reachability across the thirteen routines goes from 211 instructions to
+  over a thousand.
+- Six checkpoints. **214/214.**
+
+### Fixed
+
+- **`0x24` was a false lead, and the premise under a week of work with it.** It
+  is the ROM's only caller of `Create_Thing` and no mission runs it - but
+  walking all thirteen routines from their entries, both arms of every branch,
+  finds **no `0x24` in any mission script in the ROM**. "The mission never
+  executes `0x24`" describes the design rather than a fault: scripts do not
+  create the things in a world. The guard branch that was being searched for
+  does not exist. DEVICES.md and UNRESOLVED.md corrected in place; recorded in
+  FALSE-TRAILS.md.
+- **The mission loop is not waiting for the renderer either.** Running the same
+  script with and without `--rirq` - frames completing and frames never
+  completing - gives an identical trace. It does respond to the script:
+  `B2_BattleTech_2` diverges from `B1_BattleTech_1` at the 1418th opcode.
+- A word-by-word scan read **68881 extension words as branches**
+  (`fmove.s FP0,(-$4,A6)` is `F22E 6400 FFFC`), and **`bsr.b` was not decoded**
+  at all. Both are recorded in FALSE-TRAILS.md.
+
+### Added
+
 - **`0xED`'s class 1 arm is the player-link path, and it is reachable**: entity
   1 a Mech, entity 2 the mission, three packets in order - a game length, an
   `0xED` naming the mech, an `0xED` naming the mission - and both arms run.

@@ -164,17 +164,21 @@ move.*
   **spawn opcode `0x0B` runs**. The **game length** turned out to be
   `0xE5`'s packet `+0x3C`, seconds times a hundred into the mission clock, and
   sending it before `0xED` sets the clock and starts the mission - and still
-  nothing is created. **Opcode `0x24` is the one that creates a
-  thing**, and `Create_Thing` has exactly one caller in the ROM - so a world is
-  populated instruction by instruction by a mission program, and by nothing
-  else. Traced with `--vmtrace`, a properly started
-  `B1_BattleTech_1` executes **8192 opcodes using 65 distinct ones** and runs
-  `0x24` **not once**. It is not stuck - the mix is wide and changing - it is
-  waiting, in a loop. **Not for a player**: linking one through `0xED`'s class
-  1 arm leaves the trace byte-for-byte identical. What remains is another pod
-  on the wire, a renderer state the stub does not reach, or something in the
-  mission record we have not learned to fill. Settled by: naming what the
-  typed loads in its loop are reading.
+  nothing is created. Traced with `--vmtrace`, a properly started
+  `B1_BattleTech_1` executes **8192 opcodes using 65 distinct ones** across 979
+  distinct bytecode addresses, revisiting its hot address every hundred to two
+  hundred instructions. That is a main loop doing work. **Not waiting for a
+  player**: linking one through `0xED`'s class 1 arm leaves the trace
+  byte-for-byte identical. **Not waiting for the renderer**: running with and
+  without `--rirq` leaves it identical too. It does respond to the script -
+  `B2_BattleTech_2` diverges at the 1418th opcode - so the trace is not a
+  constant.
+  **`0x24` was a false lead.** It is the ROM's only caller of `Create_Thing`,
+  but walking all thirteen routines from their entries, both arms of every
+  branch, finds **no `0x24` in any mission script**. "The mission never runs
+  `0x24`" describes the design, not a fault: scripts do not create the things
+  in a world. What does is again open. Settled by: finding the other caller
+  path into the entity arena, or naming what the typed loads in the loop read.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

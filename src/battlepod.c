@@ -1034,6 +1034,13 @@ static uint32_t g_moncall[MON_SLOTS];
 static uint32_t g_vmtrace;
 static unsigned g_vmtrace_n;
 static uint8_t  g_vmops[VMTRACE_MAX];
+/* The interpreter's bytecode program counter is a pointer in its own frame at
+ * `(-$10e,A6)` - that is the cell every operand-taking arm steps with
+ * `addq.l #1`. Logging it alongside the opcode turns the opcode stream into
+ * something a disassembly can be lined up against, which is what it takes to
+ * find the loop in a trace of eight thousand instructions. */
+#define VMTRACE_FRAME_PC (-0x10e)
+static uint32_t g_vmpcs[VMTRACE_MAX];
 
 #define MAX_PKTS 8
 static uint8_t  g_pkt[MAX_PKTS][512];
@@ -2455,9 +2462,12 @@ int main(int argc, char **argv)
 			if (slot == MON_SLOT_RECV) mon_recv_polled();
 		}
 
-		if (g_vmtrace && pc == g_vmtrace && g_vmtrace_n < VMTRACE_MAX)
+		if (g_vmtrace && pc == g_vmtrace && g_vmtrace_n < VMTRACE_MAX) {
+			uint32_t a6 = m68k_get_reg(NULL, M68K_REG_A6);
+			g_vmpcs[g_vmtrace_n] = m68k_read_memory_32(a6 + VMTRACE_FRAME_PC);
 			g_vmops[g_vmtrace_n++] =
 				(uint8_t)m68k_get_reg(NULL, M68K_REG_D0);
+		}
 
 		if (g_taps || g_setats) tap_check(pc);
 
@@ -2518,8 +2528,9 @@ int main(int argc, char **argv)
 		unsigned k;
 		printf("\nmission opcodes executed: %u\n", g_vmtrace_n);
 		for (k = 0; k < g_vmtrace_n; k++)
-			printf("%02X%s", g_vmops[k], (k % 24 == 23) ? "\n" : " ");
-		if (g_vmtrace_n % 24) printf("\n");
+			printf("%08X:%02X%s", g_vmpcs[k], g_vmops[k],
+			       (k % 8 == 7) ? "\n" : " ");
+		if (g_vmtrace_n % 8) printf("\n");
 	}
 
 	if (g_rscmd) {

@@ -248,3 +248,37 @@ when the harness was what was wrong.
 **Multi-file edit scripts that abort partway leave the tree inconsistent** and,
 worse, leave a commit message describing changes that were never made. Edit one
 file at a time.
+
+**"The mission never executes `0x24`" was read as a symptom for a week.** `0x24`
+is the ROM's only caller of `Create_Thing`, the mission runs eight thousand
+instructions without it, and the world stays empty - three true statements that
+together looked like a diagnosis. They are not one. Walking all thirteen mission
+routines from their entry points, following both arms of every branch, finds
+**no `0x24` in any script in the ROM**. The instruction the mission was "failing
+to reach" is not in the program. Everything built on that premise - looking for
+the guard branch, looking for the value the guard reads, linking a player to
+satisfy it - was looking for something that does not exist. A negative
+observation is only evidence once you have checked that the positive was ever
+possible.
+
+**A word-by-word scan of 68k code reads 68881 extension words as branches.**
+`fmove.s FP0,(-$4,A6)` assembles as `F22E 6400 FFFC`, and the middle word is a
+`bcc.w` with a negative displacement to anything scanning two bytes at a time.
+Every operand reader that stored a float was therefore declared a data-dependent
+loop, and two opcodes got the wrong length. The fix is to give coprocessor
+instructions their real length before testing a word for anything else. The
+general lesson: a scanner that does not track instruction boundaries will find
+whatever it is looking for in the middle of something else.
+
+**`bsr.b` is two bytes.** A call decoder that handled `jsr abs.l`, `jsr (d16,PC)`
+and `bsr.w` silently skipped every short `bsr`, so the reader it called was never
+costed and the opcode came out zero bytes long. Four addressing forms, not three.
+
+**The reader a `pea` feeds is not always the next instruction.** `0x09`'s arm
+pushes a second argument between the `pea` and the `jsr`. Requiring adjacency
+read its operand as zero bytes and desynchronised every walk that reached it.
+
+**A conformance checkpoint has to be one number per line.** `trace entries: 8192,
+distinct opcodes: 65` parses as the integer `8192,` and fails a `-ge` test with a
+shell error, while the text it is checking is correct. The harness printed
+`FAIL` next to a number that matched its own floor.
