@@ -161,6 +161,7 @@ tap 0213BB92 hit 1
 tap 021188BE hit 1
 tap 021189D4 hit 1
 tap 0210E22E hit 1
+mission opcodes executed: 8192
   0000  42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00
 tap 0211786C hit 1
 tap 02117788 hit 1
@@ -440,7 +441,7 @@ done
 # and the entity it names must be class 19, the mission class. The record takes
 # the name, the interpreter's program counter lands in the ROM's bytecode, and
 # the fetch-decode loop runs.
-"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21FA062=00000013     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0'     --tap 021188BE --tap 021189D4 --tap 0210E22E --peek 021A5DBC:16     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21FA062=00000013     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0'     --tap 021188BE --tap 021189D4 --tap 0210E22E --peek 021A5DBC:16 --vmtrace     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

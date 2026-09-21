@@ -2597,6 +2597,37 @@ entity table by hand: nothing has executed a `0x24`.
 opcode with no handler, and there is no `0x24` among them - so whatever creates
 this mission's mechs is further in, or in one of the routines it schedules.
 
+### What a mission actually executes
+
+`--vmtrace` logs the interpreter's dispatch register, which gives the exact
+opcode stream a mission runs - the only ground truth there is for a
+disassembler working from operand lengths it inferred.
+
+`B1_BattleTech_1`, started properly with a game length and a class 19 entity,
+executes **8192 opcodes** before the budget runs out, using **65 distinct**
+ones. It begins exactly as the disassembly says:
+
+```
+49 49 49 4B 4B 47 47 47 4A 65 45 42 | 61 65 72 61 61 61 61 70 61 65 72 61
+```
+
+- the twelve instructions of the entry, then the jump, then the body.
+
+The ten most-used, with counts:
+
+```
+61:2416  65:1309  62:637  73:459  70:342  39:240  3C:222  33:221  72:144  4B:130
+```
+
+`0x61` alone is a third of everything executed, which is what a push looks
+like in a stack machine.
+
+**`0x0B` runs once and `0x24` never runs at all.** So the mission schedules one
+routine and, in eight thousand instructions, never creates a thing. It is not
+stuck - the opcode mix is wide and changing - it is *waiting for something*,
+in a loop, and whatever it polls is false on a pod with one entity, no
+players and no other cockpits on the wire.
+
 ## Making the pod report on itself
 
 The firmware has a complete self-diagnostic and it can be turned on.

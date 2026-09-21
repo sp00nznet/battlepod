@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--vmtrace` - the exact opcode stream a mission runs.** It logs the
+  interpreter's dispatch register, which is the only ground truth there is for
+  a disassembler working from operand lengths it inferred.
+- **A properly started `B1_BattleTech_1` executes 8192 opcodes using 65
+  distinct ones**, beginning exactly as the disassembly says. The ten most
+  used: `61:2416 65:1309 62:637 73:459 70:342 39:240 3C:222 33:221 72:144
+  4B:130` - `0x61` alone is a third of everything, which is what a push looks
+  like in a stack machine.
+- **`0x0B` runs once and `0x24` never runs at all.** So the mission schedules
+  one routine and, in eight thousand instructions, never creates a thing. It is
+  not stuck - the mix is wide and changing - it is **waiting**, in a loop, for
+  something that is false on a pod with one entity, no players and nothing else
+  on the wire.
+- One more checkpoint. **200/200.**
+
 - **A thing is only ever made by a script.** `Create_Thing` is called from
   **exactly one place in the whole ROM**, and that place is a bytecode opcode
   handler: **`0x24`**, which takes four operands off the script's stack - two

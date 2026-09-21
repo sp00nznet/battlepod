@@ -1025,6 +1025,16 @@ static void live_close(void)
 
 static uint32_t g_mon, g_monstub;
 static uint32_t g_moncall[MON_SLOTS];
+/* The mission interpreter's fetch-decode loop dispatches on D0. Logging that
+ * register at one address gives the exact opcode stream a mission executes,
+ * which is the only ground truth there is for a bytecode disassembler working
+ * from operand lengths it inferred. */
+#define VMTRACE_PC  0x021198A6u
+#define VMTRACE_MAX 8192
+static uint32_t g_vmtrace;
+static unsigned g_vmtrace_n;
+static uint8_t  g_vmops[VMTRACE_MAX];
+
 #define MAX_PKTS 8
 static uint8_t  g_pkt[MAX_PKTS][512];
 static uint32_t g_pktlen[MAX_PKTS];
@@ -2281,6 +2291,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rstub") && i + 1 < argc) {
 			g_rstub = (uint32_t)strtoul(argv[++i], NULL, 16);
 		}
+		else if (!strcmp(a, "--vmtrace")) {
+			g_vmtrace = (i + 1 < argc && argv[i+1][0] != '-')
+			          ? (uint32_t)strtoul(argv[++i], NULL, 16) : VMTRACE_PC;
+		}
 		else if (!strcmp(a, "--rirq")) {
 			g_rirq = 5;
 			if (i + 1 < argc && argv[i+1][0] != '-') {
@@ -2441,6 +2455,10 @@ int main(int argc, char **argv)
 			if (slot == MON_SLOT_RECV) mon_recv_polled();
 		}
 
+		if (g_vmtrace && pc == g_vmtrace && g_vmtrace_n < VMTRACE_MAX)
+			g_vmops[g_vmtrace_n++] =
+				(uint8_t)m68k_get_reg(NULL, M68K_REG_D0);
+
 		if (g_taps || g_setats) tap_check(pc);
 
 #ifdef BATTLEPOD_SDL
@@ -2495,6 +2513,14 @@ int main(int argc, char **argv)
 	       m68k_get_reg(NULL, M68K_REG_SR));
 	printf("\ncode at the stop point\n");
 	disasm_at(m68k_get_reg(NULL, M68K_REG_PPC), 8);
+
+	if (g_vmtrace_n) {
+		unsigned k;
+		printf("\nmission opcodes executed: %u\n", g_vmtrace_n);
+		for (k = 0; k < g_vmtrace_n; k++)
+			printf("%02X%s", g_vmops[k], (k % 24 == 23) ? "\n" : " ");
+		if (g_vmtrace_n % 24) printf("\n");
+	}
 
 	if (g_rscmd) {
 		printf("%srenderer commands: %d posted%s", "\n", g_rscmd, "\n");
