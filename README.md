@@ -32,7 +32,9 @@ diagnostic monitor can be driven interactively over the modelled serial port —
 far enough to make the cockpit's lamps, bar graphs and alphanumeric displays
 emit real Remote I/O packets, checksums and all. See
 [DEVICES.md](docs/DEVICES.md) for the map, [RENDERING.md](docs/RENDERING.md) for what it
-would take to reproduce all four of a cockpit's surfaces, and
+would take to reproduce all four of a cockpit's surfaces,
+[GAMES.md](docs/GAMES.md) for the three game modes the ROM turns out to carry -
+BattleTech, Red Planet and Martian Football - and
 [ROADMAP.md](ROADMAP.md) for what's next,
 [docs/](docs/) for the whole technical record - including
 [what turned out to be wrong](docs/FALSE-TRAILS.md) and [what is still

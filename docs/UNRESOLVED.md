@@ -183,7 +183,27 @@ move.*
   unused mission opcode. In this ROM they are unreachable.
   A write trap on entity 1's class word says the same from the other side: on
   a boot with a mission running, the only writes to it are two zeroes from the
-  arena init. **Nothing ever gives an entity a class.** Settled by: finding
+  arena init. **Nothing ever gives an entity a class.** Now largely settled - see below - but not from the wire. Settled by: finding
+- **Why the pod cannot start its own game.** Three routines give an arena
+  entity a class, `0x0214C57E` is the workhorse, and its nine callers are one
+  per class with `0x0212D060` making the Mech. The routine that would build the
+  player's own Mech is `0x02134F06`; it needs the game length positive and bit
+  1 of `0x02193C13`, both of which arrive in an `0xE5` packet (`+0x3C` and
+  `+0x30`). But **`0x02134F06` is only reachable through a dispatch on
+  `My_Mech_Ptr`'s own class**, and a fresh pod's `My_Mech_Ptr` is arena slot 0,
+  set up by init with class 0. Class 0 never reaches it. Forcing slot 0 to
+  class 1 breaks the circle and the per-frame work resumes, so the machinery is
+  all there. What is missing is whoever is supposed to break it on real
+  hardware - the console creating the mech first, or a boot path this project
+  has not found. Settled by: finding what sets slot 0's class, or what calls
+  `0x02134F06` before any mech exists.
+- **What the router puts in an event payload.** `0xF8` selector 1 is a second
+  route to a class 1 Mech - the animation editor's - and injecting `0xF8`
+  reaches its arm, but the payload the handler reads is a buffer at
+  `0x02183716` whose `+0x02` stays zero however the packet is filled. The
+  packet-to-event copy is understood for the handlers `entityfields.py` swept
+  and not for this one. Settled by: tracing the copy for one message that
+  works and one that does not.
   what is supposed to, which is now the whole of the question.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.

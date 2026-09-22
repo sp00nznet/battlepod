@@ -162,6 +162,8 @@ tap 0213BA92 hit 1
 tap 021188BE hit 1
 tap 021189D4 hit 1
 tap 0210E22E hit 1
+set 021F99AE = 00000001 at pc 02122154
+tap 02130296 hit 1
 mission opcodes executed: 8192
   0000  42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00
 tap 0211786C hit 1
@@ -469,6 +471,13 @@ done
 # nothing about what the mission executes, which is the point.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21FA062=00000001 --set-at 02122154 21FA716=00000013     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0'     --packet 'ED 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02'     --tap 0213BA92 --tap 0213BB92     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
 
+# Scenario 4D: My_Mech_Ptr's class gates the whole game. Arena slot 0 is set up
+# with class 0, the per-frame dispatch at 0x02138F8E switches on that class, and
+# only class 1 - Mech - reaches the routine that would build a real one. Giving
+# slot 0 a class breaks the circle: the class 1 arm runs, and a mission run goes
+# from 400 renderer commands to the count a pod reaches with no mission at all.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00 09 27 C0'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --tap 02130296 --tap 02138F8E     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -725,6 +734,16 @@ if [ -f "$ROM" ]; then
     check_exactly "0211DC1E" 1          # Create_Thing, from opcode 0x24's arm
     check_exactly "0211DBA2" 1          # the class 4 constructor, from 0x21's
     check_exactly "0211E15E" 2          # the allocator, from both of them
+
+    # The three arena allocators - the routines that actually give an entity a
+    # class. Each caller asks for exactly one class, so the counts are a
+    # census of what this build can make.
+    CHECKTEXT=$(python tools/xref.py "$ROM" 020FFFE4 --calls 0214C4FC 0214C57E 0214C61E 0212D058 02134F06 2>/dev/null)
+    check_exactly "0214C4FC" 4          # class 4 three times, class 9 once
+    check_exactly "0214C57E" 9          # one caller per class, Mech included
+    check_exactly "0214C61E" 0          # the top-of-arena pool, never used
+    check_exactly "0212D058" 2          # the class 1 Mech constructor
+    check_exactly "02134F06" 2          # the routine that decides My_Mech_Ptr
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both

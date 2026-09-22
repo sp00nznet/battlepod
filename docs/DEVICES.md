@@ -2859,6 +2859,122 @@ them**. The four that exist are `0x21` (creates a class 4 thing, via
 `0x0211DBA2`), `0x22`, `0x23` and `0x24` (`Create_Thing`), and no mission
 script in the ROM reaches any of them.
 
+### What gives an entity its class
+
+An entity is real when its `Class_ID` at `+0x02` is non-zero, and three
+routines write it. All three index the arena the same way - base `0x021F99AC`,
+stride `0x6B4` - and all three write the same three fields:
+
+```
+0214C528  btst  #$0, ($d,A3)      free?
+0214C530  move.l D2, ($2,A3)      the class
+0214C534  move.l D3, ($6,A3)      the slot index, as Number
+0214C538  move.l #$7, ($a,A3)     Thing_Flags
+```
+
+| routine | cursor | callers |
+|---|---|---|
+| `0x0214C4FC` | `[0x021A5DB8]`, starts at 1 | 4 |
+| `0x0214C57E` | `[0x021A5DB8]`, the workhorse | 9 |
+| `0x0214C61E` | `[0x023A9ED6]`, starts at **950** | 0 |
+
+The third allocates from the top of the arena and nothing calls it - a pool for
+short-lived things that this build never uses.
+
+Each caller asks for exactly one class, which makes the nine callers of
+`0x0214C57E` a table of constructors:
+
+| class | creator |
+|---|---|
+| 1 **Mech** | `0x0212D060` |
+| 3 | `0x0214C1A0` |
+| 8 Escape pod | `0x02140E48` |
+| 10 Hovercraft | `0x02111C7E`, `0x02126242` |
+| 11 | `0x02137006` |
+| 13 | `0x021063C4` |
+| 17 | `0x02158B12` |
+| 18 Hovercraft | `0x02158D3E` |
+
+and the four callers of `0x0214C4FC` ask for class 4 (three of them) and class
+9, Camship.
+
+The class numbering comes out of `Create_Thing`'s own 19-way switch, where each
+arm names what it is building:
+
+| | | | |
+|---|---|---|---|
+| 1 Mech | 6 Escape pod | 8 Escape pod | 9 Camship |
+| 10 Hovercraft | 12 VTV | 16 Copter | 18 Hovercraft |
+
+Classes 0, 4, 5, 7, 13 and 15 take the arm that prints
+`Create unknown thing %d, class %d received`; 2, 3, 11, 14 and 17 have arms
+that do not name themselves.
+
+### `Create_Thing` does not build into the arena
+
+The reason its allocator strides `0x6C0` where the arena strides `0x6B4` is
+that it is a different table. Opcode `0x24` passes `(-$14,A6)` - the mission's
+own record - as `Create_Thing`'s first argument, and `0x0211E15E` allocates
+from **16 slots of 0x6C0 bytes** inside it, starting at slot 1. Opcode `0x20`
+clears the same 16 slots.
+
+So a mission gets sixteen scripted objects of its own, and the 1000-entity
+arena is something else. Both structures carry class, number and flags at the
+same three offsets, which is what made them look like one thing.
+
+### My_Mech_Ptr, and the gate in front of the whole game
+
+Arena slot 0 is set up by hand during init - class 0, number 0, flags 7 - and
+`My_Mech_Ptr` at `0x0218AEE4` points at it. `0x02134F06` is what decides
+whether it keeps pointing there:
+
+```
+02134F0E  tst.l  $2193c1c.l        the game length
+02134F14  ble    $2134f20
+02134F16  btst   #$1, $2193c13.l
+02134F1E  bne    $2134f70          -> create a real class 1 Mech
+...
+02134F52  move.l $2189f10.l, $218aee4.l   -> otherwise, entity 0
+```
+
+The real path builds a Mech from mission-record fields `+0x4C`, `+0x50`,
+`+0x54` and `+0x58` and stores it as `My_Mech_Ptr`. The flag it tests arrives
+over the wire: `0xE5`'s handler at `0x0210E212` copies packet `+0x30` straight
+into `0x02193C10`, and `+0x3C` into the game length two instructions later.
+
+**But `0x02134F06` is only reachable through a dispatch on `My_Mech_Ptr`'s own
+class.** `0x02138F8E` reads `($2,A0)` from `My_Mech_Ptr` and switches on it;
+class 1 takes the arm at `0x02138F9A`, which calls `0x02130296`, which calls
+`0x02134F06`. A pod whose mech is entity 0 has class 0 and never gets there.
+
+Forcing entity 0's class to 1 is enough to break the circle: `0x02130296`
+then runs every frame, and a run with a mission started goes from 400 renderer
+commands to 42300 - which is the count a pod reaches with no mission at all,
+so what the class was suppressing is the ordinary per-frame work.
+
+Whether the real cabinet breaks the circle some other way, or whether the
+console is expected to create the mech first, is open - see UNRESOLVED.md.
+
+### The other way in: the animation editor creates things
+
+`0xF6` through `0xFF` all dispatch to `0x02103702`, which switches on the same
+byte again and separates them:
+
+| | | | | |
+|---|---|---|---|---|
+| `F6` `0x02104320` | `F7` `0x0210432E` | `F8` `0x021041B0` | `F9` `0x0210396C` | `FA` `0x02103862` |
+| `FB` `0x021037CE` | `FC` `0x02103A36` | `FD` `0x0210377E` | `FE` `0x02103732` | `FF` `0x02103720` |
+
+`0xF8` is the one that creates. It destroys whatever `0x0215DD0A` names, then
+switches on the event payload's `+0x02`, and selector **1** reaches
+`0x02104254` - a call to the class 1 Mech constructor whose result goes into
+`0x0218AEE4`, `My_Mech_Ptr` itself.
+
+Injecting `0xF8` reaches the arm, but the payload the handler reads is a
+buffer at `0x02183716` rather than the bytes put on the wire, and its `+0x02`
+is zero however the packet is filled. What the router copies into an event
+payload, and for which message kinds, is the next thing to establish.
+
 ### The slot allocator
 
 `0x0211E15E` is the allocator both constructors use, and it is not the entity

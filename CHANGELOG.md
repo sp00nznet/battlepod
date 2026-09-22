@@ -84,7 +84,34 @@ All notable changes to this project are documented here. The format follows
   `0x10`-`0x16` and `0x8D` maintain it. On a booted pod it is entirely zero, as
   is the 60 x 64-byte table at `0x02182816` that `0x10` indexes - which is why
   `%1d deaths` formats to `" "` and `"deaths"` with nothing between them.
-- Twenty-seven checkpoints. **235/235.**
+- **What gives an entity its class.** Three routines write it, all indexing the
+  arena at `0x021F99AC` with stride `0x6B4` and all writing the same three
+  fields - class to `+0x02`, slot index to `+0x06`, `7` to `+0x0A`.
+  `0x0214C57E` is the workhorse with **nine callers, one per class**, including
+  `0x0212D060` for **class 1, the Mech**; `0x0214C4FC` has four (class 4 three
+  times, class 9 Camship); `0x0214C61E` allocates from slot 950 upward and
+  nothing calls it.
+- **The class numbering**, from `Create_Thing`'s own 19-way switch: 1 Mech,
+  6 and 8 Escape pod, 9 Camship, 10 and 18 Hovercraft, 12 VTV, 16 Copter.
+- **`Create_Thing` does not build into the arena.** Opcode `0x24` passes the
+  mission's own record, and `0x0211E15E` allocates 16 slots of `0x6C0` inside
+  it. That is why its stride never matched the arena's - it is a different
+  table, and the two only look alike because both carry class, number and flags
+  at the same offsets.
+- **The gate in front of the whole game.** `0x02134F06` decides whether
+  `My_Mech_Ptr` is a real Mech or arena slot 0: it wants the game length
+  positive and bit 1 of `0x02193C13`, and both arrive in an `0xE5` packet
+  (`+0x3C` and `+0x30`, copied by `0x0210E212`). But it is only reachable
+  through a **dispatch on `My_Mech_Ptr`'s own class**, and a fresh pod's
+  `My_Mech_Ptr` is slot 0 with class 0. Forcing slot 0 to class 1 breaks the
+  circle: the class 1 arm runs every frame and a mission run goes from 400
+  renderer commands to 42300, the count a pod reaches with no mission at all.
+- **`0xF8` is the other way in.** `0xF6`-`0xFF` dispatch to `0x02103702`, which
+  switches on the same byte again; `0xF8`'s arm destroys whatever `0x0215DD0A`
+  names and, on payload selector 1, builds a class 1 Mech straight into
+  `My_Mech_Ptr`. Injecting it reaches the arm but not the selector - the
+  payload is a buffer at `0x02183716`, not the bytes on the wire.
+- Seven checkpoints and a scenario. **242/242.**
 
 ### Fixed
 

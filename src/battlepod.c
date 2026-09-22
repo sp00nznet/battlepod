@@ -84,7 +84,7 @@ static uint32_t g_watch_base, g_watch_len;
  *
  * So: a write trap. Any write into the range is printed with the pc that made
  * it, capped so a mistake costs a screenful rather than a log file. */
-#define WTRAP_MAX 64
+#define WTRAP_MAX 20000
 static uint32_t g_wtrap_base, g_wtrap_len;
 static unsigned g_wtrap_n;
 
