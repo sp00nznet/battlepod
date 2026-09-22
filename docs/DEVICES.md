@@ -2898,6 +2898,61 @@ the same interpreter. Only one table had ever been read, and a write trap on
 `[0x0216F49C]` is what found the other: it is written exactly once per boot,
 from `0x02117890`, and the instruction three back is the branch that chooses.
 
+### What the other game is
+
+The strings say it, and they are the fastest description of what any of these
+scripts is *for*. `mission_dis.py --strings` walks every routine in both tables
+and prints the literals it can reach.
+
+**Red Planet** is a scored race. `Score %1d`, `Scoring zones: %1d`, `%1d KPH`,
+`Leader Board`, `Leader is %0n %0L`, `%0n %0L is last`, and two exit cameras -
+`*Winner-Cam*` in `R1_Red_Planet_1` and `*Loser-Cam*` in `R2_Red_Planet_2`.
+The whole thing is framed as a broadcast: `Live from Red Planet`.
+
+**Martian Football** is a team sport played in the same vehicles.
+`(No team)`, `Red Team`, `Blue Team`; a `Position` that is one of `Runner`,
+`Blocker`, `Crusher`, or `?`; counts of `Blockers` and `Crushers`; the same
+`%1d KPH` and `Cockpit view` / `Rear quadrant`; and the caption
+`Martian Football: live from Red Planet`. Its title line is
+`Red Planet / Martian Football`, so it is a mode of Red Planet rather than a
+separate title, and its build string says so too: `VGL Universe 34934a`
+against Red Planet's `34934` and BattleTech's `34933`.
+
+For comparison, BattleTech's `B1_BattleTech_1` carries `Shoulder view`,
+`Ground cam`, `Map view`, `STATS (kills/deaths)`, `%1d kills`, `%1d deaths`,
+`Speed %1d` and `%2d/%3d`. These are the cockpit's on-screen text, and there
+is no other source for it in the firmware.
+
+### The interpreter's printf, and the roster behind it
+
+`0x0A` pops a format string and calls `0x0211A89A` with two pointers out of the
+mission record: `+0x1CE4` as the **roster** and `+0x1CB8` as an array of float
+arguments. Output goes to a 39-byte buffer at `0x021827BC`.
+
+A conversion is `%` then an optional `*` then a digit then a letter. The digit
+is a **slot number**; `*` means take the slot number from the float argument at
+that index instead, truncated to an integer. The slot is clamped to 0..19.
+
+| letter | arm | what it prints |
+|---|---|---|
+| `N` `n` | `0x0211A978` | the slot's first name, from record `+0x08` |
+| `V` `v` | `0x0211A9A4` | the slot's vehicle, from record `+0x0C` |
+| `L` `l` | `0x0211AAB8` | the slot's last name, from record `+0x10` |
+| `D` `d` | `0x0211A9D0` | an integer |
+| `F` `f` | `0x0211AA74` | a float |
+| `T` `t` | `0x0211AB46` / `0x0211AAD2` | a time, with separate upper and lower arms |
+
+So `%*0n %*0L` is "the first and last name of whoever argument 0 names", and
+`%*9v` is the vehicle of whoever argument 9 names - which is why the
+follow-cockpit cameras use slot 9 and the scoreboard uses slot 1.
+
+The roster is **20 slots of 30 bytes** at mission record `+0x1CE4`, and mission
+opcodes `0x10` through `0x16` and `0x8D` are what maintain it. A booted pod
+running `B1_BattleTech_1` has it entirely zero, and so is the 60-entry,
+64-byte table at `0x02182816` that `0x10` indexes - the pod formats
+`%1d deaths` into its buffer and gets `" "` and `"deaths"` with nothing in
+between, because there is nobody on the roster.
+
 ### Nothing a script does creates anything
 
 With every jump in the trace accounted for - **zero transitions the successor

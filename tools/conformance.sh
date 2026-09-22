@@ -702,6 +702,16 @@ if [ -f "$ROM" ]; then
     check_at_least "RedPlanet routines" 18
     check_at_least "RedPlanet instructions" 4688
     check_exactly "RedPlanet creation opcodes" 0
+
+    # The strings say what a script is for, and they are the whole of what is
+    # known about the other game on this hardware.
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" --strings 2>/dev/null)
+    check_contains "Martian Football: live from Red Planet"
+    check_contains "Red Team"
+    check_contains "Crusher"
+    check_contains "*Winner-Cam*"
+    check_contains "STATS (kills/deaths)"
+    check_contains "Map view"
 fi
 
 # Who else calls this. A routine with one caller is explained by that caller;

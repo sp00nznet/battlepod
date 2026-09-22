@@ -25,6 +25,7 @@ usage: mission_dis.py <ROM3_0> [NAME] [--base HEX] [--limit N]
        mission_dis.py <ROM3_0> --lengths
        mission_dis.py <ROM3_0> --trace <battlepod --vmtrace output>
        mission_dis.py <ROM3_0> --reach
+       mission_dis.py <ROM3_0> --strings
        mission_dis.py --selftest
 """
 import re
@@ -416,6 +417,45 @@ def report_reach(data, base=BASE):
               (name, sum(1 for o in seen.values() if o in CREATION)))
 
 
+def literals(data, table, base=BASE):
+    """(routine, [string]) for every literal a routine can reach.
+
+    The strings are the fastest description of what a script is *for*. Reading
+    them is how `Martian Football` stopped being a name in a table: Red Team,
+    Blue Team, Runner, Blocker, Crusher, and a broadcast caption.
+    """
+    import missions
+    lens, hs = lengths(data, base)
+    out = []
+    for name, entry in missions.routines(data, base, table):
+        seen = set()
+        work = [table + entry]
+        found = []
+        while work:
+            pc = work.pop()
+            if pc in seen or not (0 <= pc - base < len(data)):
+                continue
+            op = data[pc - base]
+            if op >= NOPCODE or hs[op] is None:
+                continue
+            seen.add(pc)
+            if op == STRING_PUSH:
+                n = data[pc + 1 - base]
+                found.append(data[pc + 2 - base:pc + 2 + n - base]
+                             .split(NUL)[0].decode("latin-1"))
+            work += successors(data, pc, lens, hs, base)
+        out.append((name, list(dict.fromkeys(found))))
+    return out
+
+
+def report_strings(data, base=BASE):
+    for game, table in TABLES.items():
+        print("%s:" % game)
+        for name, texts in literals(data, table, base):
+            if texts:
+                print("  %-18s %s" % (name, " | ".join(texts)))
+
+
 TRACE = re.compile(r"([0-9A-F]{8}):([0-9A-F]{2})")
 
 
@@ -507,6 +547,9 @@ def main(argv):
     if "--base" in argv:
         base = int(argv[argv.index("--base") + 1], 16)
     data = open(argv[1], "rb").read()
+    if "--strings" in argv:
+        sys.path.insert(0, "tools")
+        return report_strings(data, base)
     if "--reach" in argv:
         sys.path.insert(0, "tools")
         return report_reach(data, base)

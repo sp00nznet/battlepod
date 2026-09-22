@@ -62,7 +62,29 @@ All notable changes to this project are documented here. The format follows
 | BattleTech | 13 | 2329 | 70 | **0** |
 | Red Planet | 18 | 4688 | 68 | **0** |
 
-- Twenty-one checkpoints. **229/229.**
+- **`mission_dis.py --strings`**, and with it what the other game is. **Red
+  Planet** is a scored race - `Score %1d`, `Scoring zones: %1d`, `%1d KPH`,
+  `Leader Board`, `Leader is %0n %0L`, `*Winner-Cam*` and `*Loser-Cam*`, all
+  captioned `Live from Red Planet`. **Martian Football** is a team sport in the
+  same vehicles: `(No team)` / `Red Team` / `Blue Team`, a `Position` that is
+  `Runner`, `Blocker`, `Crusher` or `?`, counts of `Blockers` and `Crushers`,
+  and the caption `Martian Football: live from Red Planet`. Its title line is
+  `Red Planet / Martian Football` and its build string `VGL Universe 34934a`
+  against Red Planet's `34934` - a mode of Red Planet, not a separate title.
+- **BattleTech's own HUD text**, from the same source: `Shoulder view`,
+  `Ground cam`, `Map view`, `STATS (kills/deaths)`, `%1d kills`, `%1d deaths`,
+  `Speed %1d`, `%2d/%3d`.
+- **The interpreter's `printf` conversions.** `%` then an optional `*` then a
+  digit then a letter; the digit is a slot number, `*` takes the slot number
+  from the float argument at that index. `N`/`n` first name, `V`/`v` vehicle,
+  `L`/`l` last name, `D`/`d` integer, `F`/`f` float, `T`/`t` time.
+- **The roster**: 20 slots of 30 bytes at mission record `+0x1CE4`, first name
+  at `+0x08`, vehicle at `+0x0C`, last name at `+0x10`, with the float
+  arguments at `+0x1CB8` and the output buffer at `0x021827BC`. Mission opcodes
+  `0x10`-`0x16` and `0x8D` maintain it. On a booted pod it is entirely zero, as
+  is the 60 x 64-byte table at `0x02182816` that `0x10` indexes - which is why
+  `%1d deaths` formats to `" "` and `"deaths"` with nothing between them.
+- Twenty-seven checkpoints. **235/235.**
 
 ### Fixed
 
