@@ -1032,10 +1032,19 @@ static void live_close(void)
 #define MON_SLOTS    32
 #define MON_STUB_OFF  0x200
 #define MON_STUB_SZ   16
-#define MON_PKT_OFF   0x400		/* received-packet buffer, past the stubs */
+/* The received-packet buffer sits past the stubs. It used to be at +0x400,
+ * which put the packet body at 0x02000804 with the default monitor base - and
+ * the firmware's millisecond timebase is at 0x02000808, four bytes into it. So
+ * `--clock` overwrote bytes 4 through 7 of every injected packet with a
+ * counter, and any handler reading a field there saw the clock. `0xF8`'s
+ * create selector is at +0x02 and spans into that hole, which is why it could
+ * never be set from the wire. Moved clear; `mon_install` now refuses to let
+ * the two overlap silently. */
+#define MON_PKT_OFF   0x600		/* received-packet buffer, past the stubs */
 #define MON_SLOT_RECV 6			/* +0x18: poll for a received packet */
 
 static uint32_t g_mon, g_monstub;
+static uint32_t g_clock_addr;	/* defined with --clock below; checked here */
 static uint32_t g_moncall[MON_SLOTS];
 /* The mission interpreter's fetch-decode loop dispatches on D0. Logging that
  * register at one address gives the exact opcode stream a mission executes,
@@ -1087,6 +1096,11 @@ static void mon_install(uint32_t base)
 	}
 
 	if (!g_npkts) return;
+	if (g_clock_addr && g_clock_addr >= base + MON_PKT_OFF &&
+	    g_clock_addr < base + MON_PKT_OFF + 4 + sizeof g_pkt[0])
+		printf("warning: the clock at %08X is inside the packet buffer "
+		       "at %08X and will overwrite packet bytes\n",
+		       g_clock_addr, base + MON_PKT_OFF);
 	mon_pkt_arm(base, 0);
 }
 
@@ -1128,7 +1142,7 @@ static void mon_recv_polled(void)
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
  * places and writes it nowhere, so the pod's boot monitor maintained it as a
  * millisecond timebase. Without one, every timeout in the game waits forever. */
-static uint32_t g_clock_addr, g_clock_div = 4096, g_clock_val;
+static uint32_t g_clock_div = 4096, g_clock_val;
 
 static void clock_tick(void)
 {

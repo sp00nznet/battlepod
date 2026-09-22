@@ -326,3 +326,27 @@ watchpoint answered "was this consulted" and never "where did this come from" -
 which is the question that mattered. Two hundred and thirty-one references to
 the entity pointer table were nearly read by hand before `--wtrap` answered it
 in one run.
+
+**The clock was writing over every injected packet.** The monitor's
+received-packet buffer sat at `+0x400` from a base of `0x02000400`, which put
+the packet body at `0x02000804`; the firmware's millisecond timebase, which
+`--clock` maintains because the ROM reads it in 336 places and writes it
+nowhere, is at `0x02000808`. Four bytes into every packet. So bytes 4 through 7
+of everything this project ever put on the wire were a free-running counter.
+
+It went unnoticed for as long as it did because nothing had needed those bytes:
+the message fields that had been exercised sit at `+0x08` and beyond, and the
+two that matter most - a mission name at `+0x0A` and a game length at `+0x3C` -
+are both clear of it. It surfaced only when `0xF8`'s create selector turned out
+to be a longword at `+0x02`, which spans bytes 2 to 5 and therefore reads half
+selector and half clock. The value coming back was `0x00000C5F`, which looked
+like a plausible handle or node id and was in fact the time.
+
+Two lessons. A harness that writes into the address space it is observing needs
+its own map checked against the firmware's, and "this constant looks like an
+id" is a hypothesis, not a reading - the way to test it was to send two
+different packets and see that the constant did not move, which takes one
+minute and was not done for some time.
+
+The packet buffer has moved to `+0x600` and `mon_install` now prints a warning
+if the clock address lands inside it.

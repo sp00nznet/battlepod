@@ -197,13 +197,13 @@ move.*
   hardware - the console creating the mech first, or a boot path this project
   has not found. Settled by: finding what sets slot 0's class, or what calls
   `0x02134F06` before any mech exists.
-- **What the router puts in an event payload.** `0xF8` selector 1 is a second
-  route to a class 1 Mech - the animation editor's - and injecting `0xF8`
-  reaches its arm, but the payload the handler reads is a buffer at
-  `0x02183716` whose `+0x02` stays zero however the packet is filled. The
-  packet-to-event copy is understood for the handlers `entityfields.py` swept
-  and not for this one. Settled by: tracing the copy for one message that
-  works and one that does not.
+- **Why a created Mech is not drawn.** `0xF8` selector 1 now builds one -
+  class 1, Number 1, flags 7, cursor advanced - and the renderer posts the same
+  number of commands with it as without. So an entity with a class is not yet
+  an entity with a model, a position the camera can see, or a place in whatever
+  list the culler walks. Settled by: finding what else a drawable thing needs,
+  starting from the fields `0x02104254`'s caller fills in after the allocation
+  returns.
   what is supposed to, which is now the whole of the question.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.

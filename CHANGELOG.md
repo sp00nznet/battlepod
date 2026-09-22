@@ -111,7 +111,24 @@ All notable changes to this project are documented here. The format follows
   names and, on payload selector 1, builds a class 1 Mech straight into
   `My_Mech_Ptr`. Injecting it reaches the arm but not the selector - the
   payload is a buffer at `0x02183716`, not the bytes on the wire.
-- Seven checkpoints and a scenario. **242/242.**
+- **The first entity this project has created.** `0xF8` with the create
+  selector at `+0x02` set to 1 builds a class 1 Mech through the arena
+  allocator: entity 1 comes back with `Class_ID` 1, `Number` 1, `Thing_Flags`
+  7, and the arena cursor at `0x021A5DB8` moved on. It is not drawn yet.
+- Eleven checkpoints and two scenarios. **246/246.**
+
+### Fixed
+
+- **`--clock` was writing over every injected packet.** The monitor's
+  received-packet buffer put the packet body at `0x02000804` and the firmware's
+  millisecond timebase is at `0x02000808`, so bytes 4 through 7 of everything
+  this project has ever put on the wire were a free-running counter. Nothing
+  had needed those bytes - the fields exercised so far all sit at `+0x08` and
+  beyond - until `0xF8`'s create selector turned out to be a longword at
+  `+0x02`, which spans bytes 2 to 5 and so read half selector and half clock.
+  The buffer has moved to `+0x600`, `mon_install` warns if the clock lands
+  inside it, and the harness is unchanged at 246 with the move. Recorded in
+  FALSE-TRAILS.md.
 
 ### Fixed
 

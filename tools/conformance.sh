@@ -164,6 +164,10 @@ tap 021189D4 hit 1
 tap 0210E22E hit 1
 set 021F99AE = 00000001 at pc 02122154
 tap 02130296 hit 1
+tap 0214C57E hit 1
+tap 0212D058 hit 1
+  0000  00 00 00 00 00 01 00 00 00 01 00 00 00 07 00 00
+  0000  00 00 00 02
 mission opcodes executed: 8192
   0000  42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00
 tap 0211786C hit 1
@@ -477,6 +481,16 @@ done
 # slot 0 a class breaks the circle: the class 1 arm runs, and a mission run goes
 # from 400 renderer commands to the count a pod reaches with no mission at all.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00 09 27 C0'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01'     --tap 02130296 --tap 02138F8E     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4E: create a thing. `0xF8` is the animation editor's create command;
+# its arm switches on the payload longword at +0x02 and selector 1 builds a
+# class 1 Mech through the arena allocator. The entity that comes back is the
+# first this project has ever made: class 1, Number 1, Thing_Flags 7, and the
+# arena cursor at 0x021A5DB8 moved on.
+#
+# This only works because the packet buffer no longer sits under the clock. The
+# selector spans bytes 2..5 and the timebase at 0x02000808 used to land on 4..7.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --tap 0214C57E --tap 0212D058     --peek 021FA060:16 --peek 021A5DB8:4     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the

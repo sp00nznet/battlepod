@@ -2970,10 +2970,22 @@ switches on the event payload's `+0x02`, and selector **1** reaches
 `0x02104254` - a call to the class 1 Mech constructor whose result goes into
 `0x0218AEE4`, `My_Mech_Ptr` itself.
 
-Injecting `0xF8` reaches the arm, but the payload the handler reads is a
-buffer at `0x02183716` rather than the bytes put on the wire, and its `+0x02`
-is zero however the packet is filled. What the router copies into an event
-payload, and for which message kinds, is the next thing to establish.
+That works, and it is the first entity this project has created:
+
+```
+peek 021FA060:
+  0000  00 00 00 00 00 01 00 00 00 01 00 00 00 07 00 00
+                    ^class 1     ^Number 1  ^flags 7
+peek 021A5DB8:
+  0000  00 00 00 02        the arena cursor moved on
+```
+
+It did not work at first, and the reason was ours. The monitor's received-packet
+buffer put the packet body at `0x02000804`, and the firmware's millisecond
+timebase is at `0x02000808` - four bytes in. `--clock` was overwriting bytes 4
+through 7 of every packet this project has ever injected, and `0xF8`'s selector
+is a longword at `+0x02`, which spans into that hole. The buffer has moved; see
+FALSE-TRAILS.md.
 
 ### The slot allocator
 
