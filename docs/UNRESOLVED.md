@@ -197,13 +197,14 @@ move.*
   hardware - the console creating the mech first, or a boot path this project
   has not found. Settled by: finding what sets slot 0's class, or what calls
   `0x02134F06` before any mech exists.
-- **Why a created Mech is not drawn.** `0xF8` selector 1 now builds one -
-  class 1, Number 1, flags 7, cursor advanced - and the renderer posts the same
-  number of commands with it as without. So an entity with a class is not yet
-  an entity with a model, a position the camera can see, or a place in whatever
-  list the culler walks. Settled by: finding what else a drawable thing needs,
-  starting from the fields `0x02104254`'s caller fills in after the allocation
-  returns.
+- **Why a created Mech draws no polygons.** It is no longer invisible to the
+  system: with a viewer class in place the firmware's own cone-culling report
+  goes from `Total 0` to `Total 1` and `Model Time` becomes non-zero, so the
+  Mech is a candidate the culler tests. But `Polygon count` stays 0 and the
+  display list gains no items for it, while the pod happily draws models 72,
+  73, 95 and 96 in the same frame. Settled by: finding which entity field names
+  the model to draw, and what the cull test at `0x0212DBA4` - bit 0 of the
+  viewing entity's `+0xBB` - is gating.
   what is supposed to, which is now the whole of the question.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.

@@ -492,6 +492,17 @@ done
 # selector spans bytes 2..5 and the timebase at 0x02000808 used to land on 4..7.
 "$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --tap 0214C57E --tap 0212D058     --peek 021FA060:16 --peek 021A5DB8:4     --steps 900000000 --top 0 >> "$OUT" 2>&1 || true
 
+# Scenario 4F: the viewer's class is what turns geometry on. With arena slot 0
+# left at class 0 the pod posts a display list with no draw-model items at all;
+# give it class 1 and the same run posts hundreds, naming models 72, 73, 95 and
+# 96. Add a created Mech and the firmware's own cone-culling report goes from
+# Total 0 to Total 1 - the entity is a candidate the culler tests.
+#
+# Checked with check_contains below rather than a CHECKS line, because the item
+# opcodes are written with a leading $ and CHECKS is a double-quoted string.
+DRAW=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --monitor --astub --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --steps 200000000 --top 0 2>&1 || true)
+NODRAW=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --monitor --astub --clock 2000808     --set 40000100=1234567     --steps 200000000 --top 0 2>&1 || true)
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -500,6 +511,42 @@ done
 
 pass=0
 total=0
+
+check_exactly() {
+    got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
+    total=$((total + 1))
+    if [ "$got" = "$2" ]; then
+        pass=$((pass + 1))
+        printf '  ok    %-32s %s (must be %s)
+' "$1" "$got" "$2"
+    else
+        printf '  FAIL  %-32s %s (must be %s)
+' "$1" "${got:-?}" "$2"
+    fi
+}
+
+check_contains() {
+    total=$((total + 1))
+    if echo "$CHECKTEXT" | grep -qF -- "$1"; then
+        pass=$((pass + 1))
+        printf '  ok    %s
+' "$1"
+    else
+        printf '  FAIL  %s
+' "$1"
+    fi
+}
+
+check_at_least() {
+    got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
+    total=$((total + 1))
+    if [ -n "$got" ] && [ "$got" -ge "$2" ]; then
+        pass=$((pass + 1))
+        printf '  ok    %-32s %s (floor %s)\n' "$1" "$got" "$2"
+    else
+        printf '  FAIL  %-32s %s (floor %s)\n' "$1" "${got:-?}" "$2"
+    fi
+}
 echo
 echo "== boot checkpoints =="
 # Read with IFS cleared so leading and trailing spaces in a checkpoint survive.
@@ -517,6 +564,39 @@ done <<EOF
 $CHECKS
 EOF
 
+echo
+echo "== geometry =="
+CHECKTEXT="$DRAW"
+check_contains 'item $240'
+check_contains 'item $2C0'
+check_count()  {
+    total=$((total + 1))
+    got=$(echo "$CHECKTEXT" | grep -cF -- "$1" || true)
+    if [ "$got" -ge "$2" ]; then
+        pass=$((pass + 1))
+        printf '  ok    %-32s %s (floor %s)
+' "$1" "$got" "$2"
+    else
+        printf '  FAIL  %-32s %s (floor %s)
+' "$1" "$got" "$2"
+    fi
+}
+check_count 'item $240' 300
+CHECKTEXT="$NODRAW"
+check_count_zero() {
+    total=$((total + 1))
+    got=$(echo "$CHECKTEXT" | grep -cF -- "$1" || true)
+    if [ "$got" -eq 0 ]; then
+        pass=$((pass + 1))
+        printf '  ok    %-32s %s (must be 0)
+' "$1" "$got"
+    else
+        printf '  FAIL  %-32s %s (must be 0)
+' "$1" "$got"
+    fi
+}
+check_count_zero 'item $240'
+
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a
 # build - but a number going down means something that used to decode no longer
@@ -526,41 +606,8 @@ if [ -f "$TI_RES" ]; then
     echo
     echo "== model archive =="
     CHECKTEXT=$(python tools/model.py "$TI_RES" --stats 2>/dev/null)
-    check_exactly() {
-        got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
-        total=$((total + 1))
-        if [ "$got" = "$2" ]; then
-            pass=$((pass + 1))
-            printf '  ok    %-32s %s (must be %s)
-' "$1" "$got" "$2"
-        else
-            printf '  FAIL  %-32s %s (must be %s)
-' "$1" "${got:-?}" "$2"
-        fi
-    }
     # Some evidence is a line of text, not a number: the proof that `0x64`
     # pushes a string is that the bytes read as one.
-    check_contains() {
-        total=$((total + 1))
-        if echo "$CHECKTEXT" | grep -qF -- "$1"; then
-            pass=$((pass + 1))
-            printf '  ok    %s
-' "$1"
-        else
-            printf '  FAIL  %s
-' "$1"
-        fi
-    }
-    check_at_least() {
-        got=$(echo "$CHECKTEXT" | grep -F "$1" | head -1 | cut -d: -f2 | awk '{print $1}')
-        total=$((total + 1))
-        if [ -n "$got" ] && [ "$got" -ge "$2" ]; then
-            pass=$((pass + 1))
-            printf '  ok    %-32s %s (floor %s)\n' "$1" "$got" "$2"
-        else
-            printf '  FAIL  %-32s %s (floor %s)\n' "$1" "${got:-?}" "$2"
-        fi
-    }
     check_at_least "header +0x58 is a known opcode" 130
     check_at_least "stream walks to a return"        130
     check_at_least "vertex count matches the header" 120

@@ -115,7 +115,22 @@ All notable changes to this project are documented here. The format follows
   selector at `+0x02` set to 1 builds a class 1 Mech through the arena
   allocator: entity 1 comes back with `Class_ID` 1, `Number` 1, `Thing_Flags`
   7, and the arena cursor at `0x021A5DB8` moved on. It is not drawn yet.
-- Eleven checkpoints and two scenarios. **246/246.**
+- **The pod draws.** A viewer whose class is 0 posts a display list with **no
+  draw-model items at all**; give arena slot 0 a class of 1 and the same run,
+  step for step, posts **357**, naming models **72, 73, 95 and 96**. What was
+  missing was never the renderer - it was a viewer with a class.
+- **`0x0212DB70` is the per-frame cull entry**: it clears the six counters the
+  firmware's own `----- CULLING -----` report prints (`0x02194054` Total
+  through `0x02194068` Cone Reject) and tests bit 0 of the viewing entity's
+  `+0xBB`. Its one caller is `0x02139140`. With a viewer class and a created
+  Mech the report goes from `Total 0` to **`Total 1`**, with `Model Time`
+  non-zero - the Mech is a candidate the culler tests.
+- **What a created Mech contains**: position floats at `+0x26`/`+0x2A`/`+0x2E`,
+  an orientation block to `+0x50`, hit-location records from `+0x2C0` carrying
+  `PPC`, `E LAS MD`, `LASER MD` and `LRM 1524`, forty damage tables from
+  `+0x490`. The constructor does the whole job.
+- Fifteen checkpoints, three scenarios, and the check helpers hoisted out of
+  the model-archive block so later sections can use them. **250/250.**
 
 ### Fixed
 

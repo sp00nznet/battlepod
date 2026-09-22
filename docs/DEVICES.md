@@ -2987,6 +2987,65 @@ through 7 of every packet this project has ever injected, and `0xF8`'s selector
 is a longword at `+0x02`, which spans into that hole. The buffer has moved; see
 FALSE-TRAILS.md.
 
+### The viewer's class is what turns geometry on
+
+A pod whose `My_Mech_Ptr` is arena slot 0 - class 0 - posts a display list with
+**no draw-model items in it at all**. Give slot 0 a class of 1 and the same
+run, step for step, posts **357**:
+
+| run, 200M instructions | items | `item $240` draw-model |
+|---|---|---|
+| default | 1512 | **0** |
+| slot 0 given class 1 | 2585 | **357** |
+
+The models it names are **72, 73, 95 and 96**, all type 1 resources in the
+archive, and the frame also carries an `item $2C0` with the parameter block
+already recorded here (`93 10000.0000 1.0000 60.0000 0.0940 0.0620 0.0940`).
+So the pod draws. What it was missing was never the renderer - it was a viewer
+with a class.
+
+### The Mech reaches the culler
+
+`0x0212DB70` is the per-frame cull entry. It clears six counters and then tests
+bit 0 of the viewing entity's `+0xBB`:
+
+```
+0212DB80  clr.l $2194054.l     Total
+0212DB86  clr.l $2194058.l     First Distance
+0212DB8C  clr.l $219405c.l     Second Distance
+0212DB92  clr.l $2194060.l     Entering Clip
+0212DB98  clr.l $2194064.l     Z Clip
+0212DB9E  clr.l $2194068.l     Cone Reject
+0212DBA4  btst  #$0, ($bb,A3)
+```
+
+Its one caller is `0x02139140`, and the six counters are exactly what the
+firmware's own `----- CULLING -----` report prints. With a viewer class and a
+created Mech, that report goes from
+
+```
+Cone stats
+Total          0
+```
+
+to `Total 1`, with `Model Time` non-zero - the Mech is a candidate the culler
+tests. It produces no polygons yet, which is the next question.
+
+### What a created Mech actually contains
+
+The entity `0xF8` builds is not a stub. Reading it back:
+
+* position floats at `+0x26`, `+0x2A`, `+0x2E` (`8000.0`, `8000.0`, `5.4`)
+* an orientation block through `+0x50`
+* armour and hit-location records from `+0x2C0`, each a name, a type and a
+  count: `PPC`, `E LAS MD`, `LASER MD`, `LRM 1524`, repeated for a second side
+* per-location damage tables from `+0x490`, forty of them
+* `+0x690` a bounding pair and `+0x6A8` two more floats
+
+So the constructor does the whole job. `tools/vehicles.py` reads the same
+weapon names out of the ROM's 38 vehicle records, which is where these come
+from.
+
 ### The slot allocator
 
 `0x0211E15E` is the allocator both constructors use, and it is not the entity
