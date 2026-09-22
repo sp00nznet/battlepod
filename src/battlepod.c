@@ -76,6 +76,18 @@ static unsigned g_dis_cpu = M68K_CPU_TYPE_68040;  /* disassemble with the FPU de
  * firmware actually reads, and from where. */
 static uint32_t g_watch_base, g_watch_len;
 
+/* `--watch` reports reads, and reads only, because a write to mapped memory
+ * takes the fast path and returns before anything is noted. That is the wrong
+ * half for the question that keeps coming up: not "was this value consulted"
+ * but "where did it come from". The entity pointer table has 231 references in
+ * the ROM and reading them was never going to say which one sets a class.
+ *
+ * So: a write trap. Any write into the range is printed with the pc that made
+ * it, capped so a mistake costs a screenful rather than a log file. */
+#define WTRAP_MAX 64
+static uint32_t g_wtrap_base, g_wtrap_len;
+static unsigned g_wtrap_n;
+
 /* MC68681 DUART, the cockpit's two serial ports. Register N sits at BASE+N*2,
  * channel A at registers 0-7 and channel B at 8-15, which is how the ROM's
  * driver addresses it:
@@ -1599,9 +1611,18 @@ unsigned int m68k_read_memory_32(unsigned int a)
 	return (m68k_read_memory_16(a) << 16) | m68k_read_memory_16(a + 2);
 }
 
+static void wtrap(uint32_t a, int size, uint32_t v)
+{
+	if (!g_wtrap_len || (a - g_wtrap_base) >= g_wtrap_len) return;
+	if (g_wtrap_n++ >= WTRAP_MAX) return;
+	printf("wtrap %08X size %d = %08X  from pc %08X\n",
+	       a, size, v, m68k_get_reg(NULL, M68K_REG_PPC));
+}
+
 void m68k_write_memory_8(unsigned int a, unsigned int v)
 {
 	uint8_t *p = g_page[a >> PAGE_BITS];
+	if (g_wtrap_len) wtrap(a, 1, v & 0xFF);
 	if (p) { p[a & (PAGE_SIZE - 1)] = (uint8_t)v; return; }
 	duart_write(a, v);
 	note(a, 1, 1, v & 0xFF);
@@ -1611,6 +1632,7 @@ void m68k_write_memory_16(unsigned int a, unsigned int v)
 {
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	uint32_t o = a & (PAGE_SIZE - 1);
+	if (g_wtrap_len) wtrap(a, 2, v & 0xFFFF);
 	if (p && o <= PAGE_SIZE - 2) { p[o] = (uint8_t)(v >> 8); p[o+1] = (uint8_t)v; return; }
 	if (!p && o <= PAGE_SIZE - 2) { note(a, 2, 1, v & 0xFFFF); return; }
 	m68k_write_memory_8(a, v >> 8);
@@ -1621,6 +1643,7 @@ void m68k_write_memory_32(unsigned int a, unsigned int v)
 {
 	uint8_t *p = g_page[a >> PAGE_BITS];
 	uint32_t o = a & (PAGE_SIZE - 1);
+	if (g_wtrap_len) wtrap(a, 4, v);
 	if (p && o <= PAGE_SIZE - 4) {
 		p[o] = (uint8_t)(v >> 24); p[o+1] = (uint8_t)(v >> 16);
 		p[o+2] = (uint8_t)(v >> 8); p[o+3] = (uint8_t)v;
@@ -2224,6 +2247,11 @@ int main(int argc, char **argv)
 				h = e;
 			}
 			g_npkts++;
+		}
+		else if (!strcmp(a, "--wtrap") && i + 1 < argc) {
+			char *c;
+			g_wtrap_base = (uint32_t)strtoul(argv[++i], &c, 16);
+			g_wtrap_len = (*c == ':') ? (uint32_t)strtoul(c + 1, NULL, 16) : 4;
 		}
 		else if (!strcmp(a, "--watch") && i + 1 < argc) {
 			char *c;

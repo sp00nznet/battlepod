@@ -2873,6 +2873,67 @@ has exactly one caller (`0x02118D3A`, opcode `0x24`'s arm) and `0x0211DBA2`
 has exactly one (`0x02118C9A`, opcode `0x21`'s arm) - both mission opcodes,
 neither of them used.
 
+### The ROM carries two games
+
+`0x0211786C` tests `[0x021B74B2]` and writes one of two table addresses into
+`[0x0216F49C]`, which is what the name lookup walks:
+
+```
+02117874  tst.l  $21b74b2.l
+0211787C  lea    $216c8ea.l, A0      the other game
+0211788A  lea    $216b378.l, A0      BattleTech
+```
+
+The second table is **Red Planet and Martian Football**, the other titles this
+cabinet ran:
+
+```
+R1_Red_Planet_1  rp1Exit  R2_Red_Planet_2  rp2Exit
+F1_Martian_Footb F2_Martian_Footb mfExit
+FC1..FC8_Follow_Cockp  lockExit  T1_Nose_Only_1  T2_Camera_Only_1
+```
+
+Eighteen routines against BattleTech's thirteen, in the same bytecode, read by
+the same interpreter. Only one table had ever been read, and a write trap on
+`[0x0216F49C]` is what found the other: it is written exactly once per boot,
+from `0x02117890`, and the instruction three back is the branch that chooses.
+
+### Nothing a script does creates anything
+
+With every jump in the trace accounted for - **zero transitions the successor
+rule fails to predict, over 8192 instructions** - the reachability walk is
+worth trusting, and it closes the question:
+
+| | routines | instructions | opcodes | creation opcodes |
+|---|---|---|---|---|
+| BattleTech | 13 | 2329 | 70 | **0** |
+| Red Planet | 18 | 4688 | 68 | **0** |
+
+Every one of the 979 addresses the pod executes is inside BattleTech's 2329.
+`Create_Thing` and the class 4 constructor each have exactly one caller, each
+caller is a mission opcode, and no script in either game reaches one. In this
+ROM the constructors are unreachable.
+
+### The last two lengths
+
+`0x07` and `0x08` had been counted as jumps because their handlers write the
+program counter back. They are not. Their reader `0x0211A650` works on the
+caller's argument in place - `addq.l #1,($c,A6)` rather than the
+`addq.l #1,(-$4,A6)` the other readers use - so matching one spelling of the
+step read both as zero bytes long, and an arm that reads nothing and writes
+the program counter looks exactly like a jump. They take **eight** and **six**
+operand bytes. Their handlers also hand the counter over *by value*
+(`move.l (-$10e,A6),-(A7)`) rather than by address, which the operand rule had
+not recognised either.
+
+One further correction fell out of it: `reader_cost` followed every call a
+reader made, including the firmware's `printf` on `0x0211A650`'s bad-operand
+path, and charged `0x07` for an `addq.l` inside it. A call is only another
+reader if it is *handed the pointer*.
+
+And `0x42` is a **call**, not a jump: a `0x44` at `0x0216B4CA` returns to
+`0x0216BA8C`, which is where the `0x42` at `0x0216BA89` came from.
+
 What remains of the original question is another pod on the wire, or something
 in the mission record this project has not learned to fill - and the way to
 tell them apart is still to name what the typed loads in the loop are reading.

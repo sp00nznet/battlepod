@@ -44,7 +44,39 @@ All notable changes to this project are documented here. The format follows
   class to `+0x02`, the index to `+0x06` and `7` to `+0x0A`. Both constructors
   use it, each has exactly one caller, and both callers are unused mission
   opcodes. `0x20`'s handler is the matching reset.
-- Twelve checkpoints. **220/220.**
+- **The ROM carries two games.** `0x0211786C` tests `[0x021B74B2]` and writes
+  one of two script-table addresses into `[0x0216F49C]`. The one nobody had
+  read is **Red Planet and Martian Football** - `R1_Red_Planet_1`,
+  `F1_Martian_Footb`, `mfExit`, `lockExit` and thirteen more, eighteen routines
+  in the same bytecode. A write trap on the pointer is what found it.
+- **`--wtrap BASE[:LEN]`** logs every write into a range with the pc that made
+  it. `--watch` only ever reported reads - a write to mapped memory takes the
+  fast path and returns before anything is noted - so the question "where did
+  this value come from" had no answer short of reading 231 references by hand.
+- **`mission_dis.py --reach`**, and the claim it makes is now sound: the
+  successor rule accounts for **every jump in an 8192-instruction trace**, and
+  all 979 executed addresses fall inside the 2329 it reaches.
+
+| | routines | instructions | opcodes | creation opcodes |
+|---|---|---|---|---|
+| BattleTech | 13 | 2329 | 70 | **0** |
+| Red Planet | 18 | 4688 | 68 | **0** |
+
+- Twenty-one checkpoints. **229/229.**
+
+### Fixed
+
+- **`0x07` and `0x08` are not jumps.** They take eight and six operand bytes.
+  Their reader works on the caller's argument in place - `addq.l #1,($c,A6)` -
+  where every other reader keeps its own copy in `(-$4,A6)`, so matching one
+  spelling of the step read both as zero-length, and an arm that reads nothing
+  and writes the program counter looks exactly like a jump. Their handlers also
+  hand the counter over by value rather than by address.
+- **`0x42` is a call, not a jump**: a `0x44` at `0x0216B4CA` returns to
+  `0x0216BA8C`, which is where the `0x42` at `0x0216BA89` came from.
+- **The operand counter followed a reader into `printf`** and charged `0x07`
+  for an `addq.l` inside it. A call is another reader only if it is handed the
+  pointer.
 
 ### Fixed
 

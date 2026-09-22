@@ -24,6 +24,7 @@ counter to a reader instead have their reader counted the same way.
 usage: mission_dis.py <ROM3_0> [NAME] [--base HEX] [--limit N]
        mission_dis.py <ROM3_0> --lengths
        mission_dis.py <ROM3_0> --trace <battlepod --vmtrace output>
+       mission_dis.py <ROM3_0> --reach
        mission_dis.py --selftest
 """
 import re
@@ -37,8 +38,10 @@ JUMP_ORIGIN = 0x021198BA    # what its offsets are relative to
 BAD_OPCODE = 0x0211972E     # the arm that reports an unknown opcode
 NOPCODE = 162
 
+FRAME_PC = 0xFEF2               # (-$10e,A6), the interpreter's program counter
 STEP_PC = b"\x52\xae\xfe\xf2"   # addq.l #1,(-$10e,A6)
 PUSH_PC = b"\x48\x6e\xfe\xf2"   # pea (-$10e,A6)
+PASS_PC = b"\x2f\x2e\xfe\xf2"   # move.l (-$10e,A6),-(A7)
 BRA_W = 0x6000                  # bra with a 16-bit displacement
 
 # An arm that hands the program counter to a helper consumes its operand inside
@@ -53,7 +56,15 @@ BRA_W = 0x6000                  # bra with a 16-bit displacement
 #
 # A reader with a backward branch consumes a number of bytes that depends on
 # the data, and is reported as such rather than guessed at.
-STEP_OWN = b"\x52\xae\xff\xfc"  # addq.l #1,(-$4,A6)
+#
+# A reader steps whatever frame cell its pointer argument lives in, and that is
+# not always the same one: `0x0211995C` keeps it in `(-$4,A6)` and steps
+# `52AE FFFC`, while `0x0211A650` - which `0x07` feeds - works on the caller's
+# argument in place and steps `52AE 000C`. Matching only the first spelling
+# read `0x07` and `0x08` as zero-length, and since their handlers also write
+# the program counter back they were taken for jumps. They are ordinary
+# instructions with eight and six operand bytes.
+STEP_ANY = b"\x52\xae"          # addq.l #1,(d16,A6)
 RTS = 0x4E75
 VARIABLE = None
 
@@ -127,6 +138,22 @@ def fpu_len(data, at):
     return n
 
 
+PUSH_CELL = (b"\x2f\x2e", b"\x48\x6e")      # move.l (d16,A6),-(A7) / pea (d16,A6)
+
+
+def handed_pointer(data, at, back=8):
+    """Was a frame cell pushed as an argument just before the call at `at`?
+
+    A reader takes the stream pointer as an argument and gives back how far it
+    got; a routine called with anything else - a string, a register - is not
+    reading the stream and must not be charged for the `addq.l`s inside it.
+    """
+    for j in range(max(0, at - back), at, 2):
+        if data[j:j + 2] in PUSH_CELL:
+            return True
+    return False
+
+
 def reader_cost(data, addr, base=BASE, span=0x200, seen=()):
     """How many operand bytes a stream reader consumes, or VARIABLE."""
     if addr in seen or len(seen) > 4:
@@ -139,7 +166,8 @@ def reader_cost(data, addr, base=BASE, span=0x200, seen=()):
     i = at
     end = min(at + span, len(data) - 6)
     while i < end:
-        if data[i:i + 4] == STEP_OWN:
+        if data[i:i + 2] == STEP_ANY and \
+           ((data[i + 2] << 8) | data[i + 3]) != FRAME_PC:
             n += 1
             i += 4
             continue
@@ -157,10 +185,15 @@ def reader_cost(data, addr, base=BASE, span=0x200, seen=()):
             return VARIABLE
         c = call_target(data, i, base)
         if c:
-            sub = reader_cost(data, c[0], base, span, seen)
-            if sub is VARIABLE:
-                return VARIABLE
-            n += sub
+            # Only a call that is *handed the pointer* is another reader.
+            # `0x0211A650` calls the firmware's printf on its bad-operand path,
+            # and following that into a routine that happens to contain an
+            # `addq.l` charged `0x07` an operand byte it does not have.
+            if handed_pointer(data, i):
+                sub = reader_cost(data, c[0], base, span, seen)
+                if sub is VARIABLE:
+                    return VARIABLE
+                n += sub
             i = c[1]
             continue
         i += 2
@@ -180,10 +213,12 @@ def operand_len(data, handler, base=BASE, span=0x80):
             n += 1                      # one byte, stepped by hand
             i += 4
             continue
-        if data[i:i + 4] == PUSH_PC:
+        if data[i:i + 4] == PUSH_PC or data[i:i + 4] == PASS_PC:
             # An arm that hands the program counter to a reader consumes its
             # operand in there. Counting only the byte steps missed those, and
-            # the disassembly ran off the rails at the first one.
+            # the disassembly ran off the rails at the first one. It hands it
+            # over by address (`pea`) or by value (`move.l ... ,-(A7)`), and
+            # only the first spelling was recognised.
             c = call_near(data, i + 4, base)
             if c:
                 sub = reader_cost(data, c[0], base)
@@ -257,6 +292,13 @@ EXTRA_OPERAND = {STRING_PUSH: 1}
 # it there is not a guess. The trace shows two- and three-byte operands.
 TERMINATED = {0x09: 0xFF}
 
+# `0x42` is a call, not a jump: `0x44` returns to the instruction after it. The
+# trace shows the pair - a `0x44` at `0x0216B4CA` lands on `0x0216BA8C`, which
+# is exactly where the `0x42` at `0x0216BA89` came from. So a call's
+# fall-through is reachable code, which `successors` already says, and a
+# return has no successor of its own worth naming.
+RETURN = 0x44
+
 
 def lengths(data, base=BASE):
     hs = handlers(data, base)
@@ -284,6 +326,8 @@ def successors(data, pc, lens, hs, base=BASE):
         return []
     if op == STRING_PUSH:
         return [pc + 2 + data[pc + 1 - base]]     # the bytes between are text
+    if op == RETURN:
+        return []
     out = [pc + n]
     if touches_pc(data, hs[op], base) and lens[op] == 2:
         d16 = struct.unpack(">h", data[pc + 1 - base:pc + 3 - base])[0]
@@ -327,6 +371,51 @@ def disassemble(data, entry, base=BASE, table=TABLE, limit=200):
         pc += total
 
 
+# The ROM carries two script tables and picks between them at boot:
+# `0x0211786C` tests `[0x021B74B2]` and writes either `0x0216C8EA` or
+# `0x0216B378` into `[0x0216F49C]`, which is what the name lookup walks. The
+# first is BattleTech; the second is Red Planet and Martian Football, the other
+# titles this cabinet ran. Only one of them had ever been read.
+TABLES = {"BattleTech": 0x0216B378, "RedPlanet": 0x0216C8EA}
+
+# The four opcodes that make something. `0x24` calls `Create_Thing`; `0x21`
+# calls the class 4 constructor. Each constructor has exactly one caller and it
+# is its mission opcode, so if no script reaches one of these, nothing a script
+# does creates anything.
+CREATION = (0x20, 0x21, 0x22, 0x23, 0x24, 0x25)
+
+
+def reachable(data, table, base=BASE):
+    """Every instruction any routine in `table` can reach, as pc -> opcode."""
+    import missions
+    lens, hs = lengths(data, base)
+    seen = {}
+    work = [table + e for _, e in missions.routines(data, base, table)]
+    while work:
+        pc = work.pop()
+        if pc in seen or not (0 <= pc - base < len(data)):
+            continue
+        op = data[pc - base]
+        if op >= NOPCODE or hs[op] is None:
+            continue
+        seen[pc] = op
+        work += successors(data, pc, lens, hs, base)
+    return seen
+
+
+def report_reach(data, base=BASE):
+    import missions
+    for name, table in TABLES.items():
+        seen = reachable(data, table, base)
+        ops = set(seen.values())
+        print("%s routines: %d" %
+              (name, len(missions.routines(data, base, table))))
+        print("%s instructions: %d" % (name, len(seen)))
+        print("%s opcodes: %d" % (name, len(ops)))
+        print("%s creation opcodes: %d" %
+              (name, sum(1 for o in seen.values() if o in CREATION)))
+
+
 TRACE = re.compile(r"([0-9A-F]{8}):([0-9A-F]{2})")
 
 
@@ -346,19 +435,18 @@ def check_trace(data, path, base=BASE):
     if not ev:
         sys.exit("no ADDRESS:OP entries in %s - is that a --vmtrace dump?" % path)
     ok = bad = jumps = 0
+    unpredicted = {}
     for (pc, op), (nxt, _) in zip(ev, ev[1:]):
-        if op == STRING_PUSH:
+        if touches_pc(data, hs[op], base) and op not in (STRING_PUSH,):
+            # A jump's target comes from the stream or from the stack; the
+            # successor rule covers it where it can, and the rest is counted.
             jumps += 1
-            want = pc + 2 + data[pc + 1 - base]
-            if want != nxt:
-                bad += 1
-                print("  %08X  %02X  string push predicts %08X, went %08X" %
-                      (pc, op, want, nxt))
-            continue
-        if touches_pc(data, hs[op], base):
-            jumps += 1
+            if op != RETURN and nxt not in successors(data, pc, lens, hs, base):
+                unpredicted[op] = unpredicted.get(op, 0) + 1
             continue
         n = inst_len(data, pc, lens, base)
+        if op == STRING_PUSH:
+            n = 2 + data[pc + 1 - base]
         if n == nxt - pc:
             ok += 1
         else:
@@ -371,6 +459,9 @@ def check_trace(data, path, base=BASE):
     print("straight-line lengths confirmed: %d" % ok)
     print("control flow skipped: %d" % jumps)
     print("lengths the trace contradicts: %d" % bad)
+    print("jumps the successor rule misses: %d" % sum(unpredicted.values()))
+    for op, k in sorted(unpredicted.items()):
+        print("    %02X  %d" % (op, k))
 
 
 def selftest():
@@ -394,7 +485,8 @@ def selftest():
     assert call_target(b"\x4e\x75", 0, 0) is None
 
     # a reader that only steps its own pointer costs one byte per step
-    r = bytearray(STEP_OWN + STEP_OWN + b"\x4e\x75" + bytes(8))
+    step = STEP_ANY + b"\xff\xfc"
+    r = bytearray(step + step + b"\x4e\x75" + bytes(8))
     assert reader_cost(bytes(r), 0, 0) == 2
     r[0:4] = b"\x60\xfe\x00\x00"                                 # a loop
     assert reader_cost(bytes(r), 0, 0) is VARIABLE
@@ -415,6 +507,9 @@ def main(argv):
     if "--base" in argv:
         base = int(argv[argv.index("--base") + 1], 16)
     data = open(argv[1], "rb").read()
+    if "--reach" in argv:
+        sys.path.insert(0, "tools")
+        return report_reach(data, base)
     if "--trace" in argv:
         return check_trace(data, argv[argv.index("--trace") + 1], base)
     if "--lengths" in argv:

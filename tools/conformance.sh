@@ -656,10 +656,12 @@ if [ -f "$ROM" ]; then
     CHECKTEXT=$(python tools/mission_dis.py "$ROM" --lengths 2>/dev/null)
     check_at_least "opcodes with a handler" 94
     check_at_least "opcodes that are control flow" 7
-    check_at_least "taking 0 operand bytes" 72
-    check_at_least "taking 1 operand bytes" 13
-    check_at_least "taking 2 operand bytes" 7
+    check_at_least "taking 0 operand bytes" 70
+    check_at_least "taking 1 operand bytes" 12
+    check_at_least "taking 2 operand bytes" 8
     check_at_least "taking 4 operand bytes" 1
+    check_at_least "taking 6 operand bytes" 1
+    check_at_least "taking 8 operand bytes" 1
     check_exactly "opcodes whose operand length depends on the stream" 1
 
     # Lengths inferred from handlers are a reading, not a measurement, so hold
@@ -674,6 +676,10 @@ if [ -f "$ROM" ]; then
     check_at_least "distinct opcodes" 65
     check_at_least "straight-line lengths confirmed" 7612
     check_exactly "lengths the trace contradicts" 0
+    # The reachability walk is only worth anything if the successor rule
+    # accounts for every jump the pod actually made. It now does, and this is
+    # the check that says so.
+    check_exactly "jumps the successor rule misses" 0
     rm -f "$OUT.vm"
 
     # `0x64` pushes a string literal, and the proof is that the bytes it skips
@@ -685,6 +691,17 @@ if [ -f "$ROM" ]; then
     check_contains "push 'VGL Universe 34933'"
     CHECKTEXT=$(python tools/mission_dis.py "$ROM" T1_Nose_Only_1 --limit 200 2>/dev/null)
     check_contains "push \"('NoseCam')\""
+
+    # The ROM carries both games' scripts and picks a table at boot. Neither
+    # game's scripts reach an opcode that creates anything - which is the whole
+    # of what a week of looking for the branch that guarded one established.
+    CHECKTEXT=$(python tools/mission_dis.py "$ROM" --reach 2>/dev/null)
+    check_at_least "BattleTech routines" 13
+    check_at_least "BattleTech instructions" 2329
+    check_exactly "BattleTech creation opcodes" 0
+    check_at_least "RedPlanet routines" 18
+    check_at_least "RedPlanet instructions" 4688
+    check_exactly "RedPlanet creation opcodes" 0
 fi
 
 # Who else calls this. A routine with one caller is explained by that caller;

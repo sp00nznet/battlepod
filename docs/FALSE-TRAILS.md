@@ -302,3 +302,27 @@ whose interpretation was in doubt.
 
 The general shape: a check that both hypotheses pass is not a check. Ask what
 the two readings *disagree* about before running anything.
+
+**An arm that reads nothing and writes the program counter looks like a jump.**
+`0x07` and `0x08` were classified as control flow on exactly that evidence, and
+both are ordinary instructions with eight and six operand bytes. They looked
+empty because their reader works on the caller's argument in place -
+`addq.l #1,($c,A6)` - where every other reader keeps its own copy in
+`(-$4,A6)`, so a pattern match on one spelling of the step found none. Matching
+the general form `addq.l #1,(d16,A6)`, excluding the interpreter's own counter,
+fixes it. Two lessons: a classification resting on the *absence* of evidence
+needs the search that produced the absence checked first, and a byte pattern
+lifted from one example is a sample of one.
+
+**Following every call a reader makes charges it for the callee's arithmetic.**
+`0x0211A650` calls the firmware's `printf` on its bad-operand path, and the
+recursive operand count walked into it, found an `addq.l`, and made `0x07` one
+byte longer than it is. A call is another reader only if it is *handed the
+pointer*.
+
+**`--watch` only ever reported reads.** A write to mapped memory takes the fast
+path and returns before anything is noted, so the option that looked like a
+watchpoint answered "was this consulted" and never "where did this come from" -
+which is the question that mattered. Two hundred and thirty-one references to
+the entity pointer table were nearly read by hand before `--wtrap` answered it
+in one run.
