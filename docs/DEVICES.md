@@ -3405,6 +3405,31 @@ model, which is how a moment in a fight is looked at: `--frame-out` reports
 which list it drew out of how many were walked. `BATTLEPOD_UNBUFFERED=1` in
 the environment makes stdout unbuffered, so a run that dies keeps its output.
 
+**The stick steers in advanced mode.** After `B1 33` (advanced) and `B1 31`
+(stick turns / tips torso) the control mode at `+0x90` is 2, and the stick
+turns the Mech: `A1` at `+0x80` took the heading to 321 degrees and `A2` at
+`+0x80` to 39.6 over the same run. Button `30` alone leaves a basic-mode Mech
+in mode 1, where the stick does nothing watched.
+
+### Playing it
+
+`cockpit.exe --live-pod` makes the SDL cockpit a pod you can fly. The main
+view draws the latest display list the firmware posted, from its own camera,
+through the same `frame_draw` `--frame-out` uses, with each model decoded
+once and cached. The keyboard is the panel: keys become framed `C0` and
+`B0`/`B1` reports appended to what DUART channel A has left to deliver.
+
+The emulator runs far faster than a 68020 - four million instructions a
+second even while drawing - so in live mode **the timebase is paced to the
+wall clock**: it ticks on instructions as before but may not pass the wall
+time in hundredths. A headless run ends with the two equal, and a Mech given
+full throttle covers its 27 metres a second of game time and no more.
+
+`tools/play.sh [scenario] [vehicle]` builds the packets - range, your Mech at
+a drop point facing 0, a Loki 150 ahead, the map, `PLAYER_LINK` - and starts
+it. `SDL_VIDEODRIVER=dummy BATTLEPOD_NO_HOLD=1` runs the same thing with no
+windows, which is how the harness plays it.
+
 ### The slot allocator
 
 `0x0211E15E` is the allocator both constructors use, and it is not the entity

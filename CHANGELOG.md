@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **It can be played.** `cockpit.exe --live-pod` draws the pod's own frames
+  in the main view and turns the keyboard into the panel's input reports -
+  W/S throttle, A/D stick, space fire, T target select, L searchlight - and
+  `tools/play.sh [scenario] [vehicle]` starts a game on it the way the
+  console does: range, your Mech at a drop point, a Loki ahead, the map,
+  `PLAYER_LINK`.
+- **The timebase is paced to the wall clock in live play.** The emulator runs
+  about four million instructions a second even while drawing; left to tick
+  on instructions the game would run many times real speed.
+- **The stick steers** in advanced mode with "stick turns" (buttons `33` and
+  `31`): `A1` and `A2` turn the Mech opposite ways.
+- `frame_draw` is shared by `--frame-out` and the live view, and caches each
+  model it decodes. `BATTLEPOD_NO_HOLD=1` lets a headless live run exit.
+- Scenario 4Q plays a game headless and checks the frame and the clock.
+  **279/279.**
 - **The buttons, and a fight.** The Mech's button switch at `0x02132536`
   names its own arms on the head-up display - radar, map and damage displays,
   torso twist, view up and down, the searchlight, target select, forward

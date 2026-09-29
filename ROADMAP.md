@@ -93,6 +93,12 @@ message, built into the arena slot it names - and its pilot from `0xED`,
 nothing patched into memory, the pod flies its Mech and posts frames of the
 map and the other Mechs in it, and `--frame-out` draws them.
 
+**Phase 14 — flying it.** The panel's input reports are decoded and the
+Mech answers them: throttle to its chassis' top speed, pedals and stick to
+turn, triggers to fire - a Loki destroyed by the firmware's own weapons code.
+`tools/play.sh` starts a game on the SDL cockpit with the main view drawn
+from the pod's own frames and the keyboard as its panel, in real time.
+
 ## Next
 
 **The four draw opcodes.** `$200` puts down a single pixel at a vertex, `$220`

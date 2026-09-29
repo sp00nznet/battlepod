@@ -851,6 +851,113 @@ static void scene_report(void)
 	}
 }
 
+/* What the pod put in a frame, kept so it can be drawn afterwards: the draw
+ * object's camera and every type 3 record. A type 3 is a whole model placed
+ * in the world - the viewer's own, and each Mech the world pass lets through
+ * the culler - so a frame is fully described, for our purposes, by these. */
+#define FRAME_OBJS 1024
+struct pod_frame {
+	int have_cam, seq;
+	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
+	int n;
+	struct { uint32_t entity, model; float rot[9], at[3]; } obj[FRAME_OBJS];
+};
+static struct pod_frame g_frame_cur, g_frame_last;
+static struct pod_frame g_frame_latest;	/* the last complete list, placed or not */
+static int g_capture;		/* walk every list, for the live view */
+static int g_frames_walked;
+static int g_frame_at;		/* --frame-at: the list to draw, not the last */
+static const char *g_frameout;
+
+/* Every model a frame names, decoded once. A skeleton goes through the rig
+ * assembler and comes out a whole mech; anything else is one model; a model
+ * with no geometry is remembered as such so it is not decoded again. */
+#define MCACHE 128
+static struct { uint32_t id; struct mesh *m; } g_mcache[MCACHE];
+static int g_mcache_n;
+
+static const struct mesh *model_mesh(uint32_t id)
+{
+	const struct mesh *src = NULL;
+	struct mesh *m = NULL;
+	int i;
+
+	for (i = 0; i < g_mcache_n; i++)
+		if (g_mcache[i].id == id) return g_mcache[i].m;
+	if (id >= 451 && id <= 456) {
+		rig_assemble(id);
+		src = &g_rig;
+	} else if (rig_load(id)) {
+		src = &g_part;
+	}
+	if (src && (m = malloc(sizeof *m)) != NULL) memcpy(m, src, sizeof *m);
+	if (g_mcache_n < MCACHE) {
+		g_mcache[g_mcache_n].id = id;
+		g_mcache[g_mcache_n].m = m;
+		g_mcache_n++;
+	}
+	return m;
+}
+
+/* Draw a captured frame from the pod's own camera. The display list's axes
+ * are (X, height, -Y); the rasteriser's world is (X, height, Y), so the third
+ * axis flips on the way in. The camera looks along the third row of the draw
+ * object's matrix - measured, not assumed: that row is (0, 0, -1) for the
+ * heading at which the culler lets the Mech through, and the Mech lies in
+ * that direction. The viewer's own record, which sits at the eye, is skipped.
+ * Joint angles are not applied: the stance is the rig's rest pose. Says what
+ * it drew when `log` is set; returns the polygons drawn. */
+static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models, int log)
+{
+	struct ras_cam cam;
+	float fx, fy, fz, eye[3];
+	int i, poly = 0;
+
+	*models = 0;
+	eye[0] = fr->cam[9]; eye[1] = fr->cam[10]; eye[2] = -fr->cam[11];
+	fx = fr->cam[6]; fy = fr->cam[7]; fz = -fr->cam[8];
+	memset(&cam, 0, sizeof cam);
+	memcpy(cam.centre, eye, sizeof eye);
+	cam.turn = atan2f(-fx, fz);
+	cam.pitch = atan2f(fy, sqrtf(fx * fx + fz * fz));
+	cam.dist = 0;
+	if (log) {
+		printf("list %d of %d walked; ", fr->seq, g_frames_walked);
+		printf("eye (%.1f, %.1f, %.1f) height %.2f, turn %.1f deg, %d models\n",
+		       eye[0], eye[2], 0.0f, eye[1], cam.turn * 57.29578f, fr->n);
+	}
+
+	ras_background(r, RAS_H / 2);
+	for (i = 0; i < fr->n; i++) {
+		struct ras_place at;
+		const struct mesh *m;
+		uint32_t id = fr->obj[i].model;
+		float dx = fr->obj[i].at[0] - eye[0], dz = -fr->obj[i].at[2] - eye[2];
+		int n;
+
+		if (dx * dx + dz * dz < 1.0f) {
+			if (log) printf("  entity %u model %u: at the eye, not drawn\n",
+					fr->obj[i].entity, id);
+			continue;
+		}
+		if (!(m = model_mesh(id))) {
+			if (log) printf("  entity %u model %u: no geometry\n", fr->obj[i].entity, id);
+			continue;
+		}
+		at.x = fr->obj[i].at[0];
+		at.y = -fr->obj[i].at[2];
+		at.z = fr->obj[i].at[1];
+		at.heading = atan2f(fr->obj[i].rot[2], fr->obj[i].rot[0]);
+		at.scale = 1.0f;
+		n = ras_draw_at(r, m, &cam, &at, 0.0f, 1);
+		if (log) printf("  entity %u model %u at (%.1f, %.1f, %.1f): %d polygons\n",
+				fr->obj[i].entity, id, at.x, at.y, at.z, n);
+		poly += n;
+		(*models)++;
+	}
+	return poly;
+}
+
 /* ------------------------------------------------------------ live windows */
 
 /* The cockpit with its panel lit, in one process, while the firmware runs.
@@ -918,7 +1025,7 @@ static int live_open(const char *frames)
 		}
 		fclose(f);
 	}
-	if (g_frames_n > 0 || g_mesh_id || g_rig_id) {
+	if (g_frames_n > 0 || g_mesh_id || g_rig_id || g_capture) {
 		g_vw = SDL_CreateWindow("battlepod - main view", SDL_WINDOWPOS_UNDEFINED,
 					SDL_WINDOWPOS_UNDEFINED, g_view_w * 2, g_view_h * 2,
 					SDL_WINDOW_RESIZABLE);
@@ -946,6 +1053,86 @@ static int live_open(const char *frames)
 	return 1;
 }
 
+/* --live-pod: the keyboard is the cockpit. Keys become the panel's own input
+ * reports - C0 id value for an analog, B1/B0 id for a button - framed as the
+ * Remote I/O board frames them and appended to what DUART channel A has left
+ * to deliver.
+ *
+ *   W / S      throttle up / down, in eighths (analog A0, 0 to 0x340)
+ *   A / D      stick left / right (A1 / A2); the first key also selects
+ *              advanced mode and "stick turns" (buttons 33 and 31), in which
+ *              the stick steers
+ *   space      trigger (button A5)
+ *   T          target select (button 40)
+ *   L          searchlight (button 20)
+ */
+static uint32_t g_clock_val, g_clock_wall;	/* defined with --clock below */
+static int      g_clock_rt;
+static char g_livein[1 << 20];
+static int  g_live_throttle, g_live_moded;
+static uint32_t g_clock_base;
+
+static void live_report(const uint8_t *d, int n)
+{
+	uint8_t sum = 0;
+	int i;
+
+	if (g_inlen[0] + (size_t)n + 5 > sizeof g_livein) return;
+	/* Bytes already delivered are never looked at again; compact them
+	 * away so a long session does not run out of room. */
+	if (g_inpos[0] > sizeof g_livein / 2) {
+		memmove(g_livein, g_livein + g_inpos[0], g_inlen[0] - g_inpos[0]);
+		g_inlen[0] -= g_inpos[0];
+		g_inpos[0] = 0;
+	}
+	g_livein[g_inlen[0]++] = 0x01;
+	g_livein[g_inlen[0]++] = 0x00;
+	g_livein[g_inlen[0]++] = (char)n;
+	g_livein[g_inlen[0]++] = (char)n;
+	for (i = 0; i < n; i++) {
+		g_livein[g_inlen[0]++] = (char)d[i];
+		sum += d[i];
+	}
+	g_livein[g_inlen[0]++] = (char)sum;
+}
+
+static void live_analog(uint8_t id, int v)
+{
+	uint8_t d[4] = { 0xC0, id, (uint8_t)(v >> 8), (uint8_t)v };
+	live_report(d, 4);
+}
+
+static void live_button(uint8_t id, int down)
+{
+	uint8_t d[2] = { (uint8_t)(down ? 0xB1 : 0xB0), id };
+	live_report(d, 2);
+}
+
+static void live_key(SDL_Keycode k, int down, int repeat)
+{
+	if (down && !repeat && !g_live_moded &&
+	    (k == SDLK_a || k == SDLK_d)) {
+		live_button(0x33, 1); live_button(0x33, 0);
+		live_button(0x31, 1); live_button(0x31, 0);
+		g_live_moded = 1;
+	}
+	switch (k) {
+	case SDLK_w: case SDLK_s:
+		if (!down) break;
+		g_live_throttle += (k == SDLK_w ? 0x68 : -0x68);
+		if (g_live_throttle < 0) g_live_throttle = 0;
+		if (g_live_throttle > 0x340) g_live_throttle = 0x340;
+		live_analog(0xA0, g_live_throttle);
+		break;
+	case SDLK_a: if (!repeat) live_analog(0xA1, down ? 0x80 : 0); break;
+	case SDLK_d: if (!repeat) live_analog(0xA2, down ? 0x80 : 0); break;
+	case SDLK_SPACE: if (!repeat) live_button(0xA5, down); break;
+	case SDLK_t: if (!repeat) live_button(0x40, down); break;
+	case SDLK_l: if (!repeat) live_button(0x20, down); break;
+	default: break;
+	}
+}
+
 /* Called from the run loop. Walks whatever new Remote I/O bytes the firmware
  * has put on the wire since last time, redraws, and pumps events. */
 static void live_pump(uint64_t step)
@@ -960,6 +1147,39 @@ static void live_pump(uint64_t step)
 	while (SDL_PollEvent(&e)) {
 		if (e.type == SDL_QUIT) g_quit = 1;
 		if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) g_quit = 1;
+		if (g_capture && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
+			live_key(e.key.keysym.sym, e.type == SDL_KEYDOWN, e.key.repeat);
+	}
+	if (g_capture) {
+		static int ready;
+		if (!ready) {
+			/* Anything --rio-in queued goes first, keys after it. */
+			size_t left = g_inlen[0] - g_inpos[0];
+			if (left > sizeof g_livein) left = sizeof g_livein;
+			if (left) memcpy(g_livein, g_in[0] + g_inpos[0], left);
+			g_in[0] = g_livein;
+			g_inpos[0] = 0;
+			g_inlen[0] = left;
+			g_clock_base = g_clock_val - SDL_GetTicks() / 10;
+			g_clock_rt = 1;
+			ready = 1;
+		}
+		g_clock_wall = g_clock_base + SDL_GetTicks() / 10;
+	}
+
+	if (g_vt && g_capture) {
+		/* The pod's own latest frame, drawn from its own camera. */
+		static struct raster f;
+		static int drawn_seq = -1;
+		int models;
+		if (g_frame_latest.have_cam && g_frame_latest.seq != drawn_seq) {
+			frame_draw(&f, &g_frame_latest, &models, 0);
+			drawn_seq = g_frame_latest.seq;
+			SDL_UpdateTexture(g_vt, NULL, f.px, RAS_W * 3);
+			SDL_RenderClear(g_vr);
+			SDL_RenderCopy(g_vr, g_vt, NULL, NULL);
+			SDL_RenderPresent(g_vr);
+		}
 	}
 
 	for (i = 0; i < NPANELS; i++) {
@@ -982,7 +1202,7 @@ static void live_pump(uint64_t step)
 		SDL_RenderClear(g_vr);
 		SDL_RenderCopy(g_vr, g_vt, NULL, NULL);
 		SDL_RenderPresent(g_vr);
-	} else if (g_vt) {
+	} else if (g_vt && g_frames_n > 0) {
 		long at = (long)((step / LIVE_EVERY) % (uint64_t)g_frames_n);
 		SDL_UpdateTexture(g_vt, NULL,
 				  g_frames_buf + at * (long)g_view_w * g_view_h * 3,
@@ -1006,6 +1226,10 @@ static void live_hold(uint64_t step)
 {
 	uint64_t spin = step;
 
+	if (g_clock_rt)
+		printf("\nlive clock: timebase %u, wall %u (hundredths)\n",
+		       g_clock_val, g_clock_wall);
+	if (getenv("BATTLEPOD_NO_HOLD")) return;	/* headless: nobody to close it */
 	while (!g_quit) {
 		live_pump(spin);
 		spin += LIVE_EVERY;
@@ -1178,6 +1402,12 @@ static void mon_recv_polled(void)
  * its chassis' top speed in metres per hundredth per tick, 0.26944 for 97 kph.
  * Without one, every timeout in the game waits forever. */
 static uint32_t g_clock_div = 4096, g_clock_val;
+/* Live play paces the timebase to the wall clock: the emulator runs far
+ * faster than a 68020, and a clock that ticked on instructions alone would
+ * run the game many times real speed. The live loop keeps this at the wall
+ * clock in hundredths; the timebase may catch up to it and no further. */
+static int      g_clock_rt;
+static uint32_t g_clock_wall;
 
 static void clock_tick(void)
 {
@@ -1187,6 +1417,7 @@ static void clock_tick(void)
 	p = g_page[g_clock_addr >> PAGE_BITS];
 	if (!p) return;
 	o = g_clock_addr & (PAGE_SIZE - 1);
+	if (g_clock_rt && g_clock_val >= g_clock_wall) return;
 	g_clock_val++;
 	p[o] = (uint8_t)(g_clock_val >> 24); p[o+1] = (uint8_t)(g_clock_val >> 16);
 	p[o+2] = (uint8_t)(g_clock_val >> 8); p[o+3] = (uint8_t)g_clock_val;
@@ -1431,21 +1662,6 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
 	}
 }
 
-/* What the pod put in a frame, kept so it can be drawn afterwards: the draw
- * object's camera and every type 3 record. A type 3 is a whole model placed
- * in the world - the viewer's own, and each Mech the world pass lets through
- * the culler - so a frame is fully described, for our purposes, by these. */
-#define FRAME_OBJS 1024
-struct pod_frame {
-	int have_cam, seq;
-	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
-	int n;
-	struct { uint32_t entity, model; float rot[9], at[3]; } obj[FRAME_OBJS];
-};
-static struct pod_frame g_frame_cur, g_frame_last;
-static int g_frames_walked;
-static int g_frame_at;		/* --frame-at: the list to draw, not the last */
-static const char *g_frameout;
 
 static void rstub_dlist(uint32_t ti_byte_addr)
 {
@@ -1453,6 +1669,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 	int records = 0;
 
 	rslog("  display list at TI %08X: %u longwords\n", ti_byte_addr, count);
+	if (g_frame_cur.have_cam) g_frame_latest = g_frame_cur;
 	memset(&g_frame_cur, 0, sizeof g_frame_cur);
 	g_frame_cur.seq = ++g_frames_walked;
 	if (count == 0 || count > 0x40000) {
@@ -1569,23 +1786,12 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 	}
 }
 
-/* Draw the last frame the pod posted that placed a model, from the pod's own
- * camera. The display list's axes are (X, height, -Y); the rasteriser's world
- * is (X, height, Y), so the third axis flips on the way in. The camera looks
- * along the third row of the draw object's matrix - measured, not assumed:
- * that row is (0, 0, -1) for the heading at which the culler lets the Mech
- * through, and the Mech lies in that direction.
- *
- * Skeletons (451-456) go through the rig assembler and come out as whole
- * mechs; anything else is drawn as a plain model. The viewer's own record,
- * which sits at the eye, is skipped. Joint angles are not applied: the
- * stance is the rig's rest pose, which is what a standing Mech sends. */
+/* --frame-out: the last list that placed a model (or --frame-at's), drawn
+ * and written as raw 480x360 RGB. */
 static void frame_report(void)
 {
 	struct pod_frame *fr = &g_frame_last;
-	struct ras_cam cam;
-	float fx, fy, fz, eye[3];
-	int i, poly = 0, drawn = 0;
+	int poly, drawn;
 	FILE *f;
 
 	printf("\npod frame: ");
@@ -1593,50 +1799,7 @@ static void frame_report(void)
 		printf("no frame placed a model\n");
 		return;
 	}
-	eye[0] = fr->cam[9]; eye[1] = fr->cam[10]; eye[2] = -fr->cam[11];
-	fx = fr->cam[6]; fy = fr->cam[7]; fz = -fr->cam[8];
-	memset(&cam, 0, sizeof cam);
-	memcpy(cam.centre, eye, sizeof eye);
-	cam.turn = atan2f(-fx, fz);
-	cam.pitch = atan2f(fy, sqrtf(fx * fx + fz * fz));
-	cam.dist = 0;
-	printf("list %d of %d walked; ", fr->seq, g_frames_walked);
-	printf("eye (%.1f, %.1f, %.1f) height %.2f, turn %.1f deg, %d models\n",
-	       eye[0], eye[2], 0.0f, eye[1], cam.turn * 57.29578f, fr->n);
-
-	ras_background(&g_sceneframe, RAS_H / 2);
-	for (i = 0; i < fr->n; i++) {
-		struct ras_place at;
-		const struct mesh *m;
-		uint32_t id = fr->obj[i].model;
-		float dx = fr->obj[i].at[0] - eye[0], dz = -fr->obj[i].at[2] - eye[2];
-		int n;
-
-		if (dx * dx + dz * dz < 1.0f) {
-			printf("  entity %u model %u: at the eye, not drawn\n",
-			       fr->obj[i].entity, id);
-			continue;
-		}
-		if (id >= 451 && id <= 456) {
-			rig_assemble(id);
-			m = &g_rig;
-		} else if (rig_load(id)) {
-			m = &g_part;
-		} else {
-			printf("  entity %u model %u: no geometry\n", fr->obj[i].entity, id);
-			continue;
-		}
-		at.x = fr->obj[i].at[0];
-		at.y = -fr->obj[i].at[2];
-		at.z = fr->obj[i].at[1];
-		at.heading = atan2f(fr->obj[i].rot[2], fr->obj[i].rot[0]);
-		at.scale = 1.0f;
-		n = ras_draw_at(&g_sceneframe, m, &cam, &at, 0.0f, 1);
-		printf("  entity %u model %u at (%.1f, %.1f, %.1f): %d polygons\n",
-		       fr->obj[i].entity, id, at.x, at.y, at.z, n);
-		poly += n;
-		drawn++;
-	}
+	poly = frame_draw(&g_sceneframe, fr, &drawn, 1);
 	f = fopen(g_frameout, "wb");
 	if (f) {
 		fwrite(g_sceneframe.px, 1, sizeof g_sceneframe.px, f);
@@ -1685,7 +1848,7 @@ static void rstub_post(void)
 	/* Past the logged window the list is still walked when a frame is
 	 * wanted, silently, so --frame-out sees the latest one rather than
 	 * the four-hundredth. */
-	if (w[0] == RS_OP_RENDER && n >= 2 && (g_rscmd <= 400 || g_frameout)) {
+	if (w[0] == RS_OP_RENDER && n >= 2 && (g_rscmd <= 400 || g_frameout || g_capture)) {
 		g_rsquiet = g_rscmd > 400;
 		rstub_dlist(w[1]);
 		g_rsquiet = 0;
@@ -2503,6 +2666,12 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--live")) {
 			g_live = 1;
 			if (i + 1 < argc && argv[i + 1][0] != '-') g_liveframes = argv[++i];
+		}
+		else if (!strcmp(a, "--live-pod")) {
+			/* The main view shows the pod's own frames and the
+			 * keyboard is its panel; see live_key. */
+			g_live = 1;
+			g_capture = 1;
 		}
 #endif
 		else if (!strcmp(a, "--set-at") && i + 2 < argc && g_setats < TAPS) {

@@ -717,6 +717,18 @@ if [ -n "$GAME" ]; then
     check_contains 'height 8.20'                                         # from its cockpit
     check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 206 polygons'  # and sees the Loki
 fi
+# Scenario 4Q: live play, headless. tools/play.sh starts a game the same way
+# and runs the SDL cockpit with the main view drawn from the pod's own
+# frames and the timebase paced to the wall clock. With the dummy video
+# driver nothing opens; the frame and the clock say it ran.
+if [ -x ./build/cockpit.exe ] && [ -n "$MAP" ]; then
+    PLAY=$(BATTLEPOD_NO_HOLD=1 SDL_VIDEODRIVER=dummy PLAY_STEPS=300000000 \
+        PLAY_ARGS="--frame-out $OUT.rgb" sh tools/play.sh 2>&1 || true)
+    CHECKTEXT="$PLAY"
+    check_contains 'entity 2 model 451 at (5385.0, 7425.0, 5.4)'       # the Loki, live
+    CHECKTEXT=$(echo "$PLAY" | awk '/^live clock/ { gsub(",", "", $4); print ($4 == $6) ? "live clock paced" : "live clock not paced" }')
+    check_contains 'live clock paced'                                   # game time is wall time
+fi
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a

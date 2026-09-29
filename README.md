@@ -353,6 +353,19 @@ F8="F8 00 00 00 00 01 00 00 00 00 $(printf '00 %.0s' $(seq 86))"
 ./build/view.exe out/podframe.rgb
 ```
 
+**Play it.** `make cockpit`, then:
+
+```
+tools/play.sh                      # BadLands-16, MadCat Prime
+tools/play.sh Nazca-24 12          # another map, a Thor Prime
+```
+
+starts a game the way the operator console does - range, vehicles, map,
+`PLAYER_LINK` - and opens the cockpit with the main view drawn from the pod's
+own frames, its clock paced to the wall. W/S throttle, A/D stick, space fires,
+T selects a target, L the searchlight, Esc quits. Your Mech drops in first and
+ignores the controls until it lands. A Loki stands 150 metres ahead.
+
 **Start a game from a scenario.** `tools/mapsend.py` turns a scenario file
 into the `0xE4` packets the console sends for a map, and `--packet-file`
 feeds them. Add a vehicle and a `PLAYER_LINK` and the pod flies it with

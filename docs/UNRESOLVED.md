@@ -227,11 +227,11 @@ move.*
   without logging a name (2, 3, 6, 11, 14, 17, 18), and the console's remaining
   class names have to be among them. Settled by: a string on one of those seven
   constructors, or a scenario that creates one.
-- **What the stick and the left pedal do.** The report format and the
-  buttons are settled (see DEVICES.md, *The controls*). The stick's effect is
-  a mode - buttons `30`/`31` choose crosshairs or torso - and neither was
-  selected when `A1`/`A2` were tried; `A3` at full scale moved nothing
-  watched in mode 1. Settled by: trying the stick after button `30` or `31`.
+- **What the left pedal and the stick's other axis do.** The stick steers
+  in advanced mode with "stick turns" (see DEVICES.md, *The controls*), and
+  `A4` turns in basic mode. `A3` at full scale moved nothing watched, and
+  `A1` and `A2` turning opposite ways reads like two halves of one axis more
+  than X and Y. Settled by: reading `0x0214E064`.
 - **What weapon each trigger fires, and what hit the Loki.** `A5` alone fires
   and destroys a Loki at 100 units; `A6` and `A7` set other bits of the same
   mask. Which of the MadCat's weapons each group holds, and what the class 11
