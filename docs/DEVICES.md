@@ -3068,11 +3068,11 @@ unless its `+0x0C` bit 4 is set, and dispatches on `Class_ID` through a
 |---|---|
 | 0, 7 | none |
 | 1 | `0x0212F2C2` - the Mech |
-| 2 | `0x0214C228` (box-tested first) |
-| 3 | `0x0212BF9A` (box-tested first) |
+| 2 | `0x02123E22` (box-tested first) |
+| 3 | `0x0214C228` (box-tested first) |
 | 4 | `0x0212C994` |
 | 5 | `0x021233D8` (box-tested first) |
-| 6 | `0x02123E22` (box-tested first) |
+| 6 | `0x0212BF9A` (box-tested first) |
 | 8 | `0x021410F2` |
 | 9 | `0x0210CA40` |
 | 10 | `0x0212A180` |
@@ -3230,6 +3230,80 @@ MadCat comes out 224 polygons, standing on the ground plane - its placement
 height of 5.4 is the rig's hip height, so the feet meet the floor without any
 adjustment. Its arms are missing, as they are from `--rig`: `516` and `517`
 are placed per frame.
+
+### The world arrives as `0xE4`
+
+The console's log starts every game the same way - `Reset world`, `Creating
+vehicles` with a `MECH_CLASS` and a `Drop Location` per pod, `Downloading
+Map`, `Initialize space` - and the pod's ROM has no word for terrain at all.
+All of it arrives through **one message**. In the monitor's state machine
+`0xE4` sets the timebase; in the game's byte-0 table its handler is
+`0x0213CF5E`, and that is a create:
+
+```
+0213CF6A  move.l ($e,A0), D0         the class
+0213E228  subi.l #-1, D0             so class -1 is index 0
+0213E22E  cmpi.l #$14, D0            twenty arms
+          else: "Create unknown thing %d, class %d received"
+```
+
+Every arm indexes the arena with `+0x12`, copies the owner word from `+0x08`,
+and writes the class and the number itself - the thing lands in the slot the
+console names, which is why the log's thing numbers mean anything. Class −1
+calls `0x0214C3AC`, the arena init: that is **`Reset world`**.
+
+| packet | |
+|---|---|
+| `+0x08` | owner, a word |
+| `+0x0A` | OR'd into Thing_Flags |
+| `+0x0E` | class |
+| `+0x12` | thing number, the arena slot |
+| `+0x16` `+0x1A` `+0x1E` | x, y, z |
+| `+0x22` | a shape (model id) for classes 2, 3, 6; a name for class 1 |
+
+and then, per class, what its initialiser reads:
+
+| class | initialiser | then |
+|---|---|---|
+| 1 Mech | `0x0212D10A` | `+0x4A` word: **vehicle record**; `+0x50`: **heading**; `+0x4C`, `+0x4E` words |
+| 2 | `0x02115BE6` | `+0x26` a long, `+0x2A` **scale**, `+0x2E` **heading** |
+| 3 | `0x0214BF0E` | `+0x26` **scale**, `+0x2A` **heading** |
+| 6 | `0x0212BBDE` | `+0x2A` **heading** |
+
+The scale multiplies the bounding box the per-shape table at `0x02194460`
+gives, and the heading rotates it - which is how each field was told apart.
+
+**Class 1 is `MECH_CLASS`.** An `0xE4` with class 1, vehicle record 34 at
+`+0x4A` and 90.0 at `+0x50` builds a Mech where it is told to, named from
+`+0x22`, with `+0x7E` = 34 and `+0xF8` = 90 - and the frame draws it as model
+456, the Avatar, with its rotation in the type 3's matrix.
+
+**Classes 2, 3 and 6 are the map.** They are the classes the scenario files'
+object lines carry - BadLands-16 has 97, 743 and 42 of them - and the classes
+the world pass box-tests before drawing. A scenario line is `class shape x y z
+heading scale` and one or two integers more; `tools/mapsend.py` turns a
+scenario into `0xE4`s, and `--packet-file` feeds them (a map is hundreds of
+packets; `--packet` held eight).
+
+One class 3 - shape 132, the commonest in BadLands - 100 units ahead of the
+viewer comes back as entity 20, model 132, 57 polygons: a rock spire, drawn
+from the pod's own frame. The whole of BadLands-16, 882 objects, goes in
+without one `Create unknown thing`, and a viewer at the map's second drop
+point stands in a base: bunkers, buildings and a tower around it, and facing
+0 - the facing the drop line gives - it looks out of the base across the
+mesas.
+
+**And so a game starts with nothing written by hand.** In the log's order -
+`0xE5` for the range, a MECH_CLASS `0xE4` for a MadCat at BadLands' second
+drop point facing 0 and another for a Loki 100 units ahead of it, the map's
+882 `0xE4`s, then `0xED` linking the pod to the MadCat - and `My_Mech_Ptr` is
+thing 1, the eye is at its cockpit 8.2 up (hip height 5.4 and the 2.8 the
+builder adds), and the frame holds the Loki and the terrain around it. No
+`--set`, no `--set-at` on the game at all.
+
+**What the trailing integers are is not known.** `mapsend.py` sends the last
+one as the flags and class 2's first as its `+0x26`; nothing has checked
+either. Nor is the heading's sign: a Mech at 90 is drawn side-on either way.
 
 ### The slot allocator
 

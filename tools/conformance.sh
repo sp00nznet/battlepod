@@ -43,7 +43,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT" "$OUT.rgb"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -537,6 +537,43 @@ AVATAR=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF0
 # this pod's node. Create a Mech, link it, and the pod is flying it.
 LINKED=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --peek 0218AEE4:4     --steps 400000000 --top 0 2>&1 || true)
 
+# Scenario 4K: the world. 0xE4 in the game table is the console's create
+# message - the one its log calls "Reset world", MECH_CLASS and "Downloading
+# Map". 0x0213CF5E switches on the class at +0x0E and builds the thing into
+# the arena slot +0x12 names. One class 3 object, model 132, 100 units ahead
+# of the viewer, is drawn by the world pass like any Mech.
+TERRAIN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 00 00 00 14 45 FA 00 00 45 FB E0 00 00 00 00 00 00 00 00 84 3F 80 00 00 43 34 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --frame-out "$OUT.rgb"     --steps 250000000 --top 0 2>&1 || true)
+
+# Scenario 4L: a whole map. tools/mapsend.py turns BadLands-16's 882 objects
+# into 0xE4 packets and the viewer stands at its second drop point, inside a
+# base. The buildings around it are drawn from the pod's own frame.
+MAP=""
+if [ -f "${VWE_GAME_FILES}/Scenarios/BadLands-16" ]; then
+    python tools/mapsend.py "${VWE_GAME_FILES}/Scenarios/BadLands-16" > "$OUT.pkt"
+    MAP=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45A84800 --set-at 02122154 21F99D6=45ECB800     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet-file "$OUT.pkt"     --frame-out "$OUT.rgb"     --steps 900000000 --top 0 2>&1 || true)
+fi
+
+# Scenario 4M: MECH_CLASS is 0xE4 class 1. Its arm hands 0x0212D10A the
+# position, the name at +0x22, a heading at +0x50 and the vehicle record at
+# +0x4A - here 34, the Avatar, facing 90.
+MECHCLASS=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FB E0 00 40 AC CC CD 41 76 61 74 61 72 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 22 00 00 00 00 42 B4 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --frame-out "$OUT.rgb"     --steps 250000000 --top 0 2>&1 || true)
+
+# Scenario 4N: a game, started the way the console's log starts one and with
+# nothing written into memory by hand. 0xE5 for the range, two MECH_CLASS
+# 0xE4s - a MadCat at BadLands' second drop point facing 0 and a Loki 100
+# units ahead of it - the map as 882 more 0xE4s, and PLAYER_LINK to the
+# MadCat. The pod flies it: the eye is at the Mech's cockpit, 8.2 up, and the
+# Loki is in the frame with the terrain.
+GAME=""
+if [ -s "$OUT.pkt" ]; then
+    { head -2 "$OUT.pkt"
+      echo 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 A8 48 00 45 EC B8 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+      echo 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 02 45 A8 48 00 45 E9 98 00 40 AC CC CD 54 68 65 6D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+      tail -n +3 "$OUT.pkt"
+      echo 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'; } > "$OUT.game"
+    GAME=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet-file "$OUT.game"     --peek 0218AEE4:4     --frame-out "$OUT.rgb"     --steps 900000000 --top 0 2>&1 || true)
+fi
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -643,6 +680,21 @@ check_contains 'entity 1 model 456 at (8000.0, 8000.0, 5.4)'        # vehicle re
 CHECKTEXT="$LINKED"
 check_contains '0000  02 1F A0 60'                                  # My_Mech_Ptr is the created Mech
 check_contains 'pick (240,180)'                                     # and the HUD centres on its view
+CHECKTEXT="$TERRAIN"
+check_contains 'entity 20 model 132 at (8000.0, 8060.0, 0.0): 57 polygons'  # a class 3 from 0xE4
+CHECKTEXT="$MECHCLASS"
+check_contains 'entity 1 model 456 at (8000.0, 8060.0, 5.4)'   # MECH_CLASS: an Avatar where it was put
+if [ -n "$MAP" ]; then
+    CHECKTEXT="$MAP"
+    check_contains 'entity 733 model 11 at (5365.0, 7660.0, 0.0): 11 polygons'  # BadLands, from the drop
+    check_count_zero 'Create unknown thing'
+fi
+if [ -n "$GAME" ]; then
+    CHECKTEXT="$GAME"
+    check_contains '0000  02 1F A0 60'                                   # the pod is flying thing 1
+    check_contains 'height 8.20'                                         # from its cockpit
+    check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 206 polygons'  # and sees the Loki
+fi
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a
@@ -888,7 +940,7 @@ fi
 
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py tools/mission_dis.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py tools/mission_dis.py tools/mapsend.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

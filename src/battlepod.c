@@ -1063,10 +1063,32 @@ static uint8_t  g_vmops[VMTRACE_MAX];
 #define VMTRACE_FRAME_PC (-0x10e)
 static uint32_t g_vmpcs[VMTRACE_MAX];
 
-#define MAX_PKTS 8
+#define MAX_PKTS 2048			/* a whole map, one 0xE4 per object */
 static uint8_t  g_pkt[MAX_PKTS][512];
 static uint32_t g_pktlen[MAX_PKTS];
 static unsigned g_npkts;
+
+/* Queue one packet written as hex bytes. */
+static int pkt_add(const char *h)
+{
+	if (g_npkts >= MAX_PKTS) {
+		fprintf(stderr, "too many packets: %d is the limit\n", MAX_PKTS);
+		return 0;
+	}
+	g_pktlen[g_npkts] = 0;
+	while (*h && g_pktlen[g_npkts] < sizeof g_pkt[0]) {
+		char *e;
+		long b;
+		while (*h == ' ' || *h == ',' || *h == '\t' || *h == '\r' || *h == '\n') h++;
+		if (!*h) break;
+		b = strtol(h, &e, 16);
+		if (e == h) { fprintf(stderr, "a packet wants hex bytes\n"); return 0; }
+		g_pkt[g_npkts][g_pktlen[g_npkts]++] = (uint8_t)b;
+		h = e;
+	}
+	g_npkts++;
+	return 1;
+}
 static uint32_t g_monbase;
 static void mon_pkt_arm(uint32_t base, unsigned n);
 static int      g_pkt_delivered;
@@ -1271,10 +1293,13 @@ static int      g_rscmd;
 static char     g_rslog[262144];
 static size_t   g_rsloglen;
 
+static int g_rsquiet;		/* walking a list only to capture it */
+
 static void rslog(const char *fmt, ...)
 {
 	va_list ap;
 	int n;
+	if (g_rsquiet) return;
 	if (g_rsloglen + 256 >= sizeof g_rslog) return;
 	va_start(ap, fmt);
 	n = vsnprintf(g_rslog + g_rsloglen, sizeof g_rslog - g_rsloglen, fmt, ap);
@@ -1397,7 +1422,7 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
  * object's camera and every type 3 record. A type 3 is a whole model placed
  * in the world - the viewer's own, and each Mech the world pass lets through
  * the culler - so a frame is fully described, for our purposes, by these. */
-#define FRAME_OBJS 64
+#define FRAME_OBJS 1024
 struct pod_frame {
 	int have_cam;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
@@ -1418,7 +1443,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 		rslog("    implausible length, not walked\n");
 		return;
 	}
-	while (at < count + 1 && records < 64) {
+	while (at < count + 1 && records < 4096) {
 		uint32_t type = dl_word(ti_byte_addr, at);
 		/* 0xFFFFFFFF is a separator, not the end: a real frame has one
 		 * after the leading record and carries on with the viewport.
@@ -1640,7 +1665,14 @@ static void rstub_post(void)
 		}
 	}
 	if (g_rscmd <= 400) rslog("\n");
-	if (w[0] == RS_OP_RENDER && n >= 2 && g_rscmd <= 400) rstub_dlist(w[1]);
+	/* Past the logged window the list is still walked when a frame is
+	 * wanted, silently, so --frame-out sees the latest one rather than
+	 * the four-hundredth. */
+	if (w[0] == RS_OP_RENDER && n >= 2 && (g_rscmd <= 400 || g_frameout)) {
+		g_rsquiet = g_rscmd > 400;
+		rstub_dlist(w[1]);
+		g_rsquiet = 0;
+	}
 
 	rs_put(4, 0);			/* command complete */
 	m68k_write_memory_32(RSTUB_FLAG, RSTUB_MAGIC);	/* renderer ready again */
@@ -2367,23 +2399,23 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--sp") && i + 1 < argc)      sp = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--vbr") && i + 1 < argc)     vbr = (uint32_t)strtoul(argv[++i], NULL, 16);
 		else if (!strcmp(a, "--packet") && i + 1 < argc) {
-			const char *h = argv[++i];
-			if (g_npkts >= MAX_PKTS) {
-				fprintf(stderr, "too many --packet options\n");
-				return 1;
+			if (!pkt_add(argv[++i])) return 1;
+		}
+		else if (!strcmp(a, "--packet-file") && i + 1 < argc) {
+			/* One packet per line, hex bytes, '#' starts a comment.
+			 * A map is hundreds of packets, which a command line
+			 * cannot carry. */
+			char line[2048];
+			FILE *pf = fopen(argv[++i], "r");
+			if (!pf) { fprintf(stderr, "cannot read %s\n", argv[i]); return 1; }
+			while (fgets(line, sizeof line, pf)) {
+				char *c = strchr(line, '#');
+				if (c) *c = 0;
+				for (c = line; *c == ' ' || *c == '\t'; c++) ;
+				if (*c == '\n' || *c == '\r' || !*c) continue;
+				if (!pkt_add(c)) { fclose(pf); return 1; }
 			}
-			g_pktlen[g_npkts] = 0;
-			while (*h && g_pktlen[g_npkts] < sizeof g_pkt[0]) {
-				char *e;
-				long b;
-				while (*h == ' ' || *h == ',') h++;
-				if (!*h) break;
-				b = strtol(h, &e, 16);
-				if (e == h) { fprintf(stderr, "--packet wants hex bytes\n"); return 1; }
-				g_pkt[g_npkts][g_pktlen[g_npkts]++] = (uint8_t)b;
-				h = e;
-			}
-			g_npkts++;
+			fclose(pf);
 		}
 		else if (!strcmp(a, "--wtrap") && i + 1 < argc) {
 			char *c;

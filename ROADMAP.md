@@ -86,6 +86,13 @@ a locals frame, six value types, a typed load and store, and named control
 flow. A world is populated by a program, instruction by instruction, and
 `Create_Thing` has exactly one caller in the ROM - bytecode opcode `0x24`.
 
+**Phase 13 — a game from the wire.** The pod gets its visibility range from
+`0xE5`, its vehicles and its whole map from `0xE4` - the console's create
+message, built into the arena slot it names - and its pilot from `0xED`,
+`PLAYER_LINK`. Sent in the order the console's 1995 log sends them, with
+nothing patched into memory, the pod flies its Mech and posts frames of the
+map and the other Mechs in it, and `--frame-out` draws them.
+
 ## Next
 
 **The four draw opcodes.** `$200` puts down a single pixel at a vertex, `$220`

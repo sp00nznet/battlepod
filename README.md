@@ -353,6 +353,16 @@ F8="F8 00 00 00 00 01 00 00 00 00 $(printf '00 %.0s' $(seq 86))"
 ./build/view.exe out/podframe.rgb
 ```
 
+**Start a game from a scenario.** `tools/mapsend.py` turns a scenario file
+into the `0xE4` packets the console sends for a map, and `--packet-file`
+feeds them. Add a vehicle and a `PLAYER_LINK` and the pod flies it with
+nothing patched; see scenario 4N in `tools/conformance.sh` for the full
+sequence.
+
+```
+python tools/mapsend.py "$GF/Scenarios/BadLands-16" > out/badlands.pkt
+```
+
 **Run the whole cockpit.** `make cockpit` builds the emulator with its windows
 - lamps, displays, bar graphs and the main view - in one process, drawing its
 own geometry in C as the firmware runs:

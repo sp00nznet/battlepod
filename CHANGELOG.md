@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A game started the way the console starts one, with nothing written into
+  memory by hand**: `0xE5` for the range, `0xE4` MECH_CLASS for each vehicle,
+  the map as `0xE4`s, `0xED` PLAYER_LINK. The pod flies its MadCat from a
+  cockpit 8.2 up and draws a Loki standing in BadLands in front of it.
+- **`0xE4` is the console's create message** - `Reset world` (class -1),
+  `MECH_CLASS` (class 1) and `Downloading Map` (classes 2, 3 and 6) are all
+  it. `0x0213CF5E` switches on the class at `+0x0E` and builds into the arena
+  slot `+0x12` names. MECH_CLASS carries the vehicle record at `+0x4A`, the
+  heading at `+0x50`, the name at `+0x22`; map objects the shape at `+0x22`
+  and scale and heading after it.
+- **`tools/mapsend.py`** turns a scenario file into those packets, and
+  **`--packet-file`** feeds them - a map is hundreds; `--packet` held eight.
+  All 882 of BadLands-16's objects go in without one `Create unknown thing`.
+- `--frame-out` now captures past the 400th renderer command, silently, so it
+  sees the latest frame.
+- **Fixed**: the class-to-draw-routine table in DEVICES.md had classes 2, 3
+  and 6 on the wrong routines; class 3 is `0x0214C228`.
+- Scenarios 4K-4N. **272/272.**
 - **`--frame-out FILE` draws what the pod put on screen**: the camera and every
   placed model from the last display list the firmware posted, with skeletons
   assembled into whole mechs. The first one is a MadCat, 224 polygons, feet on

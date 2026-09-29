@@ -184,22 +184,16 @@ move.*
   A write trap on entity 1's class word says the same from the other side: on
   a boot with a mission running, the only writes to it are two zeroes from the
   arena init. **Nothing ever gives an entity a class.** Now largely settled - see below - but not from the wire. Settled by: finding
-- **How the console creates the vehicles.** The circle that kept the pod from
-  starting a game is broken: `0xED` is `PLAYER_LINK`, and linking the pod to a
-  class 1 entity makes it `My_Mech_Ptr` (see DEVICES.md, *A pilot, a chassis,
-  and the frame drawn*). `0x02134F06` turned out to be the game-over reset, not
-  the start. What is still missing is the message that makes the vehicles in
-  the first place. The console's log calls it `MECH_CLASS` - class,
-  thing_number, type, name, then a drop location - and this project uses
-  `0xF8` selector 1 in its place, which is a vehicle viewer that fixes its own
-  position. Only two routines in the ROM call the Mech constructor, `0xF8`'s
-  and the reset, so a real `MECH_CLASS` either reaches the constructor through
-  a pointer or builds Mechs some other way. Settled by: finding it among the 46
-  handled opcodes, or a captured session.
-- **What "Downloading Map" sends.** The console's log has it between creating
-  the vehicles and `Initialize space`, taking about fourteen seconds, and the
-  pod's ROM has no word for terrain at all. The terrain in every frame so far
-  is absent. Settled by: the console's map sender.
+- **What the trailing integers on a scenario line are.** The map arrives as
+  `0xE4` (see DEVICES.md, *The world arrives as `0xE4`*), and every field its
+  arms read is placed except these: one integer after the scale on classes 3
+  and 6 (`8` throughout BadLands), two on class 2 (`0 30`). `tools/mapsend.py`
+  sends the last as the flags and class 2's first as its `+0x26`. Settled by:
+  what the flags bits do, or the console's map sender.
+- **Which way a heading turns.** `0xE4`'s headings reach `+0xF8` and the type
+  3's matrix; `--frame-out` turns models by `atan2` of that matrix, and a
+  Mech at 90 degrees is side-on whichever sign is right. Settled by: an
+  asymmetric model at 90, against period footage.
 - **What visibility range the console sends.** The pod's view limit is
   `0xE5` `+0x44` plus `+0x48`, and with both zero nothing but the head-up
   display is ever drawn. 500 each is what this project uses, and it is a guess;
@@ -207,10 +201,6 @@ move.*
   `0xE5`, or the console's encoder.
 - **What the type 4 record under the Mech is.** Model `0x55` at ground level,
   scaled (1, 1, 2) - a shadow by position, not by evidence.
-- **Two Mechs on one pod.** A linked pilot sees its own Mech's frame, and the
-  only Mech it could see is one the same `0xF8` would replace - `0xF8` destroys
-  the thing it made last before it makes another. Drawing one Mech from
-  another's seat still takes the hand-set viewer.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
