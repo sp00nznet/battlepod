@@ -3441,7 +3441,7 @@ comes out zero and nothing is sent. Three things make it go:
 
 | | |
 |---|---|
-| `0x0218AEB0` | this pod's address, net then node - the DIP switch the manual describes |
+| `0x0218AEB0` | the address the pod sends from - the game's, as the next section shows, not the pod's own |
 | `0x0218AEB3` | the node packets go to: a hub, here `0xFE` |
 | `0x02179D32` | the game identity, shared by every pod in the game; `0x0210E00A` copies it into all four address words when the pod is a router |
 
@@ -3468,6 +3468,51 @@ Loki, and **its copy of A's MadCat ends at Y = -9787**, the position A's last
 `0xEC` announced. Every pod in a centre is the same firmware seeing the same
 packets; this is the whole of multiplayer, and it needed no code of ours on
 the receiving side.
+
+### A centre: pods over UDP, a hub, CPU pilots
+
+**One address for the whole game.** A pod stamps its own address into
+`buf[6..7]` of what it sends, and a receiver posts a packet only if `buf[6..7]`
+is the game identity - anything else it **forwards**, as a router would. Pods
+given addresses of their own therefore relay one another's traffic back and
+forth without end: two of them, set up that way, passed 580,000 packets in a
+minute. `0x0210E00A`, which copies the game identity into all four address
+words, says what the firmware expects: every pod in a game carries the game's
+address. What tells pods apart is the network node the packet is delivered
+to, which is below the firmware - so in this project it is the hub's. With
+every pod at `01 01`, a pod sends about 35 packets a second.
+
+**`--net HOST:PORT`** joins a pod to a hub over UDP, one datagram per
+message: `H` hello with the pod's node, `P` a packet in either direction, `R`
+Remote I/O input to the pod, `Q` quit. Packets from the hub join the same
+queue `--packet` fills, which now grows while the pod runs. **`--net-node N`**
+names the pod to the hub and sets the game's address, hub node and identity.
+**`--realtime`** paces the timebase to the wall clock for a pod with no
+window, and in real time the renderer's frame-complete interrupt waits at
+least 3 hundredths: an instant renderer otherwise lets a pod run its frame
+loop thousands of times a second.
+
+**Heading.** A Mech at heading h walks along (sin h, -cos h): 0 is -Y, 90 is
++X, 180 is +Y. In advanced mode with the stick turning, `A2` raises the
+heading and `A1` lowers it.
+
+**`tools/hub.py`** is the centre. It launches the pods, starts the game on
+each exactly as the console's log does it - range, a MECH_CLASS per pod at
+the scenario's drop points, the map, `PLAYER_LINK` - relays everything a pod
+sends to the others except the console's own opcodes, and reads the `0xEC`
+broadcasts going past to know where every Mech is. A CPU pilot drives its pod
+through panel reports only: advanced mode and "stick turns", then stick
+toward the nearest other Mech, throttle by distance, trigger held while it
+points at it. Two such pilots on BadLands, starting at drop points 240 apart,
+close to under 100 and face each other to within a few degrees.
+
+**What does not happen yet is anyone dying.** Both pods fire - the fire
+routine runs in each, and each sends `0xE3` and `0xEA` that the other
+receives - but neither Mech's death routine runs. And the single-pod fight
+that destroys a Loki does not destroy it once the pod is given a network
+address: with a network, a Mech the pod is not flying is someone else's, and
+its damage is decided on the pod that owns it. How that owner learns it was
+hit is the open question.
 
 ### The slot allocator
 

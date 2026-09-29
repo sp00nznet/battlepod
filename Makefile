@@ -17,13 +17,16 @@ export TMPDIR := $(CURDIR)/$(BUILD)/tmp
 export TMP    := $(TMPDIR)
 export TEMP   := $(TMPDIR)
 
+# --net speaks UDP; Windows keeps its sockets in a library of their own.
+NETLIBS := $(if $(findstring mingw,$(shell $(CC) -dumpmachine)),-lws2_32,)
+
 OBJS := $(BUILD)/battlepod.o $(BUILD)/m68kcpu.o $(BUILD)/m68kdasm.o \
         $(BUILD)/softfloat.o $(BUILD)/m68kops.o
 
 all: $(BUILD)/battlepod.exe
 
 $(BUILD)/battlepod.exe: $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) -lm
+	$(CC) $(CFLAGS) -o $@ $(OBJS) -lm $(NETLIBS)
 
 HDRS := src/rio.h src/mesh.h src/raster.h src/rig.h src/scene.h
 
@@ -96,7 +99,7 @@ COCKPIT_OBJS := $(BUILD)/cockpit.o $(BUILD)/m68kcpu.o $(BUILD)/m68kdasm.o       
 
 $(BUILD)/cockpit.exe: $(COCKPIT_OBJS)
 	@test -n "$(SDL_LIBS)" || { echo "cockpit needs SDL2"; exit 1; }
-	$(CC) $(CFLAGS) -o $@ $(COCKPIT_OBJS) -static $(SDL_LIBS) -lm
+	$(CC) $(CFLAGS) -o $@ $(COCKPIT_OBJS) -static $(SDL_LIBS) -lm $(NETLIBS)
 
 $(BUILD)/cockpit.o: src/battlepod.c $(HDRS) src/paneldraw.h $(BUILD)/m68kops.h | $(BUILD)
 	$(CC) $(CFLAGS) $(INC) $(SDL_CFLAGS) -DBATTLEPOD_SDL -c -o $@ $<

@@ -749,6 +749,17 @@ if [ -x ./build/cockpit.exe ] && [ -n "$MAP" ]; then
     CHECKTEXT=$(echo "$PLAY" | awk '/^live clock/ { gsub(",", "", $4); print ($4 == $6) ? "live clock paced" : "live clock not paced" }')
     check_contains 'live clock paced'                                   # game time is wall time
 fi
+# Scenario 4S: a centre. tools/hub.py runs two pods as separate processes
+# joined over UDP, starts a game on each the way the console does, relays
+# their traffic, and flies both with CPU pilots through the panel reports.
+# They start at two drop points about 240 apart and hunt each other.
+if [ -n "$MAP" ]; then
+    HUB=$(timeout 200 python tools/hub.py --bots 2 --seconds 45 --port 5171 2>&1 || true)
+    CHECKTEXT=$(echo "$HUB" | awk '/closest two Mechs ended/ { print ($6 + 0 < 120) ? "the bots closed" : "the bots did not close" }')
+    check_contains 'the bots closed'                                    # two CPU pilots found each other
+    CHECKTEXT="$HUB"
+    check_contains 'EC:'                                                # and broadcast as they went
+fi
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a

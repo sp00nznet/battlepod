@@ -8,6 +8,24 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A centre: several pods, CPU pilots, one hub.** `tools/hub.py` launches
+  pods as separate processes joined over UDP, starts the game on each as the
+  console does, relays their traffic, and flies bots through the panel's own
+  input reports - steer at the nearest Mech, close, and hold the trigger
+  while pointing at it. Two bots on BadLands close from 240 apart to under
+  100, facing each other.
+- **`--net HOST:PORT`**, **`--net-node N`** and **`--realtime`** in the
+  emulator; the packet queue grows while a pod runs.
+- **Every pod in a game carries the game's address.** A receiver forwards
+  anything not stamped with it, so pods with addresses of their own relay
+  each other's traffic without end.
+- **Frames are paced in real time** to at least 3 hundredths, about what the
+  board managed; an instant renderer otherwise runs a pod's frame loop, and
+  its broadcasts, thousands of times a second.
+- Heading h walks along (sin h, -cos h). Scenario 4S.
+- **Open**: nobody dies yet. Networked pods fire at each other, but damage to
+  a Mech is decided on the pod that owns it, and how it learns of a hit is
+  not read.
 - **Two pods talk.** A pod transmits once it has an address at `0x0218AEB0`,
   a hub node in `0x0218AEB3` and a game identity at `0x02179D32`: the sender
   reaches the boot monitor's `+0x24` with node, length and buffer. A driving

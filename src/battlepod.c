@@ -129,6 +129,14 @@ static int      g_txena[2];		/* transmitter enabled, per channel */
 static int      g_rio_late;
 static int      g_pkt_delivered;
 static unsigned g_npkts;
+static unsigned g_pkt_next;		/* the next queued packet to arm */
+static int      g_pkt_skip, g_pkt_null;
+static unsigned g_pkt_queued;		/* every packet ever queued, for the report */
+static int      g_net;			/* --net: packets and panel input from a hub */
+static void net_send_packet(uint32_t node, const uint8_t *d, uint32_t n);
+static void rx_append(const uint8_t *d, size_t n);
+static uint32_t g_clock_val, g_clock_wall;	/* the timebase; see --clock */
+static int      g_clock_rt;
 
 static int rx_pending(int chan)
 {
@@ -228,6 +236,7 @@ static int duart_write(uint32_t a, unsigned v)
 static int g_rirq;		/* interrupt level, 0 = off */
 static int g_rirq_delay = RIRQ_DELAY;
 static int g_rirq_pending;	/* instructions left before the line goes up */
+static uint32_t g_rirq_next;	/* --realtime: the timebase before which no frame completes */
 
 static int rirq_asserted(void);
 
@@ -1066,34 +1075,23 @@ static int live_open(const char *frames)
  *   T          target select (button 40)
  *   L          searchlight (button 20)
  */
-static uint32_t g_clock_val, g_clock_wall;	/* defined with --clock below */
-static int      g_clock_rt;
-static char g_livein[1 << 20];
+
 static int  g_live_throttle, g_live_moded;
-static uint32_t g_clock_base;
+
 
 static void live_report(const uint8_t *d, int n)
 {
-	uint8_t sum = 0;
+	uint8_t f[4 + 16 + 1], sum = 0;
 	int i;
 
-	if (g_inlen[0] + (size_t)n + 5 > sizeof g_livein) return;
-	/* Bytes already delivered are never looked at again; compact them
-	 * away so a long session does not run out of room. */
-	if (g_inpos[0] > sizeof g_livein / 2) {
-		memmove(g_livein, g_livein + g_inpos[0], g_inlen[0] - g_inpos[0]);
-		g_inlen[0] -= g_inpos[0];
-		g_inpos[0] = 0;
-	}
-	g_livein[g_inlen[0]++] = 0x01;
-	g_livein[g_inlen[0]++] = 0x00;
-	g_livein[g_inlen[0]++] = (char)n;
-	g_livein[g_inlen[0]++] = (char)n;
+	if (n > 16) return;
+	f[0] = 0x01; f[1] = 0x00; f[2] = (uint8_t)n; f[3] = (uint8_t)n;
 	for (i = 0; i < n; i++) {
-		g_livein[g_inlen[0]++] = (char)d[i];
+		f[4 + i] = d[i];
 		sum += d[i];
 	}
-	g_livein[g_inlen[0]++] = (char)sum;
+	f[4 + n] = sum;
+	rx_append(f, (size_t)n + 5);
 }
 
 static void live_analog(uint8_t id, int v)
@@ -1150,23 +1148,6 @@ static void live_pump(uint64_t step)
 		if (g_capture && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
 			live_key(e.key.keysym.sym, e.type == SDL_KEYDOWN, e.key.repeat);
 	}
-	if (g_capture) {
-		static int ready;
-		if (!ready) {
-			/* Anything --rio-in queued goes first, keys after it. */
-			size_t left = g_inlen[0] - g_inpos[0];
-			if (left > sizeof g_livein) left = sizeof g_livein;
-			if (left) memcpy(g_livein, g_in[0] + g_inpos[0], left);
-			g_in[0] = g_livein;
-			g_inpos[0] = 0;
-			g_inlen[0] = left;
-			g_clock_base = g_clock_val - SDL_GetTicks() / 10;
-			g_clock_rt = 1;
-			ready = 1;
-		}
-		g_clock_wall = g_clock_base + SDL_GetTicks() / 10;
-	}
-
 	if (g_vt && g_capture) {
 		/* The pod's own latest frame, drawn from its own camera. */
 		static struct raster f;
@@ -1297,8 +1278,13 @@ static void mon_send_called(void)
 	uint32_t now = m68k_read_memory_32(0x02000808);
 
 	g_sent++;
-	if (!g_sendlog) return;
 	if (len > 512) len = 512;
+	if (g_net) {
+		uint8_t pkt[512];
+		for (i = 0; i < len; i++) pkt[i] = (uint8_t)m68k_read_memory_8(buf + i);
+		net_send_packet(node, pkt, len);
+	}
+	if (!g_sendlog) return;
 	fprintf(g_sendlog, "# t %u node %u\n", now, node);
 	for (i = 0; i < len; i++)
 		fprintf(g_sendlog, "%02X%s", m68k_read_memory_8(buf + i), i + 1 < len ? " " : "\n");
@@ -1324,7 +1310,7 @@ static uint8_t  g_vmops[VMTRACE_MAX];
 #define VMTRACE_FRAME_PC (-0x10e)
 static uint32_t g_vmpcs[VMTRACE_MAX];
 
-#define MAX_PKTS 2048			/* a whole map, one 0xE4 per object */
+#define MAX_PKTS 8192			/* a whole map, or a recorded pod's traffic */
 static uint8_t  g_pkt[MAX_PKTS][512];
 static uint32_t g_pktlen[MAX_PKTS];
 
@@ -1347,8 +1333,174 @@ static int pkt_add(const char *h)
 		h = e;
 	}
 	g_npkts++;
+	g_pkt_queued++;
 	return 1;
 }
+
+/* Queue one packet as bytes. Used for what arrives from a hub. */
+static int pkt_add_raw(const uint8_t *d, uint32_t n)
+{
+	if (g_npkts >= MAX_PKTS) return 0;
+	if (n > sizeof g_pkt[0]) n = sizeof g_pkt[0];
+	memcpy(g_pkt[g_npkts], d, n);
+	g_pktlen[g_npkts] = n;
+	g_npkts++;
+	g_pkt_queued++;
+	return 1;
+}
+
+/* DUART channel A's receive data, grown at run time: what --rio-in gave,
+ * then whatever a keyboard or a hub adds. Bytes already delivered are
+ * compacted away so a long session does not run out of room. */
+static char g_rxbuf[1 << 20];
+
+static void rx_append(const uint8_t *d, size_t n)
+{
+	if (g_in[0] != g_rxbuf) {
+		size_t left = g_inlen[0] - g_inpos[0];
+		if (left > sizeof g_rxbuf) left = sizeof g_rxbuf;
+		if (left) memcpy(g_rxbuf, g_in[0] + g_inpos[0], left);
+		g_in[0] = g_rxbuf;
+		g_inpos[0] = 0;
+		g_inlen[0] = left;
+	}
+	if (g_inpos[0] > sizeof g_rxbuf / 2) {
+		memmove(g_rxbuf, g_rxbuf + g_inpos[0], g_inlen[0] - g_inpos[0]);
+		g_inlen[0] -= g_inpos[0];
+		g_inpos[0] = 0;
+	}
+	if (g_inlen[0] + n > sizeof g_rxbuf) return;
+	memcpy(g_rxbuf + g_inlen[0], d, n);
+	g_inlen[0] += n;
+}
+
+/* --net HOST:PORT: the pod on a network of pods, through a hub.
+ *
+ * One UDP datagram per message, first byte its kind:
+ *   pod -> hub  'H' node          hello, sent until the hub answers
+ *               'P' node bytes    a packet the pod transmitted, and to where
+ *   hub -> pod  'P' bytes         a packet for the pod to receive
+ *               'R' bytes         Remote I/O input: the panel, from afar
+ * The hub is the segment: it relays what each pod sends to the others, and it
+ * is where the console's messages come from. */
+#ifdef _WIN32
+#include <winsock2.h>
+typedef SOCKET net_sock;
+#define NET_BAD INVALID_SOCKET
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <unistd.h>
+typedef int net_sock;
+#define NET_BAD (-1)
+#endif
+
+static net_sock g_netsock = NET_BAD;
+static struct sockaddr_in g_hub;
+static int g_netnode = 1, g_net_heard, g_net_quit;
+static uint32_t g_net_hello_at, g_net_in, g_net_out;
+
+static void net_send(const uint8_t *d, int n)
+{
+	if (g_netsock == NET_BAD) return;
+	sendto(g_netsock, (const char *)d, n, 0, (struct sockaddr *)&g_hub, sizeof g_hub);
+}
+
+static int net_open(const char *spec)
+{
+	char host[256];
+	const char *colon = strrchr(spec, ':');
+	size_t hl;
+
+	if (!colon || (hl = (size_t)(colon - spec)) >= sizeof host) return 0;
+	memcpy(host, spec, hl);
+	host[hl] = 0;
+#ifdef _WIN32
+	{
+		WSADATA w;
+		u_long on = 1;
+		if (WSAStartup(MAKEWORD(2, 2), &w)) return 0;
+		g_netsock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		if (g_netsock == NET_BAD) return 0;
+		ioctlsocket(g_netsock, FIONBIO, &on);
+	}
+#else
+	g_netsock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (g_netsock == NET_BAD) return 0;
+	fcntl(g_netsock, F_SETFL, fcntl(g_netsock, F_GETFL) | O_NONBLOCK);
+#endif
+	memset(&g_hub, 0, sizeof g_hub);
+	g_hub.sin_family = AF_INET;
+	g_hub.sin_port = htons((unsigned short)atoi(colon + 1));
+	g_hub.sin_addr.s_addr = inet_addr(host);
+	return 1;
+}
+
+/* Called every few thousand instructions: say hello until the hub answers,
+ * and take whatever it has sent. */
+static void net_poll(uint32_t now)
+{
+	uint8_t buf[2048];
+	int n;
+
+	if (g_netsock == NET_BAD) return;
+	if (!g_net_heard && now - g_net_hello_at >= 50) {
+		uint8_t h[2] = { 'H', (uint8_t)g_netnode };
+		net_send(h, 2);
+		g_net_hello_at = now;
+	}
+	while ((n = recvfrom(g_netsock, (char *)buf, sizeof buf, 0, NULL, NULL)) > 0) {
+		g_net_heard = 1;
+		g_net_in++;
+		if (buf[0] == 'P' && n > 1) pkt_add_raw(buf + 1, (uint32_t)(n - 1));
+		else if (buf[0] == 'R' && n > 1) rx_append(buf + 1, (size_t)(n - 1));
+		else if (buf[0] == 'Q') g_net_quit = 1;
+	}
+}
+
+/* --realtime: pace the timebase to the wall clock, in hundredths. A bot pod
+ * with no window needs it as much as the one a person is flying, or it lives
+ * its game many times faster than the pods around it. */
+static int g_realtime;
+
+static uint32_t wall_hundredths(void)
+{
+#ifdef _WIN32
+	return (uint32_t)(GetTickCount64() / 10);
+#else
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (uint32_t)(t.tv_sec * 100 + t.tv_nsec / 10000000);
+#endif
+}
+
+static void realtime_pace(void)
+{
+	static int ready;
+	static uint32_t base;
+	uint32_t w = wall_hundredths();
+
+	if (!ready) {
+		base = g_clock_val - w;
+		g_clock_rt = 1;
+		ready = 1;
+	}
+	g_clock_wall = base + w;
+}
+
+static void net_send_packet(uint32_t node, const uint8_t *d, uint32_t n)
+{
+	uint8_t buf[2 + 512];
+	if (n > 512) n = 512;
+	buf[0] = 'P';
+	buf[1] = (uint8_t)node;
+	memcpy(buf + 2, d, n);
+	net_send(buf, (int)n + 2);
+	g_net_out++;
+}
+
 static uint32_t g_monbase;
 static void mon_pkt_arm(uint32_t base, unsigned n);
 
@@ -1383,6 +1535,8 @@ static void mon_install(uint32_t base)
 		       "at %08X and will overwrite packet bytes\n",
 		       g_clock_addr, base + MON_PKT_OFF);
 	mon_pkt_arm(base, 0);
+	g_pkt_next = 1;
+	g_pkt_skip = 1;
 }
 
 /* Put packet `n` where the firmware will read it. Its header is a word it does
@@ -1407,17 +1561,22 @@ static void mon_pkt_arm(uint32_t base, unsigned n)
  * is what tells the firmware the wire is quiet. */
 static void mon_recv_polled(void)
 {
-	if (!g_npkts) return;
 	/* This runs as the stub is entered, before it executes, so the packet
 	 * armed now is the one this poll reads. Arming the next one on the same
-	 * poll would overwrite a packet the firmware has not looked at yet. */
-	if (g_pkt_delivered) {
-		if (g_pkt_delivered < g_npkts)
-			mon_pkt_arm(g_monbase, g_pkt_delivered);
-		else
-			mon_slot(MON_SLOT_RECV, MON_STUB_NULL, sizeof MON_STUB_NULL);
-	}
+	 * poll would overwrite a packet the firmware has not looked at yet -
+	 * hence the first poll, which reads what mon_install armed, arms
+	 * nothing. The queue can grow while the pod runs (--net), so the next
+	 * packet is an index, and a drained queue starts again at zero. */
 	g_pkt_delivered++;
+	if (g_pkt_skip) { g_pkt_skip = 0; return; }
+	if (g_pkt_next < g_npkts) {
+		mon_pkt_arm(g_monbase, g_pkt_next++);
+		g_pkt_null = 0;
+	} else {
+		if (!g_pkt_null) mon_slot(MON_SLOT_RECV, MON_STUB_NULL, sizeof MON_STUB_NULL);
+		g_pkt_null = 1;
+		if (g_net) g_pkt_next = g_npkts = 0;
+	}
 }
 
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
@@ -1896,7 +2055,14 @@ static int rirq_asserted(void)
 {
 	uint8_t *p;
 	if (g_rirq_pending > 1) return 0;		/* still working */
+	/* In real time a frame takes at least 3 hundredths, about the 30 a
+	 * second the board managed. Without this an instant renderer lets a pod
+	 * post frames - and its position broadcasts with them - thousands of
+	 * times a second, and a network of pods drowns in them. */
+	if (g_rirq_pending == 1 && g_clock_rt && g_clock_val < g_rirq_next)
+		return 0;
 	if (g_rirq_pending == 1) {			/* just finished */
+		g_rirq_next = g_clock_val + 3;
 		m68k_write_memory_32(RIRQ_CSR, (uint32_t)RIRQ_DONE << 16);
 		g_rirq_pending = -1;
 	}
@@ -2696,6 +2862,7 @@ int main(int argc, char **argv)
 			 * keyboard is its panel; see live_key. */
 			g_live = 1;
 			g_capture = 1;
+			g_realtime = 1;
 		}
 #endif
 		else if (!strcmp(a, "--set-at") && i + 2 < argc && g_setats < TAPS) {
@@ -2760,6 +2927,28 @@ int main(int argc, char **argv)
 		 * nothing has ever driven this receiver before, so the bytes are
 		 * given as hex - a control value is not text. */
 		else if (!strcmp(a, "--rio-late") && i + 1 < argc) g_rio_late = atoi(argv[++i]);
+		else if (!strcmp(a, "--realtime")) g_realtime = 1;
+		else if (!strcmp(a, "--net") && i + 1 < argc) {
+			if (!net_open(argv[++i])) { fprintf(stderr, "--net wants HOST:PORT\n"); return 1; }
+			g_net = 1;
+		}
+		else if (!strcmp(a, "--net-node") && i + 1 < argc && g_setats + 2 <= TAPS) {
+			/* This pod is node N to the hub. Inside the firmware every
+			 * pod in a game carries the game's address, 1/1, and sends
+			 * to the hub at node 0xFE: a receiver posts what carries the
+			 * game's address and forwards anything else, so pods with
+			 * addresses of their own relay each other's traffic back and
+			 * forth for ever. The node is the hub's business - which
+			 * pod it delivers to - not the game's. Written once the event
+			 * pump runs, as the monitor would have. */
+			g_netnode = atoi(argv[++i]);
+			g_setat_pc[g_setats] = 0x02122154;
+			g_setat_addr[g_setats] = 0x0218AEB0;
+			g_setat_val[g_setats++] = 0x010101FEu;
+			g_setat_pc[g_setats] = 0x02122154;
+			g_setat_addr[g_setats] = 0x02179D30;
+			g_setat_val[g_setats++] = 0x00000101u;
+		}
 		else if (!strcmp(a, "--send-log") && i + 1 < argc) {
 			g_sendlog = fopen(argv[++i], "w");
 			if (!g_sendlog) { fprintf(stderr, "cannot write %s\n", argv[i]); return 1; }
@@ -2884,6 +3073,8 @@ int main(int argc, char **argv)
 			m68k_set_irq((unsigned)lvl);
 		}
 		if ((step % g_clock_div) == 0) clock_tick();
+		if (g_net && (step & 0xFFF) == 0) net_poll(g_clock_val);
+		if (g_realtime && (step & 0xFFF) == 0) realtime_pace();
 		if (g_monstub && (pc - g_monstub) < MON_SLOTS * MON_STUB_SZ &&
 		    !((pc - g_monstub) % MON_STUB_SZ)) {
 			uint32_t slot = (pc - g_monstub) / MON_STUB_SZ;
@@ -2910,6 +3101,7 @@ int main(int argc, char **argv)
 
 		if (!mapped(pc)) { stop = "pc left mapped memory"; break; }
 		if (g_vector_hit) { stop = "took an exception with no vector table"; break; }
+		if (g_net_quit) { stop = "the hub said quit"; break; }
 
 		if (trace_n && step >= trace_from && step < trace_from + trace_n) {
 			char buf[128];
@@ -2992,9 +3184,11 @@ int main(int argc, char **argv)
 	if (g_peeks) peek_report();
 	if (g_scenefile) scene_report();
 	if (g_frameout) frame_report();
-	if (g_npkts)
+	if (g_pkt_queued)
 		printf("\npackets: %u queued, the wire polled %d times\n",
-		       g_npkts, g_pkt_delivered);
+		       g_pkt_queued, g_pkt_delivered);
+	if (g_net)
+		printf("net: %u datagrams in, %u packets out\n", g_net_in, g_net_out);
 	if (g_sent)
 		printf("packets: %u transmitted\n", g_sent);
 	if (g_sendlog) fclose(g_sendlog);
