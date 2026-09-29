@@ -2878,8 +2878,9 @@ stride `0x6B4` - and all three write the same three fields:
 | `0x0214C57E` | `[0x021A5DB8]`, the workhorse | 9 |
 | `0x0214C61E` | `[0x023A9ED6]`, starts at **950** | 0 |
 
-The third allocates from the top of the arena and nothing calls it - a pool for
-short-lived things that this build never uses.
+The third allocates from the top of the arena. Nothing calls it directly, and
+this was read as a pool the build never uses; it is reached through a pointer,
+and a fight fills it with class 5 hit effects (see *The controls*).
 
 Each caller asks for exactly one class, which makes the nine callers of
 `0x0214C57E` a table of constructors:
@@ -3358,6 +3359,51 @@ heading, `+0x8A` into `+0x138`, the stick pair `+0x86`/`+0x88` through
 `0x0214E064` into `+0x110`; modes 2 and 3 route them differently, and
 `+0x134`/`+0x138` start at (240, 180), the screen centre, where the HUD draws
 its reticle.
+
+**The buttons.** Button-down reports go to `0x0213187A` and a switch on the
+id at `0x02132536`. Most arms announce themselves on the head-up display
+through `0x02106120`, so the table names itself:
+
+| id | the display says | or it does |
+|---|---|---|
+| `00` `04` `08` | `RADAR` / `MAP` / `DAMAGE DISPLAY SELECTED` | |
+| `10` | `INDIRECT FIRE MODE` | |
+| `1C` / `51` | `TWISTING TORSO RIGHT` / `LEFT` | `+0xBB` bits 5 / 4 |
+| `20` | `SEARCH LIGHT ON` / `OFF` | toggles `+0xBB` bit 2 |
+| `24` / `2C` | `MOVING VIEW UP` / `DOWN` | `+0xBB` bits 6 / 7 |
+| `28` | `CENTERING THE TORSO` | `+0xBB` bit 3 |
+| `30` / `31` | `STICK MOVES CROSSHAIRS` / `STICK TURNS / TIPS TORSO` | `+0x8F` bit 1; `30` also sets `+0x90` to 3 |
+| `32` / `33` | `BASIC MODE ENABLED` / `ADVANCED MODE ENABLED` | `+0x90` to 1 / 3; basic also recentres torso and crosshair |
+| `34`-`3B` | | set and clear `+0x8F` bits 2-5 |
+| `3C` `3D` `43` | `RADAR AT 2 KM RANGE`, `ZOOM IN RADAR`, `ZOOM OUT RADAR` | |
+| `3E` `3F` | `FO SELECT` | |
+| `40` | `TARGET SELECT` | |
+| `41` `42` | `DAMAGE DISPLAY ON`, `MAP GRID ON` | |
+| `53` | `FORWARD OBSERVER ON` / `OFF` | |
+| **`A5` `A6` `A7`** | | **triggers**: set `+0x93` bits 1, 2, 0 and call `0x0215A9B4` |
+| `A8` | | toggles `+0x7C` bit 0 |
+
+`30`/`31` are why the stick seemed to do nothing: what it moves is a mode.
+
+**The triggers fire.** A linked MadCat with a Loki 100 units ahead of it, and
+one report, `B1 A5`: `0x0215A9B4` runs, the workhorse allocator hands out
+class 11 things - the shots - the pod puts its fire on the wire, and a shot
+flies out to about 1000 units before it is freed. The Loki takes the hits:
+two class 5 things appear at slots 950 and 951, model 80, while it stands,
+and between frame lists 2800 and 2900 **it dies** - `0x0213424E` sets off a
+ring of explosions at offsets round the body through `0x0213EA72`, then tears
+the Mech down at `0x02134D6C`. The slot is freed and the next shot reuses it.
+
+**The top-of-arena pool is used after all.** The class 5 things at 950 and
+951 are written from `0x0214C654`, inside `0x0214C61E` - the allocator the
+table above says nothing calls. Nothing calls it *directly*; it is reached
+through a pointer. Model 80 is a type 4 resource, in the same block as the
+HUD's reticle models 72-79.
+
+`--frame-at N` draws display list N instead of the last one that placed a
+model, which is how a moment in a fight is looked at: `--frame-out` reports
+which list it drew out of how many were walked. `BATTLEPOD_UNBUFFERED=1` in
+the environment makes stdout unbuffered, so a run that dies keeps its output.
 
 ### The slot allocator
 

@@ -1437,12 +1437,14 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
  * the culler - so a frame is fully described, for our purposes, by these. */
 #define FRAME_OBJS 1024
 struct pod_frame {
-	int have_cam;
+	int have_cam, seq;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
 	int n;
 	struct { uint32_t entity, model; float rot[9], at[3]; } obj[FRAME_OBJS];
 };
 static struct pod_frame g_frame_cur, g_frame_last;
+static int g_frames_walked;
+static int g_frame_at;		/* --frame-at: the list to draw, not the last */
 static const char *g_frameout;
 
 static void rstub_dlist(uint32_t ti_byte_addr)
@@ -1452,6 +1454,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 
 	rslog("  display list at TI %08X: %u longwords\n", ti_byte_addr, count);
 	memset(&g_frame_cur, 0, sizeof g_frame_cur);
+	g_frame_cur.seq = ++g_frames_walked;
 	if (count == 0 || count > 0x40000) {
 		rslog("    implausible length, not walked\n");
 		return;
@@ -1539,7 +1542,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 					g_frame_cur.obj[f].rot[k] = as_float(dl_word(ti_byte_addr, at + 6 + k));
 				for (k = 0; k < 3; k++)
 					g_frame_cur.obj[f].at[k] = as_float(dl_word(ti_byte_addr, at + 15 + k));
-				if (g_frame_cur.have_cam)
+				if (g_frame_cur.have_cam && (!g_frame_at || g_frame_cur.seq <= g_frame_at))
 					g_frame_last = g_frame_cur;
 			}
 			/* Types nobody has named yet are printed raw, eight to
@@ -1597,6 +1600,7 @@ static void frame_report(void)
 	cam.turn = atan2f(-fx, fz);
 	cam.pitch = atan2f(fy, sqrtf(fx * fx + fz * fz));
 	cam.dist = 0;
+	printf("list %d of %d walked; ", fr->seq, g_frames_walked);
 	printf("eye (%.1f, %.1f, %.1f) height %.2f, turn %.1f deg, %d models\n",
 	       eye[0], eye[2], 0.0f, eye[1], cam.turn * 57.29578f, fr->n);
 
@@ -2394,6 +2398,9 @@ int main(int argc, char **argv)
 	uint32_t pc = 0, blk_lo = 0xFFFFFFFFu, blk_hi = 0;
 	uint32_t blk_regs[16] = {0};
 	int blk_have = 0;
+
+	/* A crash loses whatever stdout had buffered; this keeps it. */
+	if (getenv("BATTLEPOD_UNBUFFERED")) setvbuf(stdout, NULL, _IONBF, 0);
 	const char *stop = "instruction budget exhausted";
 
 	for (i = 1; i < argc; i++) {
@@ -2482,6 +2489,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
 		else if (!strcmp(a, "--frame-out") && i + 1 < argc) g_frameout = argv[++i];
+		else if (!strcmp(a, "--frame-at") && i + 1 < argc) g_frame_at = atoi(argv[++i]);
 		else if (!strcmp(a, "--scene-drop") && i + 1 < argc) g_scenedrop = atoi(argv[++i]);
 		else if (!strcmp(a, "--amiga") && i + 1 < argc) g_amiga = argv[++i];
 		else if (!strcmp(a, "--scene-view") && i + 3 < argc) {

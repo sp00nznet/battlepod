@@ -582,6 +582,13 @@ fi
 # because a Mech still dropping in ignores the stick.
 DRIVE=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --rio-late 50000 --rio-in '01 00 04 04 C0 A0 03 40 A3 01 00 04 04 C0 A4 03 40 A7'     --peek 021FA0E4:10 --peek 021FA158:4 --peek 021FA174:4     --steps 700000000 --top 0 2>&1 || true)
 
+# Scenario 4P: a fight. A MadCat and a Loki 100 units ahead of it, both by
+# MECH_CLASS, the pod linked to the MadCat, and one button report: B1 A5, a
+# trigger. 0x0215A9B4 fires, class 11 shots come out of the arena, the pod
+# puts its fire on the wire, and the Loki dies - 0x0213424E sets off its
+# explosions and tears it down at 0x02134D6C.
+FIGHT=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 02 45 FA 00 00 45 F6 E0 00 40 AC CC CD 4C 6F 6B 69 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --rio-late 50000 --rio-in '01 00 02 02 B1 A5 56'     --tap 0215A9B4 --tap 02134D6C     --steps 120000000 --top 0 2>&1 || true)
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -696,6 +703,9 @@ CHECKTEXT="$DRIVE"
 check_contains '0000  03 40 00 00 00 00 00 00 03 40'                  # throttle and pedal filed
 check_contains '0000  3E 89 F4 9F'                                    # top speed, 97 kph
 check_contains '0000  43 90 32 88'                                    # and it has turned
+CHECKTEXT="$FIGHT"
+check_contains 'tap 0215A9B4 hit 1'                                   # the trigger fires
+check_contains 'tap 02134D6C hit 1'                                   # and the Loki is destroyed
 if [ -n "$MAP" ]; then
     CHECKTEXT="$MAP"
     check_contains 'entity 733 model 11 at (5365.0, 7660.0, 0.0): 11 polygons'  # BadLands, from the drop

@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The buttons, and a fight.** The Mech's button switch at `0x02132536`
+  names its own arms on the head-up display - radar, map and damage displays,
+  torso twist, view up and down, the searchlight, target select, forward
+  observer, basic and advanced control. `A5`-`A7` are the **triggers**. One
+  `B1 A5` from a MadCat with a Loki 100 units ahead fires shots out of the
+  arena, puts the fire on the wire, and **destroys the Loki**: `0x0213424E`
+  sets off its explosions and tears it down.
+- Buttons `30`/`31` choose whether the stick moves the crosshairs or the
+  torso, which is why the stick alone seemed to do nothing.
+- **`--frame-at N`** draws display list N rather than the last one that
+  placed a model, and `--frame-out` reports which list it drew of how many.
+- **`BATTLEPOD_UNBUFFERED=1`** makes stdout unbuffered, so a run that dies
+  keeps its output.
+- **Fixed**: the top-of-arena allocator `0x0214C61E` was written up as never
+  used. It has no direct callers, but a fight fills it with class 5 hit
+  effects.
+- Scenario 4P. **277/277.**
 - **The controls work.** The panel's input reports, named by the firmware's
   own input viewer: `B0`/`B1 id` a button up and down, `C0 id hi lo` an
   analog value, `D0 key` a keypad key. Analog `A0`-`A4` are filed into the

@@ -227,18 +227,16 @@ move.*
   without logging a name (2, 3, 6, 11, 14, 17, 18), and the console's remaining
   class names have to be among them. Settled by: a string on one of those seven
   constructors, or a scenario that creates one.
-- **What the stick and the left pedal do.** The report format is settled (see
-  DEVICES.md, *The controls*): `A0` is the throttle and `A4` turns. `A1`/`A2`
-  at the stick's full range and `A3` at the pedal's moved nothing watched in
-  mode 1 - not the heading, the position, `+0x100`, `+0x110` or the reticle
-  at `+0x134`/`+0x138`. Which of the manual's pedal modes `+0x90` is, and what
-  the buttons' ids are, is open too. Settled by: reading `0x0214E064`, or
-  sweeping the modes.
-
----
-
-## Deliberately not attempted
-
+- **What the stick and the left pedal do.** The report format and the
+  buttons are settled (see DEVICES.md, *The controls*). The stick's effect is
+  a mode - buttons `30`/`31` choose crosshairs or torso - and neither was
+  selected when `A1`/`A2` were tried; `A3` at full scale moved nothing
+  watched in mode 1. Settled by: trying the stick after button `30` or `31`.
+- **What weapon each trigger fires, and what hit the Loki.** `A5` alone fires
+  and destroys a Loki at 100 units; `A6` and `A7` set other bits of the same
+  mask. Which of the MadCat's weapons each group holds, and what the class 11
+  shots are, is not read. Model 80, the hit effect, is a type 4 resource and
+  `--frame-out` does not draw it.
 - **Type 7**, 607 KB of the archive. Compressed, decompressor readable at
   `0xFE0090F0`, but the first longword is shared across groups of records rather
   than being a per-record length - so there is no oracle, and everything else
