@@ -3151,6 +3151,86 @@ Mech was ever what was missing: it was a visibility range, which is the
 console's to send, and a viewer that is a constructed Mech rather than a
 hand-classed slot.
 
+### A pilot, a chassis, and the frame drawn
+
+**The chassis is `0xF8`'s `+0x08`.** The selector-1 arm at `0x02104202`
+hard-codes where the Mech goes - `(8000, 8000, 5.4)`, heading 0 - and passes
+the word at `+0x08` to the constructor, which stores it at the Mech's `+0x7E`.
+That is the index the frame builder multiplies by `0x3BE` into the vehicle
+table at `0x02170566`, and the index `tools/vehicles.py` numbers the ROM's 38
+records by. The pod agrees with it on every chassis tried:
+
+| `+0x08` | vehicle record | model in the type 3 |
+|---|---|---|
+| 0-3 | MadCat Prime, V1-V3 | 452 |
+| 4-7 | Vulture Prime, V1-V3 | 453 |
+| 8 | Loki Prime | 451 |
+| 12 | Thor Prime | 454 |
+| 30 | Sunder Prime | 455 |
+| 34 | Avatar Prime | 456 |
+
+The same arm then sets up a second thing at `0x02169932` with a heading of 180
+and a 30-degree field at `+0x5A` - a camera looking back at what it made. So
+`0xF8` selector 1 is a viewer for vehicles, which is why it fixes the position
+itself. It is not the console's `MECH_CLASS`.
+
+**`0xED` is `PLAYER_LINK`.** Its handler indexes the arena with `+0x32` and
+switches on that entity's class - 1, 7, 9, 10, 12, 13, 16, 19. For a Mech,
+`0x021350FA` copies the string at `+0x0A` into the entity's `+0x52` (the name
+the targeting display prints for a target), and when `+0x08`/`+0x09` match
+this pod's node it makes the entity **`My_Mech_Ptr`**. So the circle
+UNRESOLVED.md describes - `My_Mech_Ptr` starts as class 0 slot 0, and only a
+class 1 one reaches the per-frame Mech work - is broken the way the console's
+log says a game starts: create the vehicles, then link each pod to its own.
+
+```
+0xE5  a range of 500 at +0x44 and +0x48
+0xF8  selector 1: a MadCat in slot 1
+0xED  +0x32 = 1
+```
+
+and with nothing written into memory by hand, `My_Mech_Ptr` is `0x021FA060`,
+the class 1 dispatch runs every frame, and the frame is built from the Mech's
+own seat: the camera at its position, the viewer's own type 3 (model `0x3A`)
+and searchlight, and the head-up display centred at (240, 180).
+
+`0x02134F06`, which builds a Mech from mission-record fields, is **not** the
+start of a game. Its only caller in the Mech's per-frame work runs it when the
+mission clock at `0x02193C1C` has gone negative, after tearing down the current
+Mech - it is how a pod resets for the next game.
+
+`0xE8` is the matching destroy: it switches on the class of the entity its
+`+0x08` names, runs that class's teardown, and ends in `0x0214C69C`.
+
+**What a type 3 carries.** The whole per-Mech payload the renderer gets is
+
+| longwords | |
+|---|---|
+| 0 | the entity |
+| 3 | the model: a skeleton, 451-456 |
+| 4-12 | a 3x3 rotation |
+| 13-15 | the position, as (X, height, -Y) |
+| 38-81 | 21 joint (sin, cos) pairs |
+| 86-277 | 16 node matrices, 4x3 each |
+
+and a MadCat's and a Loki's differ **only in the model id**. No part ids are
+in it: the renderer finds the parts from the skeleton. What follows longword
+272 differs between runs in a way nothing else does and looks like memory the
+record did not write.
+
+**The `$2C0` scene item's third value is the heading**, not a near plane. It
+reads 1.0, 0 and 180.0 in runs whose viewers face 1, 0 and 180 degrees - the
+wrapped sum of the viewer's `+0xF8` and `+0xFC` the builder computes at
+`0x0212DCEC`.
+
+**`--frame-out`** draws the last frame that placed a model, from the pod's
+own camera: the eye is the draw object's translation, the view runs along the
+third row of its matrix, and each type 3 goes through the rig assembler. The
+MadCat comes out 224 polygons, standing on the ground plane - its placement
+height of 5.4 is the rig's hip height, so the feet meet the floor without any
+adjustment. Its arms are missing, as they are from `--rig`: `516` and `517`
+are placed per frame.
+
 ### The slot allocator
 
 `0x0211E15E` is the allocator both constructors use, and it is not the entity

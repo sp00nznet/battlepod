@@ -8,6 +8,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--frame-out FILE` draws what the pod put on screen**: the camera and every
+  placed model from the last display list the firmware posted, with skeletons
+  assembled into whole mechs. The first one is a MadCat, 224 polygons, feet on
+  the ground, seen from 40 units off.
+- **The chassis is `0xF8`'s `+0x08`**, an index into the ROM's 38 vehicle
+  records in the order `tools/vehicles.py` reads them. The pod agrees on all
+  six skeletons: 0 MadCat 452, 4 Vulture 453, 8 Loki 451, 12 Thor 454,
+  30 Sunder 455, 34 Avatar 456.
+- **A pilot with nothing written by hand.** `0xED` is `PLAYER_LINK`: it
+  switches on the class of the entity `+0x32` names, and for a Mech makes it
+  `My_Mech_Ptr` when `+0x08`/`+0x09` are this pod's node. `0xE5`, `0xF8`,
+  `0xED` and the pod is flying the Mech it was given - the order the console's
+  own log starts a game in.
+- `0x02134F06` is the **game-over reset**, reached only once the mission clock
+  is negative - not the start of a game. `0xE8` is a class-dispatched
+  **destroy**.
+- **A type 3's layout**: entity, model, a 3x3, the position, 21 joint pairs
+  and 16 node matrices. A MadCat's and a Loki's differ only in the model id.
+- **The `$2C0` scene item's third value is the heading**, not a near plane.
+- Scenarios 4I (the Avatar) and 4J (the linked pilot), and the frame drawn in
+  4H. **264/264.**
 - **The created Mech is drawn**: a MadCat, as the firmware's own type 3 record
   naming model `0x1C4` (452), with a type 4 on the ground under it and a
   type 5 searchlight at 8.2 up, colour (1.0, 0.8, 0.4), cone cos 20°/10°. The

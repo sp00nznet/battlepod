@@ -335,6 +335,24 @@ grammar came from the operator console that parses them:
 ./build/view.exe out/map.rgb
 ```
 
+**Draw what the pod itself put on screen.** `--frame-out` takes the camera and
+the placed models out of the last display list the firmware posted and draws
+them. This one gives the pod a visibility range (`0xE5` `+0x44`/`+0x48`),
+creates a Mech from vehicle record `+0x08` (0 is the MadCat Prime), and stands
+the viewer 40 units off facing it:
+
+```
+E5="E5 $(printf '00 %.0s' $(seq 59))00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 $(printf '00 %.0s' $(seq 20))"
+F8="F8 00 00 00 00 01 00 00 00 00 $(printf '00 %.0s' $(seq 86))"
+./build/battlepod.exe "$GF/Full_Load_3_0" --duart 11000 --rstub 3FF00000 --rirq --astub \
+    --monitor --clock 2000808 --set 40000100=1234567 \
+    --set-at 02122154 21F99AE=00000001 --set-at 02122154 21F99D2=45FA0000 \
+    --set-at 02122154 21F99D6=45F8C000 --set-at 02122154 21F9AC4=41F00000 \
+    --set-at 02122154 21F9AA4=43340000 \
+    --packet "$E5" --packet "$F8" --frame-out out/podframe.rgb --steps 250000000
+./build/view.exe out/podframe.rgb
+```
+
 **Run the whole cockpit.** `make cockpit` builds the emulator with its windows
 - lamps, displays, bar graphs and the main view - in one process, drawing its
 own geometry in C as the firmware runs:

@@ -1393,12 +1393,27 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
 	}
 }
 
+/* What the pod put in a frame, kept so it can be drawn afterwards: the draw
+ * object's camera and every type 3 record. A type 3 is a whole model placed
+ * in the world - the viewer's own, and each Mech the world pass lets through
+ * the culler - so a frame is fully described, for our purposes, by these. */
+#define FRAME_OBJS 64
+struct pod_frame {
+	int have_cam;
+	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
+	int n;
+	struct { uint32_t entity, model; float rot[9], at[3]; } obj[FRAME_OBJS];
+};
+static struct pod_frame g_frame_cur, g_frame_last;
+static const char *g_frameout;
+
 static void rstub_dlist(uint32_t ti_byte_addr)
 {
 	uint32_t count = dl_word(ti_byte_addr, 0), at = 1;
 	int records = 0;
 
 	rslog("  display list at TI %08X: %u longwords\n", ti_byte_addr, count);
+	memset(&g_frame_cur, 0, sizeof g_frame_cur);
 	if (count == 0 || count > 0x40000) {
 		rslog("    implausible length, not walked\n");
 		return;
@@ -1426,6 +1441,9 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			      (int)dl_word(ti_byte_addr, at + 8), (int)dl_word(ti_byte_addr, at + 9));
 		} else if (type == 1) {
 			int r, c;
+			for (r = 0; r < 12; r++)
+				g_frame_cur.cam[r] = as_float(dl_word(ti_byte_addr, at + 2 + r));
+			g_frame_cur.have_cam = 1;
 			rslog("    object    %u picks, %u longwords, viewport %u, "
 			      "items from record %u, screen %dx%d\n",
 			      dl_word(ti_byte_addr, at + 34), len,
@@ -1473,11 +1491,24 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 		} else {
 			uint32_t k;
 			rslog("    type %u, %u longwords\n", type, len);
+			/* A type 3 is an entity, a model id, a 3x3 and a
+			 * position; the rest is its joints. */
+			if (type == 3 && len >= 18 && g_frame_cur.n < FRAME_OBJS) {
+				int f = g_frame_cur.n++;
+				g_frame_cur.obj[f].entity = dl_word(ti_byte_addr, at + 2);
+				g_frame_cur.obj[f].model = dl_word(ti_byte_addr, at + 5);
+				for (k = 0; k < 9; k++)
+					g_frame_cur.obj[f].rot[k] = as_float(dl_word(ti_byte_addr, at + 6 + k));
+				for (k = 0; k < 3; k++)
+					g_frame_cur.obj[f].at[k] = as_float(dl_word(ti_byte_addr, at + 15 + k));
+				if (g_frame_cur.have_cam)
+					g_frame_last = g_frame_cur;
+			}
 			/* Types nobody has named yet are printed raw, eight to
 			 * a line, floats where they look like floats - the Mech
 			 * arrives as a type 3 and was invisible for as long as
 			 * this branch printed only a length. */
-			for (k = 2; k < len && k < 98 && at + k < count + 1; k++) {
+			for (k = 2; k < len && k < 402 && at + k < count + 1; k++) {
 				uint32_t v = dl_word(ti_byte_addr, at + k);
 				if ((k - 2) % 8 == 0) rslog("      %4u ", k - 2);
 				if ((v > 0x30000000u && v < 0x50000000u) ||
@@ -1494,6 +1525,82 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			return;
 		}
 		at += len;
+	}
+}
+
+/* Draw the last frame the pod posted that placed a model, from the pod's own
+ * camera. The display list's axes are (X, height, -Y); the rasteriser's world
+ * is (X, height, Y), so the third axis flips on the way in. The camera looks
+ * along the third row of the draw object's matrix - measured, not assumed:
+ * that row is (0, 0, -1) for the heading at which the culler lets the Mech
+ * through, and the Mech lies in that direction.
+ *
+ * Skeletons (451-456) go through the rig assembler and come out as whole
+ * mechs; anything else is drawn as a plain model. The viewer's own record,
+ * which sits at the eye, is skipped. Joint angles are not applied: the
+ * stance is the rig's rest pose, which is what a standing Mech sends. */
+static void frame_report(void)
+{
+	struct pod_frame *fr = &g_frame_last;
+	struct ras_cam cam;
+	float fx, fy, fz, eye[3];
+	int i, poly = 0, drawn = 0;
+	FILE *f;
+
+	printf("\npod frame: ");
+	if (!fr->have_cam || fr->n == 0) {
+		printf("no frame placed a model\n");
+		return;
+	}
+	eye[0] = fr->cam[9]; eye[1] = fr->cam[10]; eye[2] = -fr->cam[11];
+	fx = fr->cam[6]; fy = fr->cam[7]; fz = -fr->cam[8];
+	memset(&cam, 0, sizeof cam);
+	memcpy(cam.centre, eye, sizeof eye);
+	cam.turn = atan2f(-fx, fz);
+	cam.pitch = atan2f(fy, sqrtf(fx * fx + fz * fz));
+	cam.dist = 0;
+	printf("eye (%.1f, %.1f, %.1f) height %.2f, turn %.1f deg, %d models\n",
+	       eye[0], eye[2], 0.0f, eye[1], cam.turn * 57.29578f, fr->n);
+
+	ras_background(&g_sceneframe, RAS_H / 2);
+	for (i = 0; i < fr->n; i++) {
+		struct ras_place at;
+		const struct mesh *m;
+		uint32_t id = fr->obj[i].model;
+		float dx = fr->obj[i].at[0] - eye[0], dz = -fr->obj[i].at[2] - eye[2];
+		int n;
+
+		if (dx * dx + dz * dz < 1.0f) {
+			printf("  entity %u model %u: at the eye, not drawn\n",
+			       fr->obj[i].entity, id);
+			continue;
+		}
+		if (id >= 451 && id <= 456) {
+			rig_assemble(id);
+			m = &g_rig;
+		} else if (rig_load(id)) {
+			m = &g_part;
+		} else {
+			printf("  entity %u model %u: no geometry\n", fr->obj[i].entity, id);
+			continue;
+		}
+		at.x = fr->obj[i].at[0];
+		at.y = -fr->obj[i].at[2];
+		at.z = fr->obj[i].at[1];
+		at.heading = atan2f(fr->obj[i].rot[2], fr->obj[i].rot[0]);
+		at.scale = 1.0f;
+		n = ras_draw_at(&g_sceneframe, m, &cam, &at, 0.0f, 1);
+		printf("  entity %u model %u at (%.1f, %.1f, %.1f): %d polygons\n",
+		       fr->obj[i].entity, id, at.x, at.y, at.z, n);
+		poly += n;
+		drawn++;
+	}
+	f = fopen(g_frameout, "wb");
+	if (f) {
+		fwrite(g_sceneframe.px, 1, sizeof g_sceneframe.px, f);
+		fclose(f);
+		printf("  %s: %dx%d, %d models, %d polygons\n",
+		       g_frameout, RAS_W, RAS_H, drawn, poly);
 	}
 }
 
@@ -2325,6 +2432,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--rig-all")) g_rig_all = 1;
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
+		else if (!strcmp(a, "--frame-out") && i + 1 < argc) g_frameout = argv[++i];
 		else if (!strcmp(a, "--scene-drop") && i + 1 < argc) g_scenedrop = atoi(argv[++i]);
 		else if (!strcmp(a, "--amiga") && i + 1 < argc) g_amiga = argv[++i];
 		else if (!strcmp(a, "--scene-view") && i + 3 < argc) {
@@ -2627,6 +2735,7 @@ int main(int argc, char **argv)
 
 	if (g_peeks) peek_report();
 	if (g_scenefile) scene_report();
+	if (g_frameout) frame_report();
 	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();

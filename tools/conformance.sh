@@ -43,7 +43,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -523,8 +523,19 @@ NODRAW=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF0
 # viewer 40 units off facing 180, and +0x118 = 30, the Mech arrives: a type 3
 # naming model 0x1C4 (452, the MadCat), a type 4 for its shadow and a type 5
 # for its searchlight. The control is the same run with the range left zero.
-SEEN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --steps 400000000 --top 0 2>&1 || true)
+SEEN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --frame-out "$OUT.rgb"     --steps 400000000 --top 0 2>&1 || true)
 UNSEEN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --steps 400000000 --top 0 2>&1 || true)
+
+# Scenario 4I: the chassis is the word at 0xF8's +0x08, and it is an index
+# into the ROM's 38 vehicle records - the same order tools/vehicles.py reads
+# them in. Record 34 is the Avatar Prime, skeleton 456.
+AVATAR=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 22 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --frame-out "$OUT.rgb"     --steps 400000000 --top 0 2>&1 || true)
+
+# Scenario 4J: a pilot, with nothing written by hand. 0xED is PLAYER_LINK: it
+# switches on the class of the entity its +0x32 names, and for a Mech,
+# 0x021350FA makes that entity My_Mech_Ptr when the packet's +0x08/+0x09 are
+# this pod's node. Create a Mech, link it, and the pod is flying it.
+LINKED=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --peek 0218AEE4:4     --steps 400000000 --top 0 2>&1 || true)
 
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
@@ -624,8 +635,14 @@ CHECKTEXT="$SEEN"
 check_contains 'type 3, 286 longwords'                      # the Mech's model record
 check_contains 'FFFFFFFF        1C4'                        # naming model 452, the MadCat
 check_contains '300.0000   150.0000     0.9397     0.9848'  # its searchlight
+check_contains 'entity 1 model 452 at (8000.0, 8000.0, 5.4): 224 polygons'  # drawn from the pod's camera
 CHECKTEXT="$UNSEEN"
 check_count_zero 'type 3,'                                  # no visibility range, no Mech
+CHECKTEXT="$AVATAR"
+check_contains 'entity 1 model 456 at (8000.0, 8000.0, 5.4)'        # vehicle record 34, the Avatar
+CHECKTEXT="$LINKED"
+check_contains '0000  02 1F A0 60'                                  # My_Mech_Ptr is the created Mech
+check_contains 'pick (240,180)'                                     # and the HUD centres on its view
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a
