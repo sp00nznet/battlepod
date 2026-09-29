@@ -3004,6 +3004,16 @@ already recorded here (`93 10000.0000 1.0000 60.0000 0.0940 0.0620 0.0940`).
 So the pod draws. What it was missing was never the renderer - it was a viewer
 with a class.
 
+**But those 357 items are the head-up display, not the world.** All three of
+the draw-model calls that run sit in the targeting block of the Mech's frame
+builder, `0x0212EB9E`-`0x0212F0F0`. Model `0x48` is a reticle the builder
+animates - `0x021BB172` counts `0x48`..`0x4F` while there is a target and
+rests on `0x48` when there is none, which is why 73 appears exactly once - and
+`0x5F`/`0x60` are placed at integer screen coordinates taken from the viewer's
+`+0x128`/`+0x12C`. The block's other output is a `%4.0f` range readout. The
+viewer's `+0x67C` is its **target record**: `+0` a target entity index, `+8`
+the range, `+0x0C`..`+0x14` the target's position.
+
 ### The Mech reaches the culler
 
 `0x0212DB70` is the per-frame cull entry. It clears six counters and then tests
@@ -3029,7 +3039,8 @@ Total          0
 ```
 
 to `Total 1`, with `Model Time` non-zero - the Mech is a candidate the culler
-tests. It produces no polygons yet, which is the next question.
+tests. Why it then produced nothing is answered below, under *Why the created
+Mech drew nothing*.
 
 ### What a created Mech actually contains
 
@@ -3045,6 +3056,100 @@ The entity `0xF8` builds is not a stub. Reading it back:
 So the constructor does the whole job. `tools/vehicles.py` reads the same
 weapon names out of the ROM's 38 vehicle records, which is where these come
 from.
+
+### Why the created Mech drew nothing, and what it draws
+
+The world pass is inside the same frame builder. `0x0212E650` walks all 1000
+arena slots, skips any whose `+0x0D` bit 0 is clear, skips the viewer itself
+unless its `+0x0C` bit 4 is set, and dispatches on `Class_ID` through a
+13-entry table at `0x0212E944`:
+
+| class | draw routine |
+|---|---|
+| 0, 7 | none |
+| 1 | `0x0212F2C2` - the Mech |
+| 2 | `0x0214C228` (box-tested first) |
+| 3 | `0x0212BF9A` (box-tested first) |
+| 4 | `0x0212C994` |
+| 5 | `0x021233D8` (box-tested first) |
+| 6 | `0x02123E22` (box-tested first) |
+| 8 | `0x021410F2` |
+| 9 | `0x0210CA40` |
+| 10 | `0x0212A180` |
+| 11 | `0x021374AE` |
+| 12 | `0x021514A6` |
+
+The created Mech reaches `0x0212F2C2` every frame. Its first act is to ask
+`0x02111636` whether it can be seen, and every frame the answer was no.
+
+**`0x02111636` is the culler the status report counts.** The disassembler
+shows it ending at `0x021116CA`. It does not: its FPU branches are misdecoded,
+and read by hand the function carries on to `0x021117CA`:
+
+```
+d = (X - cam+0x2C, -Y - cam+0x34, Z - cam+0x30)    Total++
+|dx|, |dy|, |dz| each within r, else return 1      First Distance++
+|d|^2 within r^2, else return 1                    Second Distance++, Entering Clip++
+rotate d by the view matrix at 0x02193C5C
+z' + radius < 0: return 2                          Z Clip++
+(|x'| - radius) / (z' + radius) > tan: return 2
+(|y'| - radius) / (z' + radius) > tan: return 2
+return 0                                           Cone Reject++
+```
+
+with `r = radius + min(range, view limit)`. So **1 is out of range, 2 is out
+of the view cone, 0 is visible**. The last counter carries the report's name
+`Cone Reject`, but the path that increments it is the one that returns 0. The
+arguments, from the Mech's routine:
+
+| | |
+|---|---|
+| radius | the Mech's `+0x4A`: 5.0 |
+| range | the Mech's `+0x4E`: 1085.9 |
+| view limit | camera record `+0x64` + `+0x68` |
+| tan | `tan(viewer+0x118 x pi/180)` |
+
+**The view limit is the pod's visibility range, and it has always been zero.**
+The camera record is written by `0x02144724`, whose `+0x64` and `+0x68` are
+`(float)` of the longs at `0x02193C24` and `0x02193C28`. Those two have
+**exactly one writer** in the ROM:
+
+```
+0210E29C  move.l ($44,A0), $2193c24.l
+0210E2A8  move.l ($48,A0), $2193c28.l
+```
+
+in `0xE5`'s handler - the `WELCOME %s` message, which also carries the game
+length at `+0x3C`. Every `0xE5` this project had sent carried zeros at `+0x44`
+and `+0x48`, so the culler's reach was the Mech's own 5-unit radius. The Mech
+is built at (8000, 8000); the viewer stood at the origin.
+
+**The cone was zero wide.** `+0x118` is a half field of view: the Mech
+constructor sets it to 30.0 on the Mech it builds, matching the `60.0` in the
+scene's `$2C0` item. Slot 0 was only ever given a class, never constructed,
+so its `+0x118` is zero and so is `tan`.
+
+Send an `0xE5` with 500 at `+0x44` and `+0x48`, stand slot 0 40 units from the
+Mech with `+0x118` = 30.0, and turn it through four headings (`+0xF8`): at 0,
+90 and 270 the culler returns 2; at **180** it returns 0, and the frame grows
+from 132 longwords to 446 with three records the decoder had never printed:
+
+```
+type 5   id 0x3E8, colour (1.0, 0.8, 0.4) at (8000, 8.2, -8000),
+         300.0, 150.0, cos 20deg, cos 10deg                a searchlight
+type 4   id 0x3E9, model 0x55 at (8000, 0, -8000),
+         scale (1, 1, 2)                                   on the ground: a shadow?
+type 3   entity 1, model 0x1C4 at (8000, 5.4, -8000),
+         then a table of per-joint pairs                   the Mech
+```
+
+**`0x1C4` is 452, the MadCat** - one of the six chassis skeletons RENDERING.md
+identifies from the archive. The searchlight's numbers are the constants the
+routine pushes at `0x0212F53E`. So a created Mech is drawn, as a whole
+articulated model, by the firmware's own path. Neither the renderer nor the
+Mech was ever what was missing: it was a visibility range, which is the
+console's to send, and a viewer that is a constructed Mech rather than a
+hand-classed slot.
 
 ### The slot allocator
 

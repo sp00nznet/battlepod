@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The created Mech is drawn**: a MadCat, as the firmware's own type 3 record
+  naming model `0x1C4` (452), with a type 4 on the ground under it and a
+  type 5 searchlight at 8.2 up, colour (1.0, 0.8, 0.4), cone cos 20°/10°. The
+  frame goes from 132 longwords to 446.
+- **What stood in the way was the pod's visibility range**, not the renderer
+  and not the Mech. The culler `0x02111636` passes a thing only within its
+  radius plus `min(its range, the view limit)`, and the view limit is
+  `0x02193C24 + 0x02193C28` - written in exactly one place, `0xE5`'s handler,
+  from packet `+0x44` and `+0x48`. Every `0xE5` sent so far had zeros there.
+- **The culler, read by hand past the disassembler's misdecoded FPU
+  branches**: it returns 1 for out of range, 2 for outside the view cone and 0
+  for visible, and the cone's width is `tan` of the viewer's `+0x118`, a half
+  field of view the Mech constructor sets to 30.0 and a hand-classed slot 0
+  never gets.
+- **The world pass**: `0x0212E650` walks all 1000 slots and dispatches on
+  `Class_ID` through a 13-entry table at `0x0212E944`; the Mech's routine is
+  `0x0212F2C2`. Classes 0 and 7 draw nothing.
+- **Correction to the entry below: the 357 draw-model items are the head-up
+  display.** Model `0x48` is a targeting reticle animated through `0x4F`,
+  `0x5F`/`0x60` sit at screen coordinates, and the block also prints a `%4.0f`
+  range. The viewer's `+0x67C` is its target record.
+- **Unrecognised display-list records are printed raw** instead of as a bare
+  length; the Mech was a type 3 nobody could see inside.
+- **`--tap` stops with an error past its limit**, which is now 32, rather than
+  dropping the ninth tap in silence and making its address look unreached.
+- Scenario 4G (which draw-model call sites run), scenario 4H (the Mech seen)
+  with a no-range control. **260/260.**
 - **`--vmtrace` now logs the interpreter's own program counter** alongside the
   opcode. It is a pointer in the interpreter's frame at `(-$10e,A6)` - the cell
   every operand-taking arm steps with `addq.l #1` - and it turns an opcode

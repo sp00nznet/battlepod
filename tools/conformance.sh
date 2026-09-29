@@ -166,6 +166,9 @@ set 021F99AE = 00000001 at pc 02122154
 tap 02130296 hit 1
 tap 0214C57E hit 1
 tap 0212D058 hit 1
+tap 0212ED04 hit 1
+tap 0212EFDC hit 1
+tap 0212F02C hit 1
   0000  00 00 00 00 00 01 00 00 00 01 00 00 00 07 00 00
   0000  00 00 00 02
 mission opcodes executed: 8192
@@ -503,6 +506,26 @@ done
 DRAW=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --monitor --astub --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --steps 200000000 --top 0 2>&1 || true)
 NODRAW=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --monitor --astub --clock 2000808     --set 40000100=1234567     --steps 200000000 --top 0 2>&1 || true)
 
+# Scenario 4G: which of the draw-model emitter's 21 call sites actually run.
+# Three do, and they are all inside the Mech's own cull-and-draw op: two ask for
+# a constant model (0x60 and 0x5F, 96 and 95) and the third takes one out of
+# 0x021BB172. Eight taps used to be the limit and the ninth onward were dropped
+# in silence, which made every call site look unreached.
+"$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --monitor --astub --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --tap 0212ED04 --tap 0212EFDC --tap 0212F02C     --steps 200000000 --top 0 >> "$OUT" 2>&1 || true
+
+# Scenario 4H: the created Mech, seen. Two things stood between it and the
+# frame, and neither was the renderer. The cull test at 0x02111636 passes a
+# thing only within its own radius plus the pod's visibility range - which is
+# 0x02193C24 + 0x02193C28, written only by 0xE5's handler from packet +0x44 and
+# +0x48, and every 0xE5 sent so far carried zeros there. And its cone test uses
+# tan of the viewer's +0x118, a half field of view the Mech constructor sets to
+# 30 degrees and a hand-classed entity 0 never gets. With a range of 500, the
+# viewer 40 units off facing 180, and +0x118 = 30, the Mech arrives: a type 3
+# naming model 0x1C4 (452, the MadCat), a type 4 for its shadow and a type 5
+# for its searchlight. The control is the same run with the range left zero.
+SEEN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --steps 400000000 --top 0 2>&1 || true)
+UNSEEN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567 --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45FA0000 --set-at 02122154 21F99D6=45F8C000     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'F8 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --steps 400000000 --top 0 2>&1 || true)
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -596,6 +619,13 @@ check_count_zero() {
     fi
 }
 check_count_zero 'item $240'
+
+CHECKTEXT="$SEEN"
+check_contains 'type 3, 286 longwords'                      # the Mech's model record
+check_contains 'FFFFFFFF        1C4'                        # naming model 452, the MadCat
+check_contains '300.0000   150.0000     0.9397     0.9848'  # its searchlight
+CHECKTEXT="$UNSEEN"
+check_count_zero 'type 3,'                                  # no visibility range, no Mech
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
 # the decoder is meant to get better, and a number going up should not fail a
@@ -805,6 +835,13 @@ if [ -f "$ROM" ]; then
     check_exactly "0214C61E" 0          # the top-of-arena pool, never used
     check_exactly "0212D058" 2          # the class 1 Mech constructor
     check_exactly "02134F06" 2          # the routine that decides My_Mech_Ptr
+
+    # The draw path. 0x021452F0 writes the item $240 opcode and a model id;
+    # 0x021444E8 is the bulk append that gets the staged items into the list.
+    CHECKTEXT=$(python tools/xref.py "$ROM" 020FFFE4 --calls 021452F0 021444E8 0212DB70 2>/dev/null)
+    check_exactly "021452F0" 21         # the draw-model emitter
+    check_exactly "021444E8" 1          # append N longwords to the display list
+    check_exactly "0212DB70" 1          # the Mech's per-frame cull-and-draw op
 fi
 
 # The two halves of the game protocol have to agree, and where a message is both

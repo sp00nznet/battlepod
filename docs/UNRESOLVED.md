@@ -197,15 +197,17 @@ move.*
   hardware - the console creating the mech first, or a boot path this project
   has not found. Settled by: finding what sets slot 0's class, or what calls
   `0x02134F06` before any mech exists.
-- **Why a created Mech draws no polygons.** It is no longer invisible to the
-  system: with a viewer class in place the firmware's own cone-culling report
-  goes from `Total 0` to `Total 1` and `Model Time` becomes non-zero, so the
-  Mech is a candidate the culler tests. But `Polygon count` stays 0 and the
-  display list gains no items for it, while the pod happily draws models 72,
-  73, 95 and 96 in the same frame. Settled by: finding which entity field names
-  the model to draw, and what the cull test at `0x0212DBA4` - bit 0 of the
-  viewing entity's `+0xBB` - is gating.
-  what is supposed to, which is now the whole of the question.
+- **What visibility range the console sends.** The pod's view limit is
+  `0xE5` `+0x44` plus `+0x48`, and with both zero nothing but the head-up
+  display is ever drawn. 500 each is what this project uses, and it is a guess;
+  why the range comes in two halves is not known either. Settled by: a captured
+  `0xE5`, or the console's encoder.
+- **What the type 4 record under the Mech is.** Model `0x55` at ground level,
+  scaled (1, 1, 2) - a shadow by position, not by evidence.
+- **A viewer that is a Mech.** The created Mech draws only when slot 0 is
+  hand-given a class, a position, a heading and the `+0x118` half field of view
+  the constructor would have set. That is the same missing step as *why the pod
+  cannot start its own game*, seen from the renderer's side.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

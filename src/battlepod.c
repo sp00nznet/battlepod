@@ -320,7 +320,7 @@ static void rio_dump(const char *path)
  * the only way to see a packet the pod is about to transmit is to be standing
  * at the door when it goes out. */
 
-#define TAPS 8
+#define TAPS 32
 /* Write a longword the first time execution reaches an address. The pod's
  * own network identity is cleared by the firmware's startup and then never
  * written again - it is configuration, and it arrives from outside - so
@@ -1471,7 +1471,23 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			rslog("    items     %u longwords\n", len - 2);
 			dl_items(ti_byte_addr, at + 2, len - 2);
 		} else {
+			uint32_t k;
 			rslog("    type %u, %u longwords\n", type, len);
+			/* Types nobody has named yet are printed raw, eight to
+			 * a line, floats where they look like floats - the Mech
+			 * arrives as a type 3 and was invisible for as long as
+			 * this branch printed only a length. */
+			for (k = 2; k < len && k < 98 && at + k < count + 1; k++) {
+				uint32_t v = dl_word(ti_byte_addr, at + k);
+				if ((k - 2) % 8 == 0) rslog("      %4u ", k - 2);
+				if ((v > 0x30000000u && v < 0x50000000u) ||
+				    (v > 0xB0000000u && v < 0xD0000000u))
+					rslog(" %10.4f", as_float(v));
+				else
+					rslog(" %10X", v);
+				if ((k - 2) % 8 == 7) rslog("\n");
+			}
+			if ((k - 2) % 8) rslog("\n");
 		}
 		if (len == 0 || len > count + 1 - at) {
 			rslog("    record length %u does not fit; stopping\n", len);
@@ -2331,8 +2347,16 @@ int main(int argc, char **argv)
 			g_setat_val[g_setats] = (*c == '=') ? (uint32_t)strtoul(c + 1, NULL, 16) : 0;
 			g_setats++;
 		}
-		else if (!strcmp(a, "--tap") && i + 1 < argc && g_taps < TAPS)
+		else if (!strcmp(a, "--tap") && i + 1 < argc) {
+			/* Silently dropping the ninth tap cost an afternoon: the
+			 * run looked like the call sites were never reached when
+			 * the taps for them had never been installed. */
+			if (g_taps >= TAPS) {
+				printf("too many --tap: %d is the limit\n", TAPS);
+				return 2;
+			}
 			g_tap[g_taps++] = (uint32_t)strtoul(argv[++i], NULL, 16);
+		}
 		else if (!strcmp(a, "--tap-dump") && i + 2 < argc) {
 			g_tapoff = (int32_t)strtol(argv[++i], NULL, 0);
 			g_tapdump = (uint32_t)strtoul(argv[++i], NULL, 0);
