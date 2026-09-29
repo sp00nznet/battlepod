@@ -43,7 +43,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -589,6 +589,21 @@ DRIVE=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00
 # explosions and tears it down at 0x02134D6C.
 FIGHT=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet 'E5 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 02 45 FA 00 00 45 F6 E0 00 40 AC CC CD 4C 6F 6B 69 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --rio-late 50000 --rio-in '01 00 02 02 B1 A5 56'     --tap 0215A9B4 --tap 02134D6C     --steps 120000000 --top 0 2>&1 || true)
 
+# Scenario 4R: two pods. A pod transmits once it has an address (net, node)
+# at 0x0218AEB0, a hub node in 0x0218AEB3 and a game identity at 0x02179D32;
+# the sender at 0x021468A4 then reaches the monitor's +0x24, and --send-log
+# writes what goes out. Pod A (node 1) is given full throttle and walks
+# toward -Y, broadcasting 0xEC and 0xE7 as it goes. Pod B (node 2) has the
+# same two Mechs from the console, is linked to its own, and is fed A's
+# traffic - and its copy of A's Mech ends where A said it was.
+PODA=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 218AEB0=010101FE --set-at 02122154 2179D30=00000101     --packet 'E5 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'     --packet 'ED 00 00 00 00 00 00 00 01 01 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'     --rio-late 50000 --rio-in '01 00 04 04 C0 A0 03 40 A3'     --send-log "$OUT.sent"     --steps 300000000 --top 0 2>&1 || true)
+{ echo 'E5 00 00 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  echo 'E4 00 00 00 00 00 00 00 01 02 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  echo 'E4 00 00 00 00 00 00 00 01 02 00 00 00 00 00 00 00 01 00 00 00 02 45 FA 00 00 45 F6 E0 00 40 AC CC CD 4C 6F 6B 69 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 43 34 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  echo 'ED 00 00 00 00 00 00 00 01 02 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 00 00 00 00 00 00'
+  grep "^E[C7] " "$OUT.sent" | awk 'int((NR-1)/2)%10==0'; } > "$OUT.b"
+PODB=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 218AEB0=010201FE --set-at 02122154 2179D30=00000101     --packet-file "$OUT.b"     --peek 021FA086:12 --peek 0218AEE4:4     --steps 300000000 --top 0 2>&1 || true)
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -706,6 +721,11 @@ check_contains '0000  43 90 32 88'                                    # and it h
 CHECKTEXT="$FIGHT"
 check_contains 'tap 0215A9B4 hit 1'                                   # the trigger fires
 check_contains 'tap 02134D6C hit 1'                                   # and the Loki is destroyed
+CHECKTEXT="$PODA"
+check_contains 'packets: 9166 transmitted'                             # a pod on the network
+CHECKTEXT="$PODB"
+check_contains '0000  02 1F A7 14'                                     # pod B flies its own Mech
+check_contains '0000  45 FA 00 00 C6 18 ED 30 40 B1 DC 19'             # and sees pod A's where A put it
 if [ -n "$MAP" ]; then
     CHECKTEXT="$MAP"
     check_contains 'entity 733 model 11 at (5365.0, 7660.0, 0.0): 11 polygons'  # BadLands, from the drop

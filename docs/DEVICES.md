@@ -3430,6 +3430,45 @@ a drop point facing 0, a Loki 150 ahead, the map, `PLAYER_LINK` - and starts
 it. `SDL_VIDEODRIVER=dummy BATTLEPOD_NO_HOLD=1` runs the same thing with no
 windows, which is how the harness plays it.
 
+### Two pods
+
+**A pod transmits once it knows where it is.** The sender at `0x021468A4`
+picks a route by the low bits of its priority argument and hands the packet to
+`0x0212C78E`, which calls through `[0x0216FADE]` - the boot monitor's service
+table at `0x02000400` - at `+0x24`, with the node in D0, the length in D1 and
+the buffer in A0. A zero back is success. With everything at zero, the route
+comes out zero and nothing is sent. Three things make it go:
+
+| | |
+|---|---|
+| `0x0218AEB0` | this pod's address, net then node - the DIP switch the manual describes |
+| `0x0218AEB3` | the node packets go to: a hub, here `0xFE` |
+| `0x02179D32` | the game identity, shared by every pod in the game; `0x0210E00A` copies it into all four address words when the pod is a router |
+
+and the console's packets must name the pod's node at `+0x08`/`+0x09`, or
+`PLAYER_LINK` does not take. With those set, a driving pod calls `+0x24`
+9166 times in 300 million instructions: `0xEC` and `0xE7` in pairs, 4581 of
+each, sent to the game identity with mode 1, plus the console messages it
+forwards.
+
+`--send-log FILE` writes each one, as `--packet-file` reads them, under a
+line with the timebase and the node.
+
+**The other pod applies them.** A packet off the monitor's queue that is not
+one of the console's own opcodes goes through `0x02145E90`, is copied into
+one of 100 receive slots at `0x02183716`, and - if `buf[6..7]` is the game
+identity - posted as a kind 3 event to the game's byte-0 table. `0xEC`'s arm
+at `0x0213BA14` switches on the named entity's class and hands a Mech to
+`0x021358A0`.
+
+So: pod A, node 1, full throttle, logging what it sends. Pod B, node 2, given
+the same two Mechs by the console - A's MadCat as thing 1, its own Loki as
+thing 2 - linked to thing 2, and fed A's `0xEC`/`0xE7` traffic. B flies its
+Loki, and **its copy of A's MadCat ends at Y = -9787**, the position A's last
+`0xEC` announced. Every pod in a centre is the same firmware seeing the same
+packets; this is the whole of multiplayer, and it needed no code of ours on
+the receiving side.
+
 ### The slot allocator
 
 `0x0211E15E` is the allocator both constructors use, and it is not the entity

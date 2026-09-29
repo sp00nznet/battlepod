@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Two pods talk.** A pod transmits once it has an address at `0x0218AEB0`,
+  a hub node in `0x0218AEB3` and a game identity at `0x02179D32`: the sender
+  reaches the boot monitor's `+0x24` with node, length and buffer. A driving
+  pod sends `0xEC` and `0xE7` in pairs. Fed to a second pod that has the same
+  Mechs from the console, they move its copy of the first pod's Mech to
+  where the first pod put it.
+- **`--send-log FILE`** writes every packet the pod transmits, in the form
+  `--packet-file` reads, and the report counts them.
+- Scenario 4R. **282/282.**
 - **It can be played.** `cockpit.exe --live-pod` draws the pod's own frames
   in the main view and turns the keyboard into the panel's input reports -
   W/S throttle, A/D stick, space fire, T target select, L searchlight - and

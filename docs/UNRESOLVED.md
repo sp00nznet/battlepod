@@ -31,13 +31,13 @@ the receiving side alone. Settled by: the console's encoders, or a captured
 session.
 
 **Where the node ID reaches the software from.** The System 3.0 manual
-documents an 8-position Node ID DIP switch on the CPU board front plate and
-says communication is impossible without it. The firmware never writes
-`0x0218AEB0`/`B1`. So the switch is read either by the boot monitor - which
-this project stubs - or by the ARCNET controller as its physical node ID, in
-which case the `(net, node)` pair the game filters on is a different number
-altogether. Nothing measured says which. Settled by: a real boot monitor, or a
-capture of what a configured pod actually puts in that pair.
+documents an 8-position Node ID DIP switch on the CPU board front plate. The
+firmware reads its address from `0x0218AEB0` and never writes it except to
+copy the game identity at `0x02179D32` into it when acting as a router; this
+project sets both by hand, and with them set pods talk (see DEVICES.md, *Two
+pods*). Whether the switch reaches `0x0218AEB0` through the boot monitor or
+is the ARCNET controller's own node id is still not known. Settled by: a real
+boot monitor, or a capture of what a configured pod puts in that pair.
 
 **The feet are `473`/`476` and `493`/`496`.** By elimination from the seven-id
 block the rest of each leg came from. The adjacency rule that decides every

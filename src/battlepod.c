@@ -1279,6 +1279,30 @@ static void live_close(void)
  * the two overlap silently. */
 #define MON_PKT_OFF   0x600		/* received-packet buffer, past the stubs */
 #define MON_SLOT_RECV 6			/* +0x18: poll for a received packet */
+#define MON_SLOT_SEND 9			/* +0x24: transmit, D0 node, D1 length, A0 buffer */
+
+/* --send-log: every packet the pod transmits, one per line - the timebase,
+ * the node it went to, then the bytes from the opcode on - in the form
+ * --packet-file reads, so one pod's traffic can be fed to another. The
+ * sender at 0x021468A4 reaches the monitor's +0x24 through 0x0212C78E; a
+ * zero back is success, which the stub already returns. */
+static FILE *g_sendlog;
+static uint32_t g_sent;
+
+static void mon_send_called(void)
+{
+	uint32_t node = m68k_get_reg(NULL, M68K_REG_D0) & 0xFFFF;
+	uint32_t len = m68k_get_reg(NULL, M68K_REG_D1) & 0xFFFF;
+	uint32_t buf = m68k_get_reg(NULL, M68K_REG_A0), i;
+	uint32_t now = m68k_read_memory_32(0x02000808);
+
+	g_sent++;
+	if (!g_sendlog) return;
+	if (len > 512) len = 512;
+	fprintf(g_sendlog, "# t %u node %u\n", now, node);
+	for (i = 0; i < len; i++)
+		fprintf(g_sendlog, "%02X%s", m68k_read_memory_8(buf + i), i + 1 < len ? " " : "\n");
+}
 
 static uint32_t g_mon, g_monstub;
 static uint32_t g_clock_addr;	/* defined with --clock below; checked here */
@@ -2736,6 +2760,10 @@ int main(int argc, char **argv)
 		 * nothing has ever driven this receiver before, so the bytes are
 		 * given as hex - a control value is not text. */
 		else if (!strcmp(a, "--rio-late") && i + 1 < argc) g_rio_late = atoi(argv[++i]);
+		else if (!strcmp(a, "--send-log") && i + 1 < argc) {
+			g_sendlog = fopen(argv[++i], "w");
+			if (!g_sendlog) { fprintf(stderr, "cannot write %s\n", argv[i]); return 1; }
+		}
 		else if (!strcmp(a, "--rio-in") && i + 1 < argc) {
 			static char buf[8192];
 			const char *h = argv[++i];
@@ -2861,6 +2889,7 @@ int main(int argc, char **argv)
 			uint32_t slot = (pc - g_monstub) / MON_STUB_SZ;
 			g_moncall[slot]++;
 			if (slot == MON_SLOT_RECV) mon_recv_polled();
+			if (slot == MON_SLOT_SEND) mon_send_called();
 		}
 
 		if (g_vmtrace && pc == g_vmtrace && g_vmtrace_n < VMTRACE_MAX) {
@@ -2966,6 +2995,9 @@ int main(int argc, char **argv)
 	if (g_npkts)
 		printf("\npackets: %u queued, the wire polled %d times\n",
 		       g_npkts, g_pkt_delivered);
+	if (g_sent)
+		printf("packets: %u transmitted\n", g_sent);
+	if (g_sendlog) fclose(g_sendlog);
 	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();
