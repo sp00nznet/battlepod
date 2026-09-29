@@ -2981,7 +2981,7 @@ peek 021A5DB8:
 ```
 
 It did not work at first, and the reason was ours. The monitor's received-packet
-buffer put the packet body at `0x02000804`, and the firmware's millisecond
+buffer put the packet body at `0x02000804`, and the firmware's
 timebase is at `0x02000808` - four bytes in. `--clock` was overwriting bytes 4
 through 7 of every packet this project has ever injected, and `0xF8`'s selector
 is a longword at `+0x02`, which spans into that hole. The buffer has moved; see
@@ -3304,6 +3304,60 @@ builder adds), and the frame holds the Loki and the terrain around it. No
 **What the trailing integers are is not known.** `mapsend.py` sends the last
 one as the flags and class 2's first as its `+0x26`; nothing has checked
 either. Nor is the heading's sign: a Mech at 90 is drawn side-on either way.
+
+### The controls
+
+**What an input report says.** The firmware's own diagnostic viewer at
+`0x02125248` - `Waiting for remote I/O data` - decodes the panel's reports,
+and names every one:
+
+| report | viewer's line |
+|---|---|
+| `B0 id` | `Button %x up` |
+| `B1 id` | `Button %x down` |
+| `C0 id hi lo` | `Analog %x to %hd` |
+| `D0 key` | `Keyboard key %x` |
+
+`Get_Event` parses the same four at `0x02122B94` and posts each as an event of
+that kind - the `0xB0`, `0xB1`, `0xC0`, `0xD0` arms of the game loop's switch,
+which hand it to the pilot's vehicle by class. The sweep that found nothing
+fed single framed opcodes to a pod with no Mech; there was nothing to steer.
+
+**The receiver has two modes.** `0x0215B76A` is framed - `01`, an address, a
+length, their sum, the payload, the payload's sum - and `0x0215B72C` puts raw
+bytes straight into the ring at `0x0217D4B6`. A game switches between them;
+the parser skips bytes it does not know, so framed reports get through
+either way.
+
+**Analog ids `A0`-`A4` go to the pilot's Mech** at `0x021317C6`, which files
+the value at `+0x84`, `+0x86`, `+0x88`, `+0x8A` and `+0x8C` - unless `+0xBB`
+bit 0 is set, which it is while the Mech drops in, so a report sent too early
+is dropped. `Get_Event` also clamps id `A0` to 0 below -10, the manual's
+throttle "sometimes wrapping to `$FFF0`".
+
+With a linked pilot and the reports held back until after the drop
+(`--rio-late`):
+
+| report | effect |
+|---|---|
+| `C0 A0 0340` | speed at `+0x114` goes to **0.26944** and the Mech walks toward -Y at heading 0 |
+| `C0 A4 0340` | the heading at `+0xF8` turns; with the throttle open it walks in a circle |
+| `C0 A1`/`A2` `±0080`, `C0 A3 0340` | nothing moved that was watched |
+
+**0.26944 is 97 kph in metres per hundredth of a second** - the MadCat
+Prime's top speed in its vehicle record - so full throttle is exactly top
+speed, and the Mech covers 0.2695 units per tick of `0x02000808`. **The
+timebase counts hundredths of a second**, not milliseconds: the game length
+is hundredths, and the watchdog kick every 100 ticks is once a second. It also
+means `--clock`'s default of one tick per 4096 instructions runs the game at
+about 400,000 instructions a second of game time.
+
+The Mech's control code at `0x0213078C`-`0x02130BFE` reads the cells under a
+mode at `+0x90`, which is 1 on a fresh Mech: `+0x8C` into the turn and the
+heading, `+0x8A` into `+0x138`, the stick pair `+0x86`/`+0x88` through
+`0x0214E064` into `+0x110`; modes 2 and 3 route them differently, and
+`+0x134`/`+0x138` start at (240, 180), the screen centre, where the HUD draws
+its reticle.
 
 ### The slot allocator
 

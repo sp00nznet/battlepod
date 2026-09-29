@@ -8,6 +8,21 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The controls work.** The panel's input reports, named by the firmware's
+  own input viewer: `B0`/`B1 id` a button up and down, `C0 id hi lo` an
+  analog value, `D0 key` a keypad key. Analog `A0`-`A4` are filed into the
+  pilot's Mech at `+0x84`-`+0x8C`; `A0` is the throttle and `A4` turns it.
+  Full throttle, `0x340`, is exactly the chassis' top speed.
+- **The timebase counts hundredths of a second**, not milliseconds: a MadCat
+  Prime at full throttle moves 0.26944 a tick, its 97 kph in metres per
+  hundredth.
+- **`--rio-late N`** holds the panel's input back until the packet queue has
+  gone and the wire has been polled N more times, because a Mech still
+  dropping in ignores its controls. The end-of-run report says how many times
+  the wire was polled.
+- **`--peek` refuses to go past its limit**, now 32, instead of being read as
+  an unknown option.
+- Scenario 4O. **275/275.**
 - **A game started the way the console starts one, with nothing written into
   memory by hand**: `0xE5` for the range, `0xE4` MECH_CLASS for each vehicle,
   the map as `0xE4`s, `0xED` PLAYER_LINK. The pod flies its MadCat from a

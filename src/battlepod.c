@@ -122,7 +122,20 @@ static unsigned g_imr;			/* interrupt mask register */
 static unsigned g_ivr = 0x0F;		/* interrupt vector register, reset value */
 static int      g_txena[2];		/* transmitter enabled, per channel */
 
-static int rx_pending(int chan) { return g_inpos[chan] < g_inlen[chan]; }
+/* --rio-late holds the panel's input back until every queued packet has been
+ * delivered: a control report only means something once the pod has a Mech
+ * to steer, and before the link that is slot 0. The number is how many
+ * polls of the quiet wire to wait after that. */
+static int      g_rio_late;
+static int      g_pkt_delivered;
+static unsigned g_npkts;
+
+static int rx_pending(int chan)
+{
+	if (chan == 0 && g_rio_late && g_pkt_delivered <= (int)g_npkts + g_rio_late)
+		return 0;
+	return g_inpos[chan] < g_inlen[chan];
+}
 
 /* Register number 0-15, or -1 if the address is not ours. */
 static int duart_reg(uint32_t a)
@@ -258,7 +271,7 @@ static const char *g_riodump;
 /* Look at memory when the run ends. --watch says what touched an address and
  * --tap says what the registers held somewhere; this just reads, which is what
  * checking a configuration byte wants. */
-#define PEEKS 8
+#define PEEKS 32
 static uint32_t g_peek[PEEKS], g_peekn[PEEKS];
 static int g_peeks;
 
@@ -1034,7 +1047,7 @@ static void live_close(void)
 #define MON_STUB_SZ   16
 /* The received-packet buffer sits past the stubs. It used to be at +0x400,
  * which put the packet body at 0x02000804 with the default monitor base - and
- * the firmware's millisecond timebase is at 0x02000808, four bytes into it. So
+ * the firmware's timebase is at 0x02000808, four bytes into it. So
  * `--clock` overwrote bytes 4 through 7 of every injected packet with a
  * counter, and any handler reading a field there saw the clock. `0xF8`'s
  * create selector is at +0x02 and spans into that hole, which is why it could
@@ -1066,7 +1079,6 @@ static uint32_t g_vmpcs[VMTRACE_MAX];
 #define MAX_PKTS 2048			/* a whole map, one 0xE4 per object */
 static uint8_t  g_pkt[MAX_PKTS][512];
 static uint32_t g_pktlen[MAX_PKTS];
-static unsigned g_npkts;
 
 /* Queue one packet written as hex bytes. */
 static int pkt_add(const char *h)
@@ -1091,7 +1103,6 @@ static int pkt_add(const char *h)
 }
 static uint32_t g_monbase;
 static void mon_pkt_arm(uint32_t base, unsigned n);
-static int      g_pkt_delivered;
 
 /* moveq #0,D0 ; suba.l A0,A0 ; rts - returns NULL with Z set, which the
  * firmware's thunks read as "nothing available, no error". */
@@ -1163,7 +1174,9 @@ static void mon_recv_polled(void)
 
 /* --clock: a free-running counter in RAM. The firmware reads 0x02000808 in 336
  * places and writes it nowhere, so the pod's boot monitor maintained it as a
- * millisecond timebase. Without one, every timeout in the game waits forever. */
+ * timebase. It counts hundredths of a second: a Mech at full throttle moves
+ * its chassis' top speed in metres per hundredth per tick, 0.26944 for 97 kph.
+ * Without one, every timeout in the game waits forever. */
 static uint32_t g_clock_div = 4096, g_clock_val;
 
 static void clock_tick(void)
@@ -2455,8 +2468,12 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--mesh") && i + 1 < argc)
 			g_mesh_id = (uint32_t)strtoul(argv[++i], NULL, 0);
 		else if (!strcmp(a, "--mesh-all")) g_mesh_all = 1;
-		else if (!strcmp(a, "--peek") && i + 1 < argc && g_peeks < PEEKS) {
+		else if (!strcmp(a, "--peek") && i + 1 < argc) {
 			char *c;
+			if (g_peeks >= PEEKS) {
+				printf("too many --peek: %d is the limit\n", PEEKS);
+				return 2;
+			}
 			g_peek[g_peeks] = (uint32_t)strtoul(argv[++i], &c, 16);
 			g_peekn[g_peeks] = (*c == ':') ? (uint32_t)strtoul(c + 1, NULL, 0) : 16;
 			g_peeks++;
@@ -2541,6 +2558,7 @@ int main(int argc, char **argv)
 		 * sends the CPU. The stick, throttle and pedals arrive this way, and
 		 * nothing has ever driven this receiver before, so the bytes are
 		 * given as hex - a control value is not text. */
+		else if (!strcmp(a, "--rio-late") && i + 1 < argc) g_rio_late = atoi(argv[++i]);
 		else if (!strcmp(a, "--rio-in") && i + 1 < argc) {
 			static char buf[8192];
 			const char *h = argv[++i];
@@ -2768,6 +2786,9 @@ int main(int argc, char **argv)
 	if (g_peeks) peek_report();
 	if (g_scenefile) scene_report();
 	if (g_frameout) frame_report();
+	if (g_npkts)
+		printf("\npackets: %u queued, the wire polled %d times\n",
+		       g_npkts, g_pkt_delivered);
 	if (g_rig_all) rig_all();
 	if (g_mesh_all) mesh_all();
 	if (g_mesh_id) mesh_report();

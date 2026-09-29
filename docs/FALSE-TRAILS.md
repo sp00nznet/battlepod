@@ -329,7 +329,7 @@ in one run.
 
 **The clock was writing over every injected packet.** The monitor's
 received-packet buffer sat at `+0x400` from a base of `0x02000400`, which put
-the packet body at `0x02000804`; the firmware's millisecond timebase, which
+the packet body at `0x02000804`; the firmware's timebase, which
 `--clock` maintains because the ROM reads it in 336 places and writes it
 nowhere, is at `0x02000808`. Four bytes into every packet. So bytes 4 through 7
 of everything this project ever put on the wire were a free-running counter.

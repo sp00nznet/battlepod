@@ -227,9 +227,13 @@ move.*
   without logging a name (2, 3, 6, 11, 14, 17, 18), and the console's remaining
   class names have to be among them. Settled by: a string on one of those seven
   constructors, or a scenario that creates one.
-- **The input report format.** The receive interrupt hands each byte to a state
-  machine through a function pointer at `0x0217FBE4`. Feeding all 256 opcodes
-  past the firmware's decoder produced nothing.
+- **What the stick and the left pedal do.** The report format is settled (see
+  DEVICES.md, *The controls*): `A0` is the throttle and `A4` turns. `A1`/`A2`
+  at the stick's full range and `A3` at the pedal's moved nothing watched in
+  mode 1 - not the heading, the position, `+0x100`, `+0x110` or the reticle
+  at `+0x134`/`+0x138`. Which of the manual's pedal modes `+0x90` is, and what
+  the buttons' ids are, is open too. Settled by: reading `0x0214E064`, or
+  sweeping the modes.
 
 ---
 

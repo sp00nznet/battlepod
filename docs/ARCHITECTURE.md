@@ -254,11 +254,12 @@ Three bytes in, three bytes out: the **payload**, with the `01 00 03 03` header
 and the `D9` checksum stripped by the firmware's own protocol handler. So
 inbound framing is the same as outbound, and the transport is done.
 
-What is not done is **what an input report says**. The receive interrupt at
-`0x0215B6CC` takes up to four bytes a time and hands each to a state machine
-through a function pointer at `0x0217FBE4`, so the opcodes the panel board
-sends are a dig through those states rather than something a sweep will find -
-feeding all 256 opcodes past the firmware's decoder produced nothing.
+**What an input report says** is now known, from the firmware's own input
+viewer: `B0`/`B1 id` a button up or down, `C0 id hi lo` an analog value, `D0
+key` a keypad key. Analog `A0` is the throttle and `A4` turns the Mech; with
+both sent to a linked pilot after its drop, it walks at exactly its chassis'
+top speed. See DEVICES.md, *The controls*. The earlier sweep found nothing
+because it fed single opcodes to a pod that had no Mech to steer.
 
 The manual does give what the values will be when they arrive, which is what
 the input path needs on the far side: throttle and pedals `$0000` to `$0340`,
