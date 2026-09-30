@@ -366,6 +366,19 @@ own frames, its clock paced to the wall. W/S throttle, A/D stick, space fires,
 T selects a target, L the searchlight, Esc quits. Your Mech drops in first and
 ignores the controls until it lands. A Loki stands 150 metres ahead.
 
+**Run a centre.** `tools/hub.py` runs several pods at once - each a whole
+emulated cockpit in its own process - joined over UDP, starts the game on all
+of them as the operator console did, and flies the bots with CPU pilots that
+use the panel controls like anyone else:
+
+```
+python tools/hub.py --bots 3 --arena --console          # watch three bots fight
+python tools/hub.py --human --bots 2 --arena --console  # you, two bots, and the operator's view
+```
+
+`--console` is the operator's view from above (Z follows the fighting).
+Pods' own output goes to `build/pod<N>.log`.
+
 **Start a game from a scenario.** `tools/mapsend.py` turns a scenario file
 into the `0xE4` packets the console sends for a map, and `--packet-file`
 feeds them. Add a vehicle and a `PLAYER_LINK` and the pod flies it with

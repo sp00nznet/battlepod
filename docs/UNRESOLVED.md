@@ -201,19 +201,11 @@ move.*
   `0xE5`, or the console's encoder.
 - **What the type 4 record under the Mech is.** Model `0x55` at ground level,
   scaled (1, 1, 2) - a shadow by position, not by evidence.
-- **How a hit on another pod's Mech becomes damage.** Networked pods fire at
-  each other and nothing dies, even in four minutes. What is read: `0xE3`
-  ORs its word into the shooter's `+0x94`, the flag the Mech draw routine
-  tests for firing effects - "this Mech is firing", not a shot. `0xEA` is an
-  owner reporting its own damage: target, shooter, a hit location written
-  into the target's table at `+0x48C + 20 x loc`, and location -1 for a kill,
-  credited to the shooter's pod at `0x02193C08`. What is measured: a pod that
-  owns a Loki, fed 245 `0xE3`s from a MadCat firing at it from 100 units,
-  takes no damage and fires nothing; and the shooter sends no damage message
-  either. A single pod with no network address destroys the same Loki. So
-  with a network, the hit is either never scored or is scored in a message
-  not yet seen. Settled by: tapping the shot's collision path on the shooter,
-  or trying target select (button `40`) first.
+- **What `0xE2` says, and where a downed pilot goes.** A pod whose Mech dies
+  sends `0xED` from its own address, then an 8-byte `0xE2`, and stops
+  broadcasting. The `0xED` looks like a relink to an escape pod or a camera;
+  neither has been followed. Settled by: tapping the death routine's callees
+  on the dying pod.
 - **The arms.** `516` and `517` are identified as the right and left assemblies,
   each with five alternative loadouts, but their placement is per-frame.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of

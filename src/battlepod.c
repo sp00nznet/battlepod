@@ -2933,21 +2933,23 @@ int main(int argc, char **argv)
 			g_net = 1;
 		}
 		else if (!strcmp(a, "--net-node") && i + 1 < argc && g_setats + 2 <= TAPS) {
-			/* This pod is node N to the hub. Inside the firmware every
-			 * pod in a game carries the game's address, 1/1, and sends
-			 * to the hub at node 0xFE: a receiver posts what carries the
-			 * game's address and forwards anything else, so pods with
-			 * addresses of their own relay each other's traffic back and
-			 * forth for ever. The node is the hub's business - which
-			 * pod it delivers to - not the game's. Written once the event
-			 * pump runs, as the monitor would have. */
+			/* This pod is node N: its address is net 1, node N, it
+			 * sends broadcasts to the hub at node 0xFE, and it plays in
+			 * game 1/0, which no pod is. A Mech's owner word is its
+			 * pod's address; a hit on a Mech another pod owns goes to
+			 * that pod as 0xBA, addressed to its node. A pod also
+			 * forwards broadcasts not stamped with the game's address -
+			 * and posts them too - so the hub drops what comes back to
+			 * it forwarded (the origin at [4..5] is not the sender).
+			 * Written once the event pump runs, as the monitor that
+			 * read the DIP switch would have. */
 			g_netnode = atoi(argv[++i]);
 			g_setat_pc[g_setats] = 0x02122154;
 			g_setat_addr[g_setats] = 0x0218AEB0;
-			g_setat_val[g_setats++] = 0x010101FEu;
+			g_setat_val[g_setats++] = 0x010001FEu | ((uint32_t)(g_netnode & 0xFF) << 16);
 			g_setat_pc[g_setats] = 0x02122154;
 			g_setat_addr[g_setats] = 0x02179D30;
-			g_setat_val[g_setats++] = 0x00000101u;
+			g_setat_val[g_setats++] = 0x00000100u;
 		}
 		else if (!strcmp(a, "--send-log") && i + 1 < argc) {
 			g_sendlog = fopen(argv[++i], "w");

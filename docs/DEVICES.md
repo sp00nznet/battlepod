@@ -3471,7 +3471,7 @@ the receiving side.
 
 ### A centre: pods over UDP, a hub, CPU pilots
 
-**One address for the whole game.** A pod stamps its own address into
+**One address for the whole game** - which turned out to be half right; see *A kill between pods*. A pod stamps its own address into
 `buf[6..7]` of what it sends, and a receiver posts a packet only if `buf[6..7]`
 is the game identity - anything else it **forwards**, as a router would. Pods
 given addresses of their own therefore relay one another's traffic back and
@@ -3506,6 +3506,42 @@ toward the nearest other Mech, throttle by distance, trigger held while it
 points at it. Two such pilots on BadLands, starting at drop points 240 apart,
 close to under 100 and face each other to within a few degrees.
 
+**A pool of things.** The allocator at `0x0214C57E` takes a free slot only if
+its owner word - `+0x00`, the same field `MECH_CLASS`'s `+0x08` fills - is
+this pod's address:
+
+```
+0214C5AA  btst   #$0, ($d,A3)       free?
+0214C5B2  move.b (A3), D0
+0214C5B4  cmp.b  $218aeb0.l, D0     owned by us?
+```
+
+A fresh arena owns nothing, so with no network - address `00 00` - every slot
+is the pod's, and with one - `01 01` - none is. A networked pod pulls the
+trigger, the fire routine runs, the shot's constructor at `0x02136FFE` asks
+for a class 11 thing and gets nothing, and the pod prints its out-of-things
+message. That is why the fight that destroys a Loki alone did nothing on a
+network.
+
+The console hands out pools with **class 0 `0xE4`s**: the arm at
+`0x0213CFB2` writes the owner from `+0x08` and the number from `+0x12` and
+clears the class and flags - a free slot, owned. Given slots 100 to 199, the
+networked fight destroys the Loki again, and the pod puts on the wire what it
+never sent before: `0xDE` for each shot, `0xE8` and `0xE9` as they end, and
+`0xEA` for every hit - sent by the **shooter**, naming the Mech it hit, the
+shooter and a hit location, `-1` for a kill.
+
+`tools/hub.py` reserves each pod a range in that pod's arena only, after the
+map's things and below 944, where the class 0 arm does something else.
+BadLands-16's 882 objects leave room for about 50.
+
+With pools, two CPU pilots' shots fly and hit: in five minutes one reported 84
+hits on the other and a handful on the buildings between them. **Neither
+died.** The single pod needed 75 hits; the difference is where the damage is
+kept - every pod carries the game's address, so each pod treats every Mech as
+its own and applies hits to its own copy, and the owner's copy is not the one
+being hit.
+
 **What does not happen yet is anyone dying.** Both pods fire - the fire
 routine runs in each, and each sends `0xE3` and `0xEA` that the other
 receives - but neither Mech's death routine runs. And the single-pod fight
@@ -3513,6 +3549,58 @@ that destroys a Loki does not destroy it once the pod is given a network
 address: with a network, a Mech the pod is not flying is someone else's, and
 its damage is decided on the pod that owns it. How that owner learns it was
 hit is the open question.
+
+### A kill between pods
+
+**Pods have addresses of their own after all; the game's is one no pod has.**
+The earlier fix - every pod at the game's address - stopped the flood, but it
+also made every Mech every pod's own, so each pod applied its hits to its own
+copy of the target and the owner never heard. The hit function says what the
+design is:
+
+```
+02136AFA  move.b (A3), D0            the target's owner word
+02136AFC  cmp.b  $2179d32.l, D0      the game's?
+02136B10  cmp.b  $218aeb0.l, D0      ours?
+02136B44  jsr    $213358a            then apply the damage here
+02136B6C  jsr    $213edd2            else send it to the owner
+```
+
+and `0x0213EDD2` builds **`0xBA`** - the "old damage spreader" - with the
+target, the shooter and the hit, and sends it in mode 0 to the target's owner
+word: to that one pod's node. So a Mech is owned by its pod (MECH_CLASS's
+`+0x08` is the pod's address), and damage goes to the owner, who applies it
+and reports it in `0xEA`.
+
+That needs pods with distinct addresses, and a pod forwards a broadcast whose
+`[6..7]` is not the game's address - but it also posts it (`0x021230BE`
+falls through into the post at `0x021230C8`). The forward is the router's
+business. So: each pod is net 1, node N; the game is `1/0`, which no pod is;
+and the hub drops what comes back to it forwarded, which it can tell because
+the origin at `[4..5]` is not the pod that sent it. It routes by the node
+each transmit names: `0xFE`, the hub, is a broadcast; anything else goes to
+that one pod.
+
+**And then something dies.** Two CPU pilots on open ground - the hub finds the
+point furthest from any map object in the middle of the map and starts the
+pods on a ring round it - trade `0xBA`s (26 one way, 15 the other), each owner
+reports its own damage (30 and 78 `0xEA`s), and at about two minutes one
+Mech's death routine runs on its own pod. That pod then sends **`0xED`** from
+its own address - relinking its pilot, now without a Mech - and an `0xE2`,
+and stops broadcasting its position. The hub takes a pod's `0xED` after the
+drop as its Mech going down.
+
+Two things the hub had to learn on the way: a trigger pressed while the Mech
+is still dropping in is ignored, so a pilot re-presses it while it holds its
+aim; and a pod sends `0xE4` and `0xED` of its own - a thing it made, the
+relink when it dies - so those are relayed, and only the console's own
+packets, which come back only as forwards, are dropped.
+
+**The operator's view.** `hub.py --console` opens a window with the centre
+from above - the scenario's objects, every Mech with its heading, down Mechs
+crossed out, and a panel of each pod's state, the hits it has taken and who
+has gone down; Z switches between the whole map and a view that follows the
+fighting. `--console-png FILE` writes the same picture when the run ends.
 
 ### The slot allocator
 

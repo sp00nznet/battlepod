@@ -43,7 +43,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b" "$OUT.pool"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -604,6 +604,20 @@ PODA=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF000
   grep "^E[C7] " "$OUT.sent" | awk 'int((NR-1)/2)%10==0'; } > "$OUT.b"
 PODB=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 218AEB0=010201FE --set-at 02122154 2179D30=00000101     --packet-file "$OUT.b"     --peek 021FA086:12 --peek 0218AEE4:4     --steps 300000000 --top 0 2>&1 || true)
 
+# Scenario 4T: a pool of things. A pod allocates a shot only from a free
+# slot whose owner word is its own address (0x0214C57E), and a fresh arena
+# owns nothing - so a networked pod fires and nothing comes out. The console
+# gives it a pool with class 0 0xE4s; given slots 100-199, the same fight
+# that did nothing on the network destroys the Loki, and the pod broadcasts
+# its shots (0xDE) and its damage reports (0xEA) as it goes.
+{ echo 'E5 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 27 C0 00 00 00 00 00 00 01 F4 00 00 01 F4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  echo 'E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 01 00 00 00 01 45 FA 00 00 45 FA 00 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  echo 'E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 01 00 00 00 02 45 FA 00 00 45 F6 E0 00 40 AC CC CD 4C 6F 6B 69 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
+  for n in $(seq 100 199); do printf 'E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 %02X' $((n / 256)); printf ' %02X' $((n % 256)); printf ' 00%.0s' $(seq 1 42); echo; done
+  echo 'ED 00 00 00 00 00 00 00 01 01 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'; } > "$OUT.pool"
+POOL=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 218AEB0=010101FE --set-at 02122154 2179D30=00000101     --packet-file "$OUT.pool"     --rio-late 50000 --rio-in '01 00 02 02 B1 A5 56'     --tap 02134D6C --send-log "$OUT.sent"     --steps 150000000 --top 0 2>&1 || true)
+POOLSENT=$(grep -c "^DE " "$OUT.sent" || true)
+
 # Scenario 5: say IDENTIFY_YOURSELF to the booted pod and catch what it builds
 # to send back. The tap stands at the door of the packet sender and dumps the
 # caller's buffer, because the reply is a stack argument and never reaches a
@@ -726,6 +740,10 @@ check_contains 'packets: 9166 transmitted'                             # a pod o
 CHECKTEXT="$PODB"
 check_contains '0000  02 1F A7 14'                                     # pod B flies its own Mech
 check_contains '0000  45 FA 00 00 C6 18 ED 30 40 B1 DC 19'             # and sees pod A's where A put it
+CHECKTEXT="$POOL"
+check_contains 'tap 02134D6C hit 1'                                   # a networked pod, given a pool, kills
+CHECKTEXT="shots on the wire: $POOLSENT"
+check_contains 'shots on the wire: 993'                               # and puts its shots on the wire
 if [ -n "$MAP" ]; then
     CHECKTEXT="$MAP"
     check_contains 'entity 733 model 11 at (5365.0, 7660.0, 0.0): 11 polygons'  # BadLands, from the drop

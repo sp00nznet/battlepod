@@ -8,6 +8,28 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **A kill between pods.** A hit on a Mech another pod owns becomes `0xBA`,
+  sent to the owner's node; the owner applies it and reports it in `0xEA`.
+  That needs pods with addresses of their own (net 1, node N) in a game whose
+  address no pod has (1/0), and a hub that drops the copies pods forward and
+  routes by node - `0xFE` a broadcast, anything else one pod. Two CPU pilots
+  on open ground trade hits until one Mech's death routine runs on its own
+  pod.
+- **The operator's view**: `hub.py --console` draws the centre from above -
+  map objects, every Mech with its heading, who is down, hits taken - with Z
+  to follow the fighting; `--console-png` writes it to a file.
+- `hub.py --arena` starts the pods on a ring on open ground; `--debug` prints
+  what each pilot sees. Pilots re-press the trigger while aimed. **286/286.**
+- **A pool of things.** A pod allocates a shot only from a free slot owned by
+  its own address, and a fresh arena owns nothing, so networked pods fired
+  and nothing came out. The console's class 0 `0xE4` hands out slots; given
+  a pool, a networked pod destroys the Loki again and puts its shots
+  (`0xDE`), their ends (`0xE8`, `0xE9`) and its hits (`0xEA`) on the wire.
+  `tools/hub.py` gives each pod its own range. Scenario 4T.
+- CPU pilots now fire all three trigger groups; the hub reports hits and
+  kills by pod.
+- **Open**: across pods, hits land on the shooter's copy of the target, not
+  the owner's, so nobody dies.
 - **A centre: several pods, CPU pilots, one hub.** `tools/hub.py` launches
   pods as separate processes joined over UDP, starts the game on each as the
   console does, relays their traffic, and flies bots through the panel's own
