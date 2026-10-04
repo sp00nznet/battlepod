@@ -543,6 +543,11 @@ assets, no disassembly of theirs. The tool ships; the data does not. You supply
 your own copy of the release, and everything the tool generates lands in
 `out/`, which is gitignored.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): evidence for every claim, no VWE material in
+any form, and code that is yours or MIT-compatible.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Applies to this tool only.

@@ -64,12 +64,12 @@ snap turn.png
 $ ./netlab build battlepod
 ...
 build wall 7.82 s
--> G:/recomp/arcade/battlepod/build-farm/cockpit.exe
+-> <checkout>/build-farm/cockpit.exe
 ...
-$ ./netlab qa battlepod --on testbox
+$ ./netlab qa battlepod --on <windows-vm>
 == qa: battlepod.exe --selftest && paneltest.exe --selftest && viewtest.exe --selftest
 == qa: local/projects/battlepod.qa
-run on testbox: C:\netlab\battlepod\cockpit.exe C:\netlab\vwe\GameFiles\Full_Load_3_0 ...
+run on <windows-vm>: C:\netlab\battlepod\cockpit.exe C:\netlab\vwe\GameFiles\Full_Load_3_0 ...
 ok   window 'battlepod - main view'
 snap drop.png
 snap walking.png

@@ -218,7 +218,9 @@ having one.
 
 In addition to the checklist in the repo rules:
 
-- [ ] **Decide on `DEVICES.md`.** The repo rules ban committing "generated
+- [x] **Decide on `DEVICES.md`.** *Decided 2026-10-04: the short quoted
+      sequences stay, as evidence for specific claims, the way emulator
+      documentation works; no listings. Made public that day.* The repo rules ban committing "generated
       headers, symbol maps, or struct definitions reconstructed from
       proprietary binaries" and "disassembly listings". `DEVICES.md` is
       hand-written device documentation, which is how every emulator project
