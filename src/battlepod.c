@@ -642,6 +642,10 @@ static int rig_assemble(uint32_t skel)
 		memcpy(g_rig.ny, rig.ny, sizeof rig.ny);
 		memcpy(g_rig.nz, rig.nz, sizeof rig.nz);
 		memcpy(g_rig.parent, rig.parent, sizeof rig.parent);
+		memcpy(g_rig.ox, rig.ox, sizeof rig.ox);
+		memcpy(g_rig.oy, rig.oy, sizeof rig.oy);
+		memcpy(g_rig.oz, rig.oz, sizeof rig.oz);
+		memcpy(g_rig.slot, rig.slot, sizeof rig.slot);
 		memcpy(g_rig.nset, rig.nset, sizeof rig.nset);
 		g_rig.nnode = rig.nnode;
 		for (node = 0; node < MESH_NODES; node++) {
@@ -866,11 +870,18 @@ static void scene_report(void)
  * in the world - the viewer's own, and each Mech the world pass lets through
  * the culler - so a frame is fully described, for our purposes, by these. */
 #define FRAME_OBJS 1024
+#define FRAME_POSES 64
+#define MECH_SLOTS 15
+#define MECH_POSE 94			/* record word of slot 1's transform */
 struct pod_frame {
 	int have_cam, seq;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
 	int n;
-	struct { uint32_t entity, model, arms; float rot[9], at[3]; } obj[FRAME_OBJS];
+	struct { uint32_t entity, model, arms; int pose; float rot[9], at[3]; } obj[FRAME_OBJS];
+	/* A Mech's record carries fifteen instance transforms from word 94, a
+	 * 3x3 and a translation each, one per skeleton slot: the pose. */
+	int npose;
+	float pose[FRAME_POSES][MECH_SLOTS][12];
 };
 static struct pod_frame g_frame_cur, g_frame_last;
 static struct pod_frame g_frame_latest;	/* the last complete list, placed or not */
@@ -898,6 +909,27 @@ static int g_mcache_n;
 #define MECH_VARS 31			/* record word of var 0 */
 
 static uint32_t dl_word(uint32_t ti_byte_addr, uint32_t i);
+
+/* --mech-dump FILE: every Mech's record in every list, one line each - the
+ * list number, then the record's words in hex - for finding what moves when
+ * a Mech turns, walks or aims. A %d in FILE becomes the pod's node. */
+static const char *g_mechdump_path;
+static int g_netnode;			/* defined with --net's state below */
+static FILE *g_mechdump;
+
+static void mech_dump(uint32_t ti_byte_addr, uint32_t at, uint32_t len)
+{
+	uint32_t k;
+
+	if (!g_mechdump) {
+		char path[512];
+		snprintf(path, sizeof path, g_mechdump_path, g_netnode);
+		if (!(g_mechdump = fopen(path, "w"))) { g_mechdump_path = NULL; return; }
+	}
+	fprintf(g_mechdump, "%d", g_frames_walked);
+	for (k = 2; k < len; k++) fprintf(g_mechdump, " %X", dl_word(ti_byte_addr, at + k));
+	fputc('\n', g_mechdump);
+}
 
 static uint32_t mech_arms(uint32_t ti_byte_addr, uint32_t at, uint32_t len)
 {
@@ -933,6 +965,125 @@ static void rig_arms(uint32_t arms)
 		rig_near(516 + side, root);		/* the shoulder: its own polygons */
 		rig_near(500 + side * 10 + v, hang[side]);	/* the arm it chose */
 	}
+}
+
+/* A Mech posed by its frame. Its parts are kept apart rather than welded
+ * into one mesh, each with the node it hangs on, and every frame each node
+ * is composed as its parent, then its offset, then its instance transform
+ * from the record - the order $040 names them in. At rest the transforms
+ * are identity and this is the same Mech model_mesh assembles. The arms
+ * hang on two extra nodes off the root, through instances 5 and 3, which is
+ * what 516 and 517 say. RENDERING.md, *The pose*. */
+#define POSE_NODES (MESH_NODES + 2)
+#define POSE_PARTS 24
+#define POSE_RIGS 16
+static struct pose_rig {
+	uint32_t key;
+	int n;
+	int node[POSE_PARTS];
+	struct mesh *m[POSE_PARTS];
+	int16_t parent[POSE_NODES];
+	float o[POSE_NODES][3];
+	uint8_t slot[POSE_NODES], set[POSE_NODES];
+} g_pose_rig[POSE_RIGS];
+static int g_pose_rigs;
+
+static void pose_keep(struct pose_rig *pr, int node, const struct mesh *m)
+{
+	struct mesh *c;
+
+	if (pr->n >= POSE_PARTS || !(c = malloc(sizeof *c))) return;
+	memcpy(c, m, sizeof *c);
+	pr->node[pr->n] = node;
+	pr->m[pr->n++] = c;
+}
+
+static struct pose_rig *pose_rig(uint32_t id, uint32_t arms)
+{
+	static const float hang[2][3] = { { 1.38f, 1.80f, -1.50f }, { -1.38f, 1.80f, -1.50f } };
+	uint32_t key = id | arms << 16;
+	struct pose_rig *pr;
+	int i, side;
+
+	for (i = 0; i < g_pose_rigs; i++)
+		if (g_pose_rig[i].key == key) return &g_pose_rig[i];
+	if (g_pose_rigs >= POSE_RIGS) return NULL;
+	pr = &g_pose_rig[g_pose_rigs++];
+	memset(pr, 0, sizeof *pr);
+	pr->key = key;
+	rig_assemble(id);
+	for (i = 0; i < MESH_NODES; i++) {
+		pr->set[i] = g_rig.nset[i];
+		pr->parent[i] = g_rig.parent[i];
+		pr->o[i][0] = g_rig.ox[i]; pr->o[i][1] = g_rig.oy[i]; pr->o[i][2] = g_rig.oz[i];
+		pr->slot[i] = g_rig.slot[i];
+	}
+	pr->set[0] = 1;
+	for (i = 0; i < g_nplaced; i++)
+		if (rig_load(g_placed[i].id)) pose_keep(pr, g_placed[i].node, &g_part);
+	for (side = 0; side < 2; side++) {
+		uint32_t v = (arms >> (side * 4)) & 15, len;
+		int nd = MESH_NODES + side;
+		if (!v) continue;
+		pr->set[nd] = 1;
+		pr->parent[nd] = 0;
+		memcpy(pr->o[nd], hang[side], sizeof hang[side]);
+		pr->slot[nd] = side ? 3 : 5;
+		if ((len = mesh_find(g_mesh_base, 0x200000u, 516 + side, g_meshbuf, sizeof g_meshbuf))) {
+			mesh_run_mode(&g_part, g_meshbuf, len, MESH_NEAR);
+			pose_keep(pr, 0, &g_part);
+		}
+		if ((len = mesh_find(g_mesh_base, 0x200000u, 500 + side * 10 + v, g_meshbuf, sizeof g_meshbuf))) {
+			mesh_run_mode(&g_part, g_meshbuf, len, MESH_NEAR);
+			pose_keep(pr, nd, &g_part);
+		}
+	}
+	return pr;
+}
+
+/* Node `nd`'s rotation r (3x3, rows) and position t, in model space. */
+static void pose_node(const struct pose_rig *pr, const float (*inst)[12], int nd,
+		      float *r, float *t, int depth)
+{
+	static const float id3[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	float pr_r[9], pr_t[3], o[3];
+	const float *k = NULL;
+	int a, b;
+
+	if (nd <= 0 || nd >= POSE_NODES || !pr->set[nd] || depth > 16) {
+		memcpy(r, id3, sizeof id3);
+		t[0] = t[1] = t[2] = 0;
+		return;
+	}
+	pose_node(pr, inst, pr->parent[nd], pr_r, pr_t, depth + 1);
+	if (pr->slot[nd] >= 1 && pr->slot[nd] <= MECH_SLOTS)
+		k = inst[pr->slot[nd] - 1];
+	for (a = 0; a < 3; a++)
+		o[a] = pr->o[nd][a] + (k ? k[9 + a] : 0);
+	/* The record stores each transform by columns, so k[b * 3 + a] is row a
+	 * column b; transposed, composed onto the parent. RENDERING.md, *The pose*. */
+	for (a = 0; a < 3; a++) {
+		t[a] = pr_t[a] + pr_r[a * 3] * o[0] + pr_r[a * 3 + 1] * o[1] + pr_r[a * 3 + 2] * o[2];
+		for (b = 0; b < 3; b++)
+			r[a * 3 + b] = !k ? pr_r[a * 3 + b] :
+				pr_r[a * 3] * k[b * 3] + pr_r[a * 3 + 1] * k[b * 3 + 1] + pr_r[a * 3 + 2] * k[b * 3 + 2];
+	}
+}
+
+static const struct mesh *mech_posed(uint32_t id, uint32_t arms, const float (*inst)[12])
+{
+	static struct mesh out;
+	struct pose_rig *pr = pose_rig(id, arms);
+	int i;
+
+	if (!pr) return NULL;
+	memset(&out, 0, sizeof out);
+	for (i = 0; i < pr->n; i++) {
+		float r[9], t[3];
+		pose_node(pr, inst, pr->node[i], r, t, 0);
+		rig_add_xf(&out, pr->m[i], r, t);
+	}
+	return &out;
 }
 
 static const struct mesh *model_mesh(uint32_t id, uint32_t arms)
@@ -1001,7 +1152,11 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 					fr->obj[i].entity, id);
 			continue;
 		}
-		if (!(m = model_mesh(id, fr->obj[i].arms))) {
+		if (id >= 451 && id <= 456 && fr->obj[i].pose >= 0)
+			m = mech_posed(id, fr->obj[i].arms, fr->pose[fr->obj[i].pose]);
+		else
+			m = model_mesh(id, fr->obj[i].arms);
+		if (!m) {
 			if (log) printf("  entity %u model %u: no geometry\n", fr->obj[i].entity, id);
 			continue;
 		}
@@ -1991,6 +2146,17 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 				g_frame_cur.obj[f].entity = dl_word(ti_byte_addr, at + 2);
 				g_frame_cur.obj[f].model = dl_word(ti_byte_addr, at + 5);
 				g_frame_cur.obj[f].arms = mech_arms(ti_byte_addr, at, len);
+				g_frame_cur.obj[f].pose = -1;
+				if (len >= MECH_POSE + MECH_SLOTS * 12 && g_frame_cur.npose < FRAME_POSES) {
+					int q = g_frame_cur.npose++, sl;
+					for (sl = 0; sl < MECH_SLOTS; sl++)
+						for (k = 0; k < 12; k++)
+							g_frame_cur.pose[q][sl][k] = as_float(
+								dl_word(ti_byte_addr, at + MECH_POSE + sl * 12 + k));
+					g_frame_cur.obj[f].pose = q;
+				}
+				if (g_mechdump_path && len > MECH_VARS + 46)
+					mech_dump(ti_byte_addr, at, len);
 				for (k = 0; k < 9; k++)
 					g_frame_cur.obj[f].rot[k] = as_float(dl_word(ti_byte_addr, at + 6 + k));
 				for (k = 0; k < 3; k++)
@@ -2051,6 +2217,7 @@ static void frame_report(void)
  * window and no display, which is what makes it work over RDP and in CI. */
 #define REC_EVERY 4			/* hundredths per video frame: 25 fps */
 static const char *g_recpath;
+static char g_recfile[512];		/* g_recpath with the node in it */
 static FILE *g_rec;
 static uint32_t g_rec_next;
 static int g_rec_frames;
@@ -2063,7 +2230,7 @@ static HANDLE g_rec_proc;
 
 static void rec_open(void)
 {
-	char cmd[1024];
+	char cmd[1024], *path = g_recfile;
 #ifdef _WIN32
 	/* Not _popen: that goes through cmd.exe, which opens a console window
 	 * when cockpit.exe (a GUI program) has none - on someone's screen. */
@@ -2072,8 +2239,9 @@ static void rec_open(void)
 	PROCESS_INFORMATION pi;
 	HANDLE rd, wr;
 
+	snprintf(path, sizeof g_recfile, g_recpath, g_netnode);	/* a %d is the pod's node */
 	snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d "
-		 "-r %d -i - -pix_fmt yuv420p \"%s\"", RAS_W, RAS_H, 100 / REC_EVERY, g_recpath);
+		 "-r %d -i - -pix_fmt yuv420p \"%s\"", RAS_W, RAS_H, 100 / REC_EVERY, path);
 	if (CreatePipe(&rd, &wr, &sa, 0)) {
 		SetHandleInformation(wr, HANDLE_FLAG_INHERIT, 0);
 		si.dwFlags = STARTF_USESTDHANDLES;
@@ -2091,8 +2259,9 @@ static void rec_open(void)
 		CloseHandle(rd);
 	}
 #else
+	snprintf(path, sizeof g_recfile, g_recpath, g_netnode);	/* a %d is the pod's node */
 	snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d "
-		 "-r %d -i - -pix_fmt yuv420p '%s'", RAS_W, RAS_H, 100 / REC_EVERY, g_recpath);
+		 "-r %d -i - -pix_fmt yuv420p '%s'", RAS_W, RAS_H, 100 / REC_EVERY, path);
 	g_rec = popen(cmd, "w");
 #endif
 	if (!g_rec) fprintf(stderr, "--record: could not start ffmpeg\n");
@@ -2130,7 +2299,7 @@ static void rec_close(void)
 	pclose(g_rec);
 #endif
 	printf("\nrecorded %d frames (%.1f s of pod time) to %s\n",
-	       g_rec_frames, g_rec_frames * REC_EVERY / 100.0, g_recpath);
+	       g_rec_frames, g_rec_frames * REC_EVERY / 100.0, g_recfile);
 }
 
 /* The request is staged in 68k RAM, memcpy'd into the queue at block+8, and the
@@ -2862,7 +3031,8 @@ static void usage(void)
 	"                   Musashi profile with the FPU enabled)\n"
 	"  --headless       open no windows (cockpit): over RDP, in CI\n"
 	"  --record FILE    the pod's own frames as video, 25 a second of its\n"
-	"                   clock, through ffmpeg (on PATH)\n"
+	"                   clock, through ffmpeg (on PATH); %d is the pod's node\n"
+	"  --mech-dump FILE every Mech record of every display list, a line each\n"
 	"\n"
 	"reading the firmware\n"
 	"  --trace N        disassemble the first N instructions\n"
@@ -2986,6 +3156,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
 		else if (!strcmp(a, "--frame-out") && i + 1 < argc) g_frameout = argv[++i];
+		else if (!strcmp(a, "--mech-dump") && i + 1 < argc) { g_mechdump_path = argv[++i]; g_capture = 1; }
 		else if (!strcmp(a, "--record") && i + 1 < argc) { g_recpath = argv[++i]; g_capture = 1; }
 		/* SDL's dummy driver: the windows exist, nobody sees them, and
 		 * nothing waits for them to be closed. */

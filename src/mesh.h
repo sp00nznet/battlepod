@@ -55,6 +55,7 @@ struct mesh {
 	float nx[MESH_NODES], ny[MESH_NODES], nz[MESH_NODES];
 	int16_t parent[MESH_NODES];
 	float ox[MESH_NODES], oy[MESH_NODES], oz[MESH_NODES];
+	uint8_t slot[MESH_NODES];		/* its instance transform, one-based */
 	uint8_t nset[MESH_NODES];
 	int nnode;
 	const char *stopped;			/* NULL if it ran to a return */
@@ -319,6 +320,7 @@ static void mesh_run_mode(struct mesh *m, const uint8_t *data, uint32_t bytes, i
 					float dz = mesh_f32(w[at + 5]);
 					m->parent[nd] = (int16_t)par;
 					m->ox[nd] = dx; m->oy[nd] = dy; m->oz[nd] = dz;
+					m->slot[nd] = (uint8_t)w[at + 2];
 					m->nx[nd] = m->nx[par] + dx;
 					m->ny[nd] = m->ny[par] + dy;
 					m->nz[nd] = m->nz[par] + dz;

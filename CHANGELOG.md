@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The Mechs walk.** Every Mech is posed per frame from the fifteen
+  instance transforms in its display-list record: hips, knees and ankles
+  move every frame, read by columns and composed onto the parent joint (the
+  knee bends only one way, which is what settled it). At rest the picture is
+  byte-for-byte what it was. The arms, it turns out, never aim: through a
+  whole fight only the leg slots move. RENDERING.md, *The pose*.
+- `--mech-dump FILE` writes every Mech record of every list; `--record` and
+  it take a `%d` for the pod's node, so a centre's pods don't share a file.
 - **The Mechs have arms.** Every Mech draws the same two arm assemblies,
   `516` and `517`, and its own display-list record picks the arm: vars 4 and
   6 (the vehicle record's `+0x2C`/`+0x2E`), skipped when the arm's intact

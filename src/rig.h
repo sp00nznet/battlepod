@@ -112,16 +112,24 @@ static void rig_joins(const float *alo, const float *ahi,
 }
 
 /* Copy one decoded part into the assembly, moved to where it hangs. */
-static void rig_add(struct mesh *out, const struct mesh *part, const float *at)
+/* ...turned by `r` (a 3x3, rows; NULL for none) and then moved to `at`. */
+static void rig_add_xf(struct mesh *out, const struct mesh *part, const float *r, const float *at)
 {
 	int vbase = out->top, mbase = out->nmat_top, i;
 
 	for (i = 0; i < part->top; i++) {
 		int d = vbase + i;
+		float x = part->vx[i], y = part->vy[i], z = part->vz[i];
 		if (!part->vset[i] || d >= MESH_VERTS) continue;
-		out->vx[d] = part->vx[i] + at[0];
-		out->vy[d] = part->vy[i] + at[1];
-		out->vz[d] = part->vz[i] + at[2];
+		if (r) {
+			float rx = r[0] * x + r[1] * y + r[2] * z;
+			float ry = r[3] * x + r[4] * y + r[5] * z;
+			z = r[6] * x + r[7] * y + r[8] * z;
+			x = rx; y = ry;
+		}
+		out->vx[d] = x + at[0];
+		out->vy[d] = y + at[1];
+		out->vz[d] = z + at[2];
 		if (!out->vset[d]) out->nvert++;
 		out->vset[d] = 1;
 		if (d + 1 > out->top) out->top = d + 1;
@@ -159,6 +167,11 @@ static void rig_add(struct mesh *out, const struct mesh *part, const float *at)
 	if (out->top < vbase + part->top) out->top = vbase + part->top;
 	if (out->nmat_top < mbase + MESH_MATS && mbase + part->nmat_top > out->nmat_top)
 		out->nmat_top = mbase + part->nmat_top;
+}
+
+static void rig_add(struct mesh *out, const struct mesh *part, const float *at)
+{
+	rig_add_xf(out, part, NULL, at);
 }
 
 #endif /* BATTLEPOD_RIG_H */

@@ -523,9 +523,42 @@ upper arm. `mesh.h`'s `MESH_NEAR` takes the near level, the intact branch
 and both sides of every face group; it is C only and used only for the arms,
 so the Python port and the harness's decoder totals are unchanged.
 
-Still open: an arm that aims. The instance transforms are identity in every
-frame captured so far, with nobody firing at anything; one more 3x3 follows
-the fifteen of them in the record, and is not identified.
+### The pose
+
+A Mech's record carries fifteen instance transforms from word 94, a 3x3 and
+a translation each, one per skeleton slot. `--mech-dump` writes every Mech
+record of every list, and 58 seconds of two CPU pilots fighting (about 3,500
+records) shows which ones move:
+
+```
+slots 7, 8, 9    left hip, knee, ankle     a rotation about x, every frame
+slots 10, 11, 12 right hip, knee, ankle    the same
+slots 1-6, 13-15                           identity throughout
+```
+
+So the walk is in the frame, and nothing else is. The knee settles how to
+apply it: on the Loki its angle runs from -5 to 95 degrees and is positive in
+1,382 of 1,403 records - a knee bends one way - while the hip swings both
+ways about 45 degrees and the ankle counter-rotates. Those are angles
+relative to the parent joint, so a node is its parent, then its offset, then
+its own transform, composed, which is the order `$040` names them in. Of the
+two ways to read the nine floats, reading them by columns leaves the Loki's
+knee behind its ankle in 117 of 3,474 leg-frames against 428 by rows; by
+columns it is. `frame_draw` poses every Mech that way (`mech_posed`), and at
+rest the result is byte-for-byte the Mech it drew before.
+
+**The arms do not aim.** The shoulder slots, 3 and 5, stayed identity
+through that whole fight, with both pilots firing and both taking hits; so
+did the torso's. What the Mech points, it points with its body. A stance
+foot is not planted either: measured in world space it slides about as far
+as the body moves, in every reading of the matrices, so the gait is a cycle
+played while the body glides rather than steps that push off the ground.
+
+The same dump confirms where the variables start. Words 55 to 78 change in
+pairs that always add to 1, an intact and a damaged fraction, and on the
+word-31 alignment they are exactly the sub-part tags the vehicle record
+gives each hit location: the Loki's Right Torso (24, 25) and Right Arm (44,
+45) are the ones that took hits.
 
 ### The weapon table
 

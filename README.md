@@ -257,7 +257,8 @@ Run with no arguments for the full option list. The ones that matter:
 | `--cpu TYPE` | `68020` / `68030` / `68040` |
 | `--realtime` | pace the pod's clock to the wall, as a real pod ran |
 | `--headless` | open no windows (`cockpit.exe`); for RDP and CI |
-| `--record FILE` | the pod's own frames as video, 25 a second of its clock, through `ffmpeg` |
+| `--record FILE` | the pod's own frames as video, 25 a second of its clock, through `ffmpeg`; a `%d` becomes the pod's node |
+| `--mech-dump FILE` | every Mech record of every display list, one line each, for finding what moves; `%d` as for `--record` |
 
 Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is

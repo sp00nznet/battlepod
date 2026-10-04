@@ -206,12 +206,12 @@ move.*
   broadcasting. The `0xED` looks like a relink to an escape pod or a camera;
   neither has been followed. Settled by: tapping the death routine's callees
   on the dying pod.
-- **An arm that aims.** Which arm a Mech carries and where it hangs at rest
-  are settled (RENDERING.md, *The arms*): vars 4 and 6 of its display-list
-  record, at offsets from its root through instances 5 and 3. Those
-  instances are identity in every frame seen so far, and the 3x3 after the
-  fifteen joint transforms is unidentified. Settled by: frames of a Mech
-  turning its torso or firing, and which words move.
+- **What the record's sixteenth 3x3 is.** After the fifteen joint transforms
+  (RENDERING.md, *The pose*) comes one more 3x3 and three words; it did not
+  change through a whole fight. The shoulder and torso slots did not either,
+  so whatever a pilot's torso twist or `TIPS TORSO` does to the picture has
+  not been seen yet. Settled by: a fight with a person on the stick, and
+  which words move.
 - **What the SecCom ring carries.** Its structure is known - a 32-slot ring of
   42-byte messages at `+0x132`, with indices at `+0x12A` and `+0x12E` - and it
   is set up during an ordinary boot. But a boot only ever finds it empty, so
