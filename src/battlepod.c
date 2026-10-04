@@ -3031,7 +3031,7 @@ static void usage(void)
 	"                   Musashi profile with the FPU enabled)\n"
 	"  --headless       open no windows (cockpit): over RDP, in CI\n"
 	"  --record FILE    the pod's own frames as video, 25 a second of its\n"
-	"                   clock, through ffmpeg (on PATH); %d is the pod's node\n"
+	"                   clock, through ffmpeg (on PATH); %%d is the pod's node\n"
 	"  --mech-dump FILE every Mech record of every display list, a line each\n"
 	"\n"
 	"reading the firmware\n"
