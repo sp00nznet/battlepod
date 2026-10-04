@@ -8,6 +8,8 @@
 # VWE_GAME_FILES at the extracted "Console Files/Game Files" directory; without
 # it this skips rather than fails.
 
+# '$240' and the like below are the renderer's opcode names, meant literally.
+# shellcheck disable=SC2016
 set -eu
 
 BIN=${BIN:-./build/battlepod.exe}
