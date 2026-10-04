@@ -870,7 +870,7 @@ struct pod_frame {
 	int have_cam, seq;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
 	int n;
-	struct { uint32_t entity, model; float rot[9], at[3]; } obj[FRAME_OBJS];
+	struct { uint32_t entity, model, arms; float rot[9], at[3]; } obj[FRAME_OBJS];
 };
 static struct pod_frame g_frame_cur, g_frame_last;
 static struct pod_frame g_frame_latest;	/* the last complete list, placed or not */
@@ -886,23 +886,74 @@ static const char *g_frameout;
 static struct { uint32_t id; struct mesh *m; } g_mcache[MCACHE];
 static int g_mcache_n;
 
-static const struct mesh *model_mesh(uint32_t id)
+/* The arms. A Mech's own record in the display list carries, from word 31,
+ * the variables its models' predicates test, and two models read them: 516
+ * draws the right arm, 501 + (var 4 - 1), unless var 44 - the Right Arm's
+ * sub-part, its intact value - is zero, and 517 the left, 511 + (var 6 - 1)
+ * on var 46. Vars 4 and 6 are the vehicle record's +0x2C and +0x2E, one to
+ * five; five decodes to nothing, which is a chassis with no arm. Each hangs
+ * where 516/517's own $040 puts it, (+-1.38, 1.80, -1.50) from the Mech's
+ * root, through an instance transform that is identity at rest.
+ * RENDERING.md, *The arms*. */
+#define MECH_VARS 31			/* record word of var 0 */
+
+static uint32_t dl_word(uint32_t ti_byte_addr, uint32_t i);
+
+static uint32_t mech_arms(uint32_t ti_byte_addr, uint32_t at, uint32_t len)
+{
+	uint32_t r, l;
+
+	if (len <= MECH_VARS + 46) return 0;
+	r = dl_word(ti_byte_addr, at + MECH_VARS + 4);
+	l = dl_word(ti_byte_addr, at + MECH_VARS + 6);
+	if (!dl_word(ti_byte_addr, at + MECH_VARS + 44) || r < 1 || r > 5) r = 0;
+	if (!dl_word(ti_byte_addr, at + MECH_VARS + 46) || l < 1 || l > 5) l = 0;
+	return r | l << 4;
+}
+
+/* One model, seen close and whole (MESH_NEAR), added at `at`. */
+static void rig_near(uint32_t id, const float *at)
+{
+	uint32_t len = mesh_find(g_mesh_base, 0x200000u, id, g_meshbuf, sizeof g_meshbuf);
+
+	if (!len) return;
+	mesh_run_mode(&g_part, g_meshbuf, len, MESH_NEAR);
+	rig_add(&g_rig, &g_part, at);
+}
+
+static void rig_arms(uint32_t arms)
+{
+	static const float root[3] = { 0, 0, 0 };
+	static const float hang[2][3] = { { 1.38f, 1.80f, -1.50f }, { -1.38f, 1.80f, -1.50f } };
+	int side;
+
+	for (side = 0; side < 2; side++) {
+		uint32_t v = (arms >> (side * 4)) & 15;
+		if (!v) continue;
+		rig_near(516 + side, root);		/* the shoulder: its own polygons */
+		rig_near(500 + side * 10 + v, hang[side]);	/* the arm it chose */
+	}
+}
+
+static const struct mesh *model_mesh(uint32_t id, uint32_t arms)
 {
 	const struct mesh *src = NULL;
 	struct mesh *m = NULL;
+	uint32_t key = id | arms << 16;
 	int i;
 
 	for (i = 0; i < g_mcache_n; i++)
-		if (g_mcache[i].id == id) return g_mcache[i].m;
+		if (g_mcache[i].id == key) return g_mcache[i].m;
 	if (id >= 451 && id <= 456) {
 		rig_assemble(id);
+		rig_arms(arms);
 		src = &g_rig;
 	} else if (rig_load(id)) {
 		src = &g_part;
 	}
 	if (src && (m = malloc(sizeof *m)) != NULL) memcpy(m, src, sizeof *m);
 	if (g_mcache_n < MCACHE) {
-		g_mcache[g_mcache_n].id = id;
+		g_mcache[g_mcache_n].id = key;
 		g_mcache[g_mcache_n].m = m;
 		g_mcache_n++;
 	}
@@ -950,7 +1001,7 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 					fr->obj[i].entity, id);
 			continue;
 		}
-		if (!(m = model_mesh(id))) {
+		if (!(m = model_mesh(id, fr->obj[i].arms))) {
 			if (log) printf("  entity %u model %u: no geometry\n", fr->obj[i].entity, id);
 			continue;
 		}
@@ -1939,6 +1990,7 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 				int f = g_frame_cur.n++;
 				g_frame_cur.obj[f].entity = dl_word(ti_byte_addr, at + 2);
 				g_frame_cur.obj[f].model = dl_word(ti_byte_addr, at + 5);
+				g_frame_cur.obj[f].arms = mech_arms(ti_byte_addr, at, len);
 				for (k = 0; k < 9; k++)
 					g_frame_cur.obj[f].rot[k] = as_float(dl_word(ti_byte_addr, at + 6 + k));
 				for (k = 0; k < 3; k++)

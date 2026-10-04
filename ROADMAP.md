@@ -139,6 +139,10 @@ the model's own stated bounding box. `render.py --mech` hangs the parts on it
 by matching each part's box against the node offsets, and all six chassis
 assemble to eight parts and draw.
 
+*Since found* (RENDERING.md, *The arms*): the pod's display list says which
+arm each Mech carries and the arm assemblies say where it hangs; only the
+aim, per frame, is open. The paragraph below is how it looked before.
+
 What genuinely is not in the archive is where the **arms** go. `$480`'s tags
 identify them — `516` is the right arm and weapon pod, `517` the left, five
 alternative loadouts each — but hung on the shoulder nodes they reach well

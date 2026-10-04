@@ -389,7 +389,7 @@ ankle; the parts left in that block fit no better, so this is recorded as open
 rather than guessed at. The straight-legged three come out 4.60 wide, which is
 close enough to 4.00 to be the same kind of rounding everything else here has.
 
-**What is still missing is the arms.** The vehicle records list a Left and
+**The arms were missing here, and are found below** (*The arms*). The vehicle records list a Left and
 Right Arm and a Left and Right Weapon Pod among their 21 hit locations, and the
 archive holds candidates — `477`-`480`, and `516`/`517`, which are a left/right
 pair whose x signs match the shoulder nodes. But the MadCat skeleton has no
@@ -476,7 +476,7 @@ Terrain and buildings use the same opcode to group their polygons and tag them
 1 and 2. That is a zone number and nothing to do with anybody's left foot, so
 only mech parts get their tags named.
 
-**This is also what settles the arms.** `516` and `517` are the two arm
+**This is also what identifies the arms** (*The arms*, below, says where they go). `516` and `517` are the two arm
 assemblies, each drawing five alternative sub-models — five loadouts, one
 chosen at draw time. What is not settled is where they go. Hung on the shoulder
 nodes they reach far outside the mech's own bounding box, and their geometry
@@ -486,6 +486,46 @@ the parts that hold still between frames are authored where they sit, and the
 ones that aim are not. The MadCat skeleton has no shoulder nodes at all, so at
 least one arm mount is supplied rather than stored — the same boundary
 everything else here runs into.
+
+### The arms
+
+They were never in the skeleton, and they are not chosen by chassis. Every
+Mech draws the same two assemblies, `516` (right) and `517` (left), and the
+pod's own display list says what they draw. A Mech's type 3 record carries,
+from word 31, the variables its models' predicates test; read against
+`516`'s program:
+
+```
+node 1 <- 0, instance 5, offset (1.38, 1.80, -1.50)   ; 517: instance 3, x -1.38
+if var 44 is zero: draw nothing                         ; the Right Arm's intact value
+if var 4 == 1..5: draw 501..505                         ; 517: var 46, var 6, 511..515
+```
+
+Vars 4 and 6 are the vehicle record's `+0x2C` and `+0x2E`, copied into the
+entity: 3 and 3 for MadCat, Loki and Sunder Primes, 2 and 2 for Vulture,
+Thor and Avatar, and some variants differ side to side (Loki V1 is 1 and 2).
+That is the evidence for word 31: the same two numbers turn up in the
+frame's words 35 and 37 for all six chassis, and on that alignment vars 44
+and 46 land on per-location values that read 1.0 on an undamaged Mech.
+Variant 5 decodes to nothing, which is a chassis with no arm; nothing in
+this release's 38 records uses it.
+
+Instances 5 and 3 are the skeleton's shoulder slots (nodes 9 and 11 on the
+Loki), and in the frame both are identity at rest, so an arm hangs at its
+offset from the Mech's root, authored pointing forward (+z, the way the toes
+point). `frame_draw` adds the shoulder (516/517's own few polygons) and the
+chosen arm to the assembled Mech: the Loki goes from 206 polygons to 320.
+
+The arm models keep their forearm behind three kinds of branch - a distance
+test for the level of detail, the weapon pod's intact value, and face-facing
+groups - so neither single path the other parts use draws more than the
+upper arm. `mesh.h`'s `MESH_NEAR` takes the near level, the intact branch
+and both sides of every face group; it is C only and used only for the arms,
+so the Python port and the harness's decoder totals are unchanged.
+
+Still open: an arm that aims. The instance transforms are identity in every
+frame captured so far, with nobody firing at anything; one more 3x3 follows
+the fifteen of them in the record, and is not identified.
 
 ### The weapon table
 

@@ -716,7 +716,7 @@ CHECKTEXT="$SEEN"
 check_contains 'type 3, 286 longwords'                      # the Mech's model record
 check_contains 'FFFFFFFF        1C4'                        # naming model 452, the MadCat
 check_contains '300.0000   150.0000     0.9397     0.9848'  # its searchlight
-check_contains 'entity 1 model 452 at (8000.0, 8000.0, 5.4): 224 polygons'  # drawn from the pod's camera
+check_contains 'entity 1 model 452 at (8000.0, 8000.0, 5.4): 338 polygons'  # drawn from the pod's camera, arms and all
 CHECKTEXT="$UNSEEN"
 check_count_zero 'type 3,'                                  # no visibility range, no Mech
 CHECKTEXT="$AVATAR"
@@ -753,7 +753,7 @@ if [ -n "$GAME" ]; then
     CHECKTEXT="$GAME"
     check_contains '0000  02 1F A0 60'                                   # the pod is flying thing 1
     check_contains 'height 8.20'                                         # from its cockpit
-    check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 206 polygons'  # and sees the Loki
+    check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 320 polygons'  # and sees the Loki, arms and all
 fi
 # Scenario 4Q: live play, headless. tools/play.sh starts a game the same way
 # and runs the SDL cockpit with the main view drawn from the pod's own
@@ -774,7 +774,7 @@ if [ -x ./build/cockpit.exe ] && [ -n "$MAP" ]; then
     if command -v ffmpeg >/dev/null 2>&1; then
         CHECKTEXT=$(PLAY_STEPS=100000000 PLAY_ARGS="--headless --record $OUT.mp4" sh tools/play.sh 2>&1 |
             awk '/^recorded/ { print "frames recorded: " $2 }')
-        check_at_least "frames recorded" 100                           # a few seconds of game, on video
+        check_at_least "frames recorded" 25                            # a second of game at least: how many depends on the machine's speed, since the clock is paced to the wall
     else
         echo "  skip  --record: no ffmpeg on PATH"
     fi

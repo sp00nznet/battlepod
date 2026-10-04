@@ -72,7 +72,8 @@ your own copy.
 ![Walking toward the Loki on BadLands, drawn from the pod's own display list](docs/screenshots/cockpit-loki.png)
 
 *The main view on the netlab test VM: a MadCat walking toward the Loki on
-BadLands, every polygon placed by the pod's own display list.*
+BadLands, every polygon placed by the pod's own display list - arms
+included, which the pod's own record chooses (RENDERING.md, *The arms*).*
 
 ![The operator's view: three CPU pilots fighting on BadLands](docs/screenshots/operator-view.png)
 

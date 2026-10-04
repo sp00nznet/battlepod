@@ -49,6 +49,8 @@ snap drop.png
 key w
 ...
 snap walking.png
+wait 4
+snap closer.png
 ...
 snap fire.png
 key a
@@ -71,13 +73,14 @@ run on testbox: C:\netlab\battlepod\cockpit.exe C:\netlab\vwe\GameFiles\Full_Loa
 ok   window 'battlepod - main view'
 snap drop.png
 snap walking.png
+snap closer.png
 snap fire.png
 snap turn.png
 PASS
 ```
 
 The screenshots land in netlab's `local/qa/battlepod/<time>/`;
-[the one in the README](screenshots/cockpit-loki.png) is `walking.png`.
+[the one in the README](screenshots/cockpit-loki.png) is `closer.png`.
 
 ## What it took
 

@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The Mechs have arms.** Every Mech draws the same two arm assemblies,
+  `516` and `517`, and its own display-list record picks the arm: vars 4 and
+  6 (the vehicle record's `+0x2C`/`+0x2E`), skipped when the arm's intact
+  value (vars 44/46) is zero, hung at the assembly's offset from the Mech's
+  root. The arms keep their forearms behind distance, damage and face-facing
+  branches, so they decode through a new `MESH_NEAR` walk. The Loki goes
+  from 206 polygons to 320; RENDERING.md, *The arms*. An arm that aims is
+  still open.
 - **`--headless --record out.mp4`.** The pod's own frames, drawn as
   `--frame-out` draws one, piped to `ffmpeg` at 25 a second of the pod's
   clock, with no window: over RDP, on a test VM, in CI. `--headless` opens

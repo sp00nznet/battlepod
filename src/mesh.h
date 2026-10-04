@@ -160,6 +160,22 @@ static uint32_t mesh_target(uint32_t operand)
 #define MESH_ALL  0
 #define MESH_FALL 1
 #define MESH_TAKE 2
+/* NEAR is a model seen close up and whole: a test on the distance ($0A0 in
+ * the predicate) falls through to the near level of detail, a bare variable
+ * test ([$020 v]) is a sub-part's intact value and is taken, and both sides
+ * of every face-facing group are drawn. The arms need it: they keep their
+ * forearm behind exactly those three kinds of branch. */
+#define MESH_NEAR 3
+
+/* What NEAR does with a predicate: 1 to take the jump. */
+static int mesh_near_takes(const uint32_t *w, uint32_t at, uint32_t end)
+{
+	uint32_t i;
+
+	for (i = at; i < end; i++)
+		if (w[i] == 0x0A0) return 0;
+	return end - at == 3 && w[at] == 0x020;
+}
 
 static void mesh_run_mode(struct mesh *m, const uint8_t *data, uint32_t bytes, int mode)
 {
@@ -207,7 +223,8 @@ static void mesh_run_mode(struct mesh *m, const uint8_t *data, uint32_t bytes, i
 				if (bad || end >= n) { m->stopped = "predicate"; goto done; }
 				if (mode == MESH_ALL) {
 					if (nwork < 256) work[nwork++] = mesh_target(w[end]);
-				} else if (mode == MESH_TAKE) {
+				} else if (mode == MESH_TAKE ||
+					   (mode == MESH_NEAR && mesh_near_takes(w, at, end))) {
 					at = mesh_target(w[end]);
 					continue;
 				}
@@ -219,7 +236,7 @@ static void mesh_run_mode(struct mesh *m, const uint8_t *data, uint32_t bytes, i
 				if (bad) { m->stopped = "predicate"; goto done; }
 				continue;
 			case 0x300: case 0x340:			/* jump on face facing */
-				if (mode == MESH_ALL) {
+				if (mode == MESH_ALL || mode == MESH_NEAR) {
 					if (nwork < 256) work[nwork++] = mesh_target(w[at + 1]);
 				} else if (mode == MESH_TAKE) {
 					at = mesh_target(w[at + 1]);
