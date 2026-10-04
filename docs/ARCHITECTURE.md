@@ -1,10 +1,50 @@
-# Where this is going
+# Architecture
 
 The hardware findings are in [DEVICES.md](DEVICES.md), the renderer in
-[RENDERING.md](RENDERING.md), and the near-term work in
-[ROADMAP.md](../ROADMAP.md). This file is the long view: what the finished thing
-should be, what shape it takes, and which decisions are already settled by
-evidence rather than by taste.
+[RENDERING.md](RENDERING.md), the wire between pods in [api.md](api.md), and
+the near-term work in [ROADMAP.md](../ROADMAP.md). This file says what runs
+today and how the parts talk, then takes the long view.
+
+## What runs today
+
+```
+              Full_Load_3_0 + the release's images (yours, never in the repo)
+                                  │ loaded at the addresses the load script names
+                                  v
+  ┌──────────────────── battlepod.c ─────────────────────────────────────────┐
+  │ Musashi 68040 profile (the board's 68020+68881)                          │
+  │ DUART: channel B the serial console, channel A Remote I/O (the panel)    │
+  │ stubs: TMS340 renderer (display lists walked, frames kept), audio, Amiga │
+  │ packets in: --packet / --packet-file, or --net from a hub                │
+  └────┬─────────────────────┬───────────────────────┬───────────────────────┘
+       │ display lists       │ Remote I/O bytes      │ packets the pod sends
+       v                     v                       v
+  frame_draw (raster.h)   rio.h -> panel state    --net: UDP to tools/hub.py
+   ├ main view window      ├ lamps, displays,       ├ relays to the other pods
+   ├ --frame-out .rgb      │ bar graphs windows     ├ CPU pilots (as panel input)
+   └ --record -> ffmpeg    └ --rio-dump file        └ operator's view (tkinter, or a PNG)
+```
+
+| program | built from | owns |
+|---|---|---|
+| `battlepod.exe` | `src/battlepod.c` | the emulator and every report: no SDL, so the harness and batch tools never grow the dependency |
+| `cockpit.exe` | the same source with `-DBATTLEPOD_SDL` | the same emulator hosting four windows: lamps, displays, bar graphs, main view; `--live-pod` makes the keyboard the panel |
+| `panel.exe`, `view.exe` | `src/panel.c`, `src/view.c` | standalone viewers of a Remote I/O capture and of raw 480x360 frames |
+| `tools/hub.py` | Python | a centre: launches pods as processes, starts the game on each as the operator console did, relays their packets, flies CPU pilots |
+| `tools/play.sh` | sh + Python | one pod and a person: the console's start-of-game packets, then `cockpit.exe --live-pod` |
+| `tools/*.py` | Python | readers for the release: resources, models, vehicles, missions, the console's own code |
+| `tools/conformance.sh` | sh | the harness: replays boots and games against the release and counts checkpoints |
+
+Every pod is a whole emulated cockpit in its own process; the hub is the
+ARCNET segment and the operator console, and nothing else. The seams are
+the ones the hardware had: packets on the wire, Remote I/O bytes on the panel
+link, display lists to the renderer. Nothing in between is invented, which is
+why each can be replayed, captured and checked on its own.
+
+## Where this is going
+
+What the finished thing should be, what shape it takes, and which decisions
+are already settled by evidence rather than by taste.
 
 ## First, how it actually plays
 

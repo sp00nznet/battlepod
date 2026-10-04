@@ -10,7 +10,9 @@ separate from the project's own front page.
 |---|---|
 | [DEVICES.md](DEVICES.md) | The hardware, board by board: the address map, the DUART, the interrupts, the boot monitor, the resource archive, the renderer's command protocol, the network and the secondary display. The longest document and the one everything else rests on. |
 | [RENDERING.md](RENDERING.md) | How the pod drew a picture, and how this project draws it back: the display list, the model programs, materials, the chassis, the rest pose, whole maps. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Where this is going - the windows, the seams, the networking, and which decisions evidence has already settled. Also answers how the game actually played. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | The programs that run today and how they talk, then where this is going - the windows, the seams, the networking, and which decisions evidence has already settled. Also answers how the game actually played. |
+| [api.md](api.md) | The wire between pods and the hub: every UDP datagram, the packets the hub reads, the panel reports a CPU pilot sends. |
+| [netlab.md](netlab.md) | Building and testing on the lab's farm and test VM: the recipe, a run, and what it took (a mingw builder, a renderer that crawled, keys without scan codes). |
 | [FALSE-TRAILS.md](FALSE-TRAILS.md) | **Every wrong turn that cost real time, and what killed it.** |
 | [UNRESOLVED.md](UNRESOLVED.md) | **What is assumed, what is measured and unexplained, and what is papered over.** |
 | [DEVICES.md](DEVICES.md) also carries the **mission interpreter**: the 162-opcode bytecode machine the pod runs its scenarios on. |

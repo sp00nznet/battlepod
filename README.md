@@ -11,10 +11,31 @@ guess - every published manual and patent has been checked, and
 [SOURCES.md](docs/SOURCES.md) says what each one does and does not contain.
 This is how you find out what it was.
 
+It sits with the sp00nznet recomp projects and follows their house style
+(one repository per machine, a conformance harness, `--headless --record`,
+builds and tests on netlab), but it is not a recompiler: the pod's 68020 runs
+under an interpreter, which is all a 1996 board needs (see
+[ROADMAP.md](ROADMAP.md), *Deferred*).
+
 ## Status
 
-**v0.1.0 — alpha, a research tool, not a game.** Geometry out of the archive
-renders; the cockpit builds frames but nothing puts them on a screen yet. Conformance: **207/207** checkpoints.
+**v0.1.0 — alpha: a research tool, and now something you can play.** A game
+starts the way the operator console starts one, the main view draws the
+pod's own frames in a window, the keyboard is its throttle, stick and
+trigger, and pods joined over UDP can destroy each other. There is no sound,
+no secondary display and no heads-up display yet. Conformance: **287/287**
+checkpoints (`make conformance`).
+
+| | |
+|---|---|
+| Boots its own image set to the main game loop | yes |
+| Renderer, audio and Amiga boards | stubbed; the renderer's display lists are read and drawn in C |
+| Main view, from the pod's own frames | yes |
+| Panel: lamps, displays, bar graphs (Remote I/O) | yes, one window per device |
+| Keyboard as throttle, stick, trigger, target select | yes |
+| Several pods over UDP, CPU pilots, the operator's view | yes (`tools/hub.py`) |
+| Headless video, `--headless --record out.mp4` | yes |
+| Secondary (Amiga) display, sound | no |
 
 The cockpit boots from its own image set to `main game loop (SecCom 674 bytes).`
 with three boards stubbed, and **all four of its subsystem checks now pass**.
@@ -39,114 +60,63 @@ BattleTech, Red Planet and Martian Football - and
 [docs/](docs/) for the whole technical record - including
 [what turned out to be wrong](docs/FALSE-TRAILS.md) and [what is still
 assumed or papered over](docs/UNRESOLVED.md) - and
-[ARCHITECTURE.md](docs/ARCHITECTURE.md) for what the finished thing should be - a
-pod in SDL windows you can arrange, an operator console written rather than
-emulated, and ARCNET over UDP so eight pods on a LAN is the same code as eight
-across the internet.
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) for the programs, how they fit
+together, and where they are going. What a BattleTech Center and its cockpits
+were is at the top of [DEVICES.md](docs/DEVICES.md#the-machine-at-a-glance).
 
 It does not contain, and will never contain, any VWE code or data. You supply
 your own copy.
 
-## The machine
+## Screenshots
 
-A BattleTech Center was organised in **sides** of eight cockpits. Each side had
-its own network and its own operator.
+![Walking toward the Loki on BadLands, drawn from the pod's own display list](docs/screenshots/cockpit-loki.png)
 
-```
-                         Ethernet / EtherTalk
-   Operations Macs ─── Mission Review ─── OpsCon Mac
-                                              │  A/ROSE ARCNET NuBus card
-                                              │
-                                     ARCNET (RG62 coax, star hub)
-          ┌──────────┬──────────┬─────────────┴────┬──────────────┐
-      cockpit 1  cockpit 2  cockpit 3    ...   cockpit 8     camera ship
-```
+*The main view on the netlab test VM: a MadCat walking toward the Loki on
+BadLands, every polygon placed by the pod's own display list.*
 
-The Macintosh side is **not** where the game lives. OpsCon is a file server with
-a launch button: the operator picks a scenario and a team list, and OpsCon
-pushes a set of binaries down the ARCNET into each cockpit's memory, then tells
-it to jump. Everything after that happens inside the pod.
+![The operator's view: three CPU pilots fighting on BadLands](docs/screenshots/operator-view.png)
 
-### Inside one cockpit
-
-The card cage holds four boards on a backplane:
-
-```
-  ┌──────────────────────────────────────────────────────────────┐
-  │ CPU board   68020 + 68881                                    │
-  │             game simulation, display lists, ARCNET           │──▶ main screen
-  │                                                              │
-  │   0x20000000  ──▶  TMS34020 renderer   (rasterises)          │
-  │                      └─▶ TMS34082 FPU (3D maths)            │
-  │   0x40000000  ──▶  "Secondary": an Amiga 500  ───────────────│──▶ MFD screen
-  │   0x50000000  ──▶  audio board                               │──▶ speakers
-  │   serial      ──▶  Remote I/O board                          │◀── stick, throttle,
-  │                    (lamps, bargraphs, heat scale, LCDs)      │    pedals, keypad
-  └──────────────────────────────────────────────────────────────┘
-```
-
-The two surprises, if you have only read the marketing:
-
-- The **"Amiga board" is a literal Amiga 500 motherboard** on a VWE carrier
-  card. It does not run the game — it draws the cockpit's secondary
-  multi-function display. Its code is 61 KB compiled with Manx Aztec C.
-- The **renderer is a Texas Instruments TMS34020 graphics processor with a
-  TMS34082 floating-point coprocessor**, and its entire bit-addressed address
-  space is mapped into the 68020 at `0x20000000`. The 68020 uploads the
-  renderer's microcode at boot, byte-reversing every longword on the way
-  because the TMS340 is little-endian and the 68020 is not. The '20 rasterises;
-  the '82 does the 3D arithmetic, driven over the coprocessor bus by 419
-  `CEXEC`/`CMOV*` instructions in R.BIN. See DEVICES.md for how the part was
-  identified from the instruction stream.
-
-### What gets loaded where
-
-`Full_Load_3_0` — a nine-line text file in the release — is the whole boot
-recipe:
-
-| image | loads at | what it is |
-|---|---|---|
-| `ROM3_0` | `0x020FFFE4` | the game: 68020 code, 534 KB |
-| `BattleTech_68020_Res` | `0x02AC0000` | 68020-side resources |
-| `R.BIN3_0` | `0x02AE0000` | TMS340 microcode |
-| `BattleTech_TI_Res` | `0x02B00000` | geometry and renderer resources, 1.5 MB |
-| `btAudio.dld` | `0x02D00000` | audio download image |
-| `AMIGA3_0` | `0x400003E4` | Amiga 500 MFD program |
-| `btsecond3_0` | `0x40010400` | Amiga 500 data |
-| `DEVELOPMENT` | `0x02FFFF00` | an 11-byte marker enabling developer mode |
-| `Go_Address` | `0x02100000` | entry point |
-
-### What the cockpit does at boot
-
-1. Clear bss, bring up the serial console, print `BTS2--Up`.
-2. Probe the audio board; report if it doesn't answer.
-3. Upload `R.BIN` into the TMS340's memory, reset it, and wait for it to write
-   **`0x31415926`** — π — into a shared word. That is the renderer saying hello.
-4. Ask the renderer to allocate memory, load the resource map, and free the
-   scratch. Commands go through a queue in the renderer's memory; replies come
-   back through the same buffer.
-5. Wait for the Amiga 500 to write `0x01234567`, answer with `0x76543210`, and
-   agree on a 1,652-byte shared communication block (the firmware prints its
-   size in hex, which is where the long-standing "674" came from).
-6. Push all 989 KB of `btAudio.dld` through a 32-entry ring FIFO to the audio
-   board.
-7. Enter the main game loop, and poll the boot monitor for an incoming packet
-   until the operator console sends one.
-
-`battlepod` replaces step 0 — the ARCNET download — by placing the same files at
-the same addresses, runs the 68020 with [Musashi](https://github.com/kstenerud/Musashi),
-and either logs or stands in for everything the CPU board talks to.
+*`tools/hub.py --bots 3 --arena --console`: three pods, each a whole emulated
+cockpit, flown by CPU pilots, seen from above.*
 
 ## Getting Started
 
-From a clean machine.
+### Quick start
+
+1. Download the repository (the green *Code* button, *Download ZIP*) and
+   unzip it, or clone it.
+2. Get *VWE Release 13.1.8* from the Internet Archive:
+   <https://archive.org/details/vwe-release-13.1.8>, and extract it with
+   `unar` (or have the `.sit` to hand: setup extracts it if `unar` is there).
+3. Run **`Setup.cmd`** on Windows, or **`./setup.sh`** elsewhere.
+
+Setup checks the prerequisites below and asks before installing any that are
+missing (MSYS2 on Windows, through `winget`), asks where your release is,
+then runs exactly the commands in *Step by step*: `make deps`, `make`,
+`make cockpit`, `make test`. It ends with a launcher, `Play.cmd` (or
+`./play`), that starts a game. If it stops, it says what to do in one
+sentence and keeps the details in `setup.log`; run it again and it carries
+on. It never downloads or copies the VWE release: you point it at yours.
+
+### Step by step
 
 **Prerequisites**
 
-- A C compiler (GCC 9+ or Clang 10+; on Windows, MSYS2 mingw-w64 works)
-- `make`, `git`, Python 3.8+ (for `tools/`)
+- A C compiler: GCC 9+ or Clang 10+. On Windows, MSYS2's MINGW64 shell
+  (`pacman -S mingw-w64-x86_64-gcc make`), not Git Bash, which has no
+  compiler.
+- GNU `make` 4+, `git`, and Python 3.8+ for `tools/` and `make deps`
+- SDL2 2.0.10+ and `pkg-config`, for the cockpit's windows (`make cockpit`,
+  `make view`, `make panel`); the emulator itself needs neither
 - [The Unarchiver CLI](https://theunarchiver.com/command-line) (`unar`), to
-  unpack the release — it is a StuffIt archive with Macintosh resource forks
+  unpack the release - it is a StuffIt archive with Macintosh resource forks
+- Optional: `ffmpeg` on `PATH`, for `--record`
+
+The usual trip-ups: on Windows, `python` can be the Microsoft Store's alias,
+which opens the Store instead of running anything - inside MSYS2 install
+`mingw-w64-x86_64-python` (or turn the alias off under *App execution
+aliases*). Tools installed while a terminal is open are not on its `PATH`
+until you open a new one.
 
 **1. Get the release.** `battlepod` ships no game data. Download
 *VWE Release 13.1.8* from the Internet Archive:
@@ -168,6 +138,7 @@ re-stuff for compatibility. Either will do.
 git clone <this repo> battlepod && cd battlepod
 make deps      # clones Musashi into third_party/
 make
+make cockpit   # the emulator with its windows; needs SDL2
 make test      # -> selftest OK (cpu runs, unmapped writes logged, pc tracked)
 ```
 
@@ -250,6 +221,16 @@ remote i/o: 1 frames decoded
 
 which is what a panel renderer consumes. See [RENDERING.md](docs/RENDERING.md).
 
+**6. Play it.**
+
+```
+VWE_GAME_FILES="$GF" tools/play.sh
+```
+
+The lamps, displays, bar graphs and main view open as four windows. Your Mech
+drops in, and after a few seconds the main view shows BadLands with a Loki
+150 metres ahead. W/S throttle, A/D stick, space fires, T targets, Esc quits.
+
 ## Usage
 
 Run with no arguments for the full option list. The ones that matter:
@@ -257,9 +238,7 @@ Run with no arguments for the full option list. The ones that matter:
 | flag | what it does |
 |---|---|
 | `--duart BASE` | model the MC68681 DUART at `BASE`; channel B is the console, captured and fed |
-| `--duart-in TEXT` | type `TEXT` at the console receiver (`
-`, `
-` work) |
+| `--duart-in TEXT` | type `TEXT` at the console receiver (`\r`, `\n` work) |
 | `--rstub ADDR` | stub the TMS340 renderer: comm block at `ADDR`, acknowledge every command, log the queue, serve allocations |
 | `--poke ADDR=HEX` | unmapped reads at `ADDR` return `HEX` |
 | `--set ADDR=HEX` | write a longword into RAM after loading, for answers a device would have left there |
@@ -275,6 +254,9 @@ Run with no arguments for the full option list. The ones that matter:
 | `--watch BASE:LEN` | also log accesses inside a mapped region, so a loaded resource shows which offsets get read and from where |
 | `--csv FILE` | write the full unmapped-access table |
 | `--cpu TYPE` | `68020` / `68030` / `68040` |
+| `--realtime` | pace the pod's clock to the wall, as a real pod ran |
+| `--headless` | open no windows (`cockpit.exe`); for RDP and CI |
+| `--record FILE` | the pod's own frames as video, 25 a second of its clock, through `ffmpeg` |
 
 Everything outside declared RAM is logged: address, width, read and write
 counts, the PC that first touched it, and the last value written. That log is
@@ -365,6 +347,20 @@ starts a game the way the operator console does - range, vehicles, map,
 own frames, its clock paced to the wall. W/S throttle, A/D stick, space fires,
 T selects a target, L the searchlight, Esc quits. Your Mech drops in first and
 ignores the controls until it lands. A Loki stands 150 metres ahead.
+
+**Record it, without a window.** `--record` draws the pod's frames as
+`--frame-out` does and pipes them to `ffmpeg`, timed by the pod's own clock,
+so it works over RDP, on a test VM or in CI:
+
+```
+PLAY_PKT=out/play.pkt BIN=none tools/play.sh        # the start-of-game packets
+./build/cockpit.exe "$GF/Full_Load_3_0" --duart 11000 --rstub 3FF00000 --rirq --astub \
+    --monitor --clock 2000808 --set 40000100=1234567 --packet-file out/play.pkt \
+    --live-pod --steps 400000000 --headless --record out/game.mp4
+```
+
+`battlepod.exe` takes `--record` too (with `--realtime`, or the pod's clock
+runs about forty times fast).
 
 **Run a centre.** `tools/hub.py` runs several pods at once - each a whole
 emulated cockpit in its own process - joined over UDP, starts the game on all
@@ -477,7 +473,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 207/207). Skips with a clear message if no
+reporting a pass count (currently 287/287). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile
@@ -495,6 +491,17 @@ make           # build/battlepod.exe
 make test      # self-check
 make clean
 ```
+
+`make cockpit`, `make view` and `make panel` add SDL2. A cross build names
+its compiler, the build machine's compiler (for Musashi's table generator)
+and its pkg-config: `make CC=x86_64-w64-mingw32-gcc HOSTCC=gcc
+PKG_CONFIG=...`; `PYTHON=python3` where `python` is missing.
+
+Day to day, builds and test runs go to
+[netlab](https://github.com/sp00nznet/recomp-netlab) rather than a
+workstation: its mingw builder cross-builds every exe in seconds, and its
+Windows test VM runs the cockpit, plays a game and screenshots it. See
+[docs/netlab.md](docs/netlab.md) for the recipe and what it took.
 
 No dependencies beyond a C compiler and Musashi, which is MIT-licensed and
 fetched rather than vendored.

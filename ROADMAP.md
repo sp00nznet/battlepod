@@ -183,12 +183,13 @@ having one.
 
 - Draw a whole display list rather than one model at a time. `render.py` takes
   a resource id today; the list format is decoded and the pieces are there.
-- Remote I/O: keyboard or HOTAS to stick, throttle, pedals; lamps, heat scale
-  and bargraphs somewhere visible.
+- Remote I/O: a HOTAS or pedals as stick, throttle and pedals (the keyboard
+  drives them today, and lamps, displays and bar graphs have windows).
 - The Amiga 500 secondary display: either HLE the 1,652-byte SecCom protocol or
   run the 61 KB Aztec C program on a second Musashi context.
 - Audio: decode `btAudio.dld`'s `A5A5` record stream.
-- ARCNET over UDP, and multi-pod games.
+- Multi-pod games across machines: pods over UDP work on one machine through
+  `tools/hub.py` ([docs/api.md](docs/api.md)); a hub reachable from a LAN is next.
 - The Macintosh operator console — only needed for the real operator UI, since
   everything it supplies is plaintext in the release.
 

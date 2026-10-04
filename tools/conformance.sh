@@ -43,7 +43,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b" "$OUT.pool"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b" "$OUT.pool" "$OUT.mp4"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -766,6 +766,18 @@ if [ -x ./build/cockpit.exe ] && [ -n "$MAP" ]; then
     check_contains 'entity 2 model 451 at (5385.0, 7425.0, 5.4)'       # the Loki, live
     CHECKTEXT=$(echo "$PLAY" | awk '/^live clock/ { gsub(",", "", $4); print ($4 == $6) ? "live clock paced" : "live clock not paced" }')
     check_contains 'live clock paced'                                   # game time is wall time
+fi
+# Scenario 4U: the same game recorded with no window (--headless --record):
+# the pod's own frames through ffmpeg, 25 to a second of its clock. Counted
+# only where ffmpeg is on PATH; without it this says so and moves on.
+if [ -x ./build/cockpit.exe ] && [ -n "$MAP" ]; then
+    if command -v ffmpeg >/dev/null 2>&1; then
+        CHECKTEXT=$(PLAY_STEPS=100000000 PLAY_ARGS="--headless --record $OUT.mp4" sh tools/play.sh 2>&1 |
+            awk '/^recorded/ { print "frames recorded: " $2 }')
+        check_at_least "frames recorded" 100                           # a few seconds of game, on video
+    else
+        echo "  skip  --record: no ffmpeg on PATH"
+    fi
 fi
 # Scenario 4S: a centre. tools/hub.py runs two pods as separate processes
 # joined over UDP, starts a game on each the way the console does, relays

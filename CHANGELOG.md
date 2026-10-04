@@ -8,6 +8,42 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **`--headless --record out.mp4`.** The pod's own frames, drawn as
+  `--frame-out` draws one, piped to `ffmpeg` at 25 a second of the pod's
+  clock, with no window: over RDP, on a test VM, in CI. `--headless` opens
+  `cockpit.exe`'s windows on SDL's dummy driver and doesn't wait for them to
+  be closed. Scenario 4U records a few seconds of a game. **287/287.**
+- **Quick start: `Setup.cmd` / `setup.sh`.** Checks the prerequisites and
+  asks before installing any (MSYS2 through `winget`, then `pacman`; or apt,
+  or Homebrew), asks where your release is, runs the README's step-by-step
+  commands, and leaves a `Play.cmd` (or `./play`) launcher. Tested from a
+  clean clone.
+- **Builds and tests on netlab** ([docs/netlab.md](docs/netlab.md)): every
+  exe cross-built on its new mingw builder in seconds, the self-checks run
+  there natively, and the cockpit played on the Windows test VM with
+  screenshots of each stage. The README's first screenshot comes from it.
+- `docs/api.md`, the wire between pods and the hub; *What runs today* at the
+  top of `docs/ARCHITECTURE.md`; README screenshots.
+- `PLAY_PKT=FILE` in `tools/play.sh` keeps the start-of-game packets, and
+  `BIN=none` stops there, for a machine with the cockpit and no Python.
+- The Makefile takes `HOSTCC`, `PYTHON` and `PKG_CONFIG`, for cross builds.
+
+### Fixed
+
+- `src/battlepod.c` called `clock_gettime` without `<time.h>`, so it did not
+  build on Linux; the first netlab build found it.
+- The README's `--duart-in` row, split across lines by an escaped newline.
+
+### Changed
+
+- The README follows the house order: what it is, status (now with a table),
+  screenshots, getting started (quick start, then step by step), usage,
+  building. *The machine* moved to the top of `docs/DEVICES.md`.
+- ROADMAP: multi-pod over UDP and keyboard input are done; what is left of
+  each is said.
+
+### Added
+
 - **A kill between pods.** A hit on a Mech another pod owns becomes `0xBA`,
   sent to the owner's node; the owner applies it and reports it in `0xEA`.
   That needs pods with addresses of their own (net 1, node N) in a game whose

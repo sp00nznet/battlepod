@@ -7,6 +7,11 @@ MUSASHI := third_party/musashi
 BUILD   := build
 
 CC      := gcc
+# A cross build (netlab's mingw builder) runs m68kmake on the build machine,
+# so it is compiled with that machine's compiler.
+HOSTCC  ?= $(CC)
+PYTHON  ?= python
+PKG_CONFIG ?= pkg-config
 CFLAGS  := -pipe -O2 -g -Wall -Wno-unused-parameter
 INC     := -Isrc -I$(MUSASHI) -I$(BUILD)
 # Musashi's documented hook for supplying your own configuration.
@@ -50,7 +55,7 @@ $(BUILD)/m68kops.c $(BUILD)/m68kops.h: $(BUILD)/m68kmake.exe $(MUSASHI)/m68k_in.
 	./$(BUILD)/m68kmake.exe $(BUILD)/ $(MUSASHI)/m68k_in.c
 
 $(BUILD)/m68kmake.exe: $(MUSASHI)/m68kmake.c | $(BUILD)
-	$(CC) -pipe -O2 -o $@ $<
+	$(HOSTCC) -pipe -O2 -o $@ $<
 
 $(BUILD):
 	mkdir -p $(BUILD)/tmp
@@ -59,7 +64,7 @@ $(BUILD):
 # reaches; tools/musashi_fpu.py adds them and is idempotent.
 deps:
 	@test -d $(MUSASHI) || git clone --depth 1 https://github.com/kstenerud/Musashi $(MUSASHI)
-	@python tools/musashi_fpu.py $(MUSASHI)/m68kfpu.c
+	@$(PYTHON) tools/musashi_fpu.py $(MUSASHI)/m68kfpu.c
 
 test: $(BUILD)/battlepod.exe $(BUILD)/paneltest.exe $(BUILD)/viewtest.exe
 	./$(BUILD)/battlepod.exe --selftest
@@ -77,8 +82,8 @@ conformance: $(BUILD)/battlepod.exe
 # The panel renderer is optional: it needs SDL2, and nothing else here does.
 # It reads the Remote I/O byte stream `battlepod --rio-dump` writes, so it runs
 # with no emulator present.
-SDL_CFLAGS := $(shell pkg-config --cflags sdl2 2>/dev/null)
-SDL_LIBS   := $(shell pkg-config --static --libs sdl2 2>/dev/null)
+SDL_CFLAGS := $(shell $(PKG_CONFIG) --cflags sdl2 2>/dev/null)
+SDL_LIBS   := $(shell $(PKG_CONFIG) --static --libs sdl2 2>/dev/null)
 
 panel: $(BUILD)/panel.exe
 

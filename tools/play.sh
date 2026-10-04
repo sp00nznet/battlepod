@@ -20,6 +20,9 @@
 # Needs VWE_GAME_FILES set as for tools/conformance.sh, and `make cockpit`.
 # PLAY_STEPS bounds the run and PLAY_ARGS adds options; the harness uses both
 # with SDL_VIDEODRIVER=dummy and BATTLEPOD_NO_HOLD=1 to play one headless.
+# PLAY_PKT=FILE keeps the start-of-game packets in FILE; with BIN=none it
+# stops there, for a machine that has the cockpit but no Python (netlab's
+# recipe runs cockpit.exe on its test VM with that file).
 
 set -eu
 
@@ -27,10 +30,9 @@ GF=${VWE_GAME_FILES:?set VWE_GAME_FILES to the Game Files directory of the relea
 SCEN=${1:-BadLands-16}
 VEH=${2:-0}
 BIN=${BIN:-./build/cockpit.exe}
-[ -x "$BIN" ] || { echo "play: $BIN not built; run make cockpit" >&2; exit 1; }
+[ "$BIN" = none ] || [ -x "$BIN" ] || { echo "play: $BIN not built; run make cockpit" >&2; exit 1; }
 
-OUT=$(mktemp)
-trap 'rm -f "$OUT"' EXIT
+if [ -n "${PLAY_PKT:-}" ]; then OUT=$PLAY_PKT; else OUT=$(mktemp); trap 'rm -f "$OUT"' EXIT; fi
 
 
 python - "$GF/Scenarios/$SCEN" "$VEH" > "$OUT" <<'PY'
@@ -70,6 +72,7 @@ for l in lines[2:]:
     print(l)
 print(pkt(0xED, 0x40, [(0x0A, "16s", b"B1_BattleTech_1"), (0x32, ">l", 1)]))
 PY
+[ "$BIN" != none ] || exit 0
 
 "$BIN" "$GF/Full_Load_3_0" --duart 11000 --rstub 3FF00000 --rirq --astub \
     --monitor --clock 2000808 --set 40000100=1234567 \

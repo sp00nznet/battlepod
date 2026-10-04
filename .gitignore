@@ -13,3 +13,12 @@ third_party/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# netlab builds and per-machine builds
+build-*/
+
+# setup.sh: its log, where your release is, the launcher it makes
+setup.log
+.vwe
+Play.cmd
+/play

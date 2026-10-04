@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include "m68k.h"
 #include "rio.h"
@@ -1439,7 +1440,7 @@ static int net_open(const char *spec)
 }
 
 /* Called every few thousand instructions: say hello until the hub answers,
- * and take whatever it has sent. */
+ * and take whatever it has sent. The datagrams are docs/api.md. */
 static void net_poll(uint32_t now)
 {
 	uint8_t buf[2048];
@@ -1990,6 +1991,94 @@ static void frame_report(void)
 		printf("  %s: %dx%d, %d models, %d polygons\n",
 		       g_frameout, RAS_W, RAS_H, drawn, poly);
 	}
+}
+
+/* --record: the pod's own frames, drawn as --frame-out draws one, piped to
+ * ffmpeg at 25 a second of the pod's clock (g_clock_val, in hundredths), so
+ * the video keeps the game's time however fast or slow the emulator ran. No
+ * window and no display, which is what makes it work over RDP and in CI. */
+#define REC_EVERY 4			/* hundredths per video frame: 25 fps */
+static const char *g_recpath;
+static FILE *g_rec;
+static uint32_t g_rec_next;
+static int g_rec_frames;
+
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+static HANDLE g_rec_proc;
+#endif
+
+static void rec_open(void)
+{
+	char cmd[1024];
+#ifdef _WIN32
+	/* Not _popen: that goes through cmd.exe, which opens a console window
+	 * when cockpit.exe (a GUI program) has none - on someone's screen. */
+	SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
+	STARTUPINFOA si = { sizeof si };
+	PROCESS_INFORMATION pi;
+	HANDLE rd, wr;
+
+	snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d "
+		 "-r %d -i - -pix_fmt yuv420p \"%s\"", RAS_W, RAS_H, 100 / REC_EVERY, g_recpath);
+	if (CreatePipe(&rd, &wr, &sa, 0)) {
+		SetHandleInformation(wr, HANDLE_FLAG_INHERIT, 0);
+		si.dwFlags = STARTF_USESTDHANDLES;
+		si.hStdInput = rd;
+		si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+		si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+		if (CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW,
+				   NULL, NULL, &si, &pi)) {
+			CloseHandle(pi.hThread);
+			g_rec_proc = pi.hProcess;
+			g_rec = _fdopen(_open_osfhandle((intptr_t)wr, _O_BINARY), "wb");
+		} else {
+			CloseHandle(wr);
+		}
+		CloseHandle(rd);
+	}
+#else
+	snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d "
+		 "-r %d -i - -pix_fmt yuv420p '%s'", RAS_W, RAS_H, 100 / REC_EVERY, g_recpath);
+	g_rec = popen(cmd, "w");
+#endif
+	if (!g_rec) fprintf(stderr, "--record: could not start ffmpeg\n");
+}
+
+/* Called every few thousand instructions; writes every video frame the
+ * clock has passed since the last call, the latest pod frame in each (black
+ * until the first one). */
+static void rec_poll(void)
+{
+	static struct raster r;
+	static int drawn_seq = -1;
+	int models;
+
+	if (!g_rec_next) g_rec_next = g_clock_val;
+	if (g_clock_val < g_rec_next) return;
+	if (g_frame_latest.have_cam && g_frame_latest.seq != drawn_seq) {
+		frame_draw(&r, &g_frame_latest, &models, 0);
+		drawn_seq = g_frame_latest.seq;
+	}
+	while (g_clock_val >= g_rec_next) {
+		fwrite(r.px, 1, sizeof r.px, g_rec);
+		g_rec_frames++;
+		g_rec_next += REC_EVERY;
+	}
+}
+
+static void rec_close(void)
+{
+#ifdef _WIN32
+	fclose(g_rec);
+	WaitForSingleObject(g_rec_proc, INFINITE);
+	CloseHandle(g_rec_proc);
+#else
+	pclose(g_rec);
+#endif
+	printf("\nrecorded %d frames (%.1f s of pod time) to %s\n",
+	       g_rec_frames, g_rec_frames * REC_EVERY / 100.0, g_recpath);
 }
 
 /* The request is staged in 68k RAM, memcpy'd into the queue at block+8, and the
@@ -2719,6 +2808,9 @@ static void usage(void)
 	"  --steps N        instruction budget (default 200000000)\n"
 	"  --cpu TYPE       68020 | 68030 | 68040 (default 68040, the only\n"
 	"                   Musashi profile with the FPU enabled)\n"
+	"  --headless       open no windows (cockpit): over RDP, in CI\n"
+	"  --record FILE    the pod's own frames as video, 25 a second of its\n"
+	"                   clock, through ffmpeg (on PATH)\n"
 	"\n"
 	"reading the firmware\n"
 	"  --trace N        disassemble the first N instructions\n"
@@ -2842,6 +2934,10 @@ int main(int argc, char **argv)
 		else if (!strcmp(a, "--scene") && i + 1 < argc) g_scenefile = argv[++i];
 		else if (!strcmp(a, "--scene-out") && i + 1 < argc) g_sceneout = argv[++i];
 		else if (!strcmp(a, "--frame-out") && i + 1 < argc) g_frameout = argv[++i];
+		else if (!strcmp(a, "--record") && i + 1 < argc) { g_recpath = argv[++i]; g_capture = 1; }
+		/* SDL's dummy driver: the windows exist, nobody sees them, and
+		 * nothing waits for them to be closed. */
+		else if (!strcmp(a, "--headless")) { putenv("SDL_VIDEODRIVER=dummy"); putenv("BATTLEPOD_NO_HOLD=1"); }
 		else if (!strcmp(a, "--frame-at") && i + 1 < argc) g_frame_at = atoi(argv[++i]);
 		else if (!strcmp(a, "--scene-drop") && i + 1 < argc) g_scenedrop = atoi(argv[++i]);
 		else if (!strcmp(a, "--amiga") && i + 1 < argc) g_amiga = argv[++i];
@@ -3063,6 +3159,7 @@ int main(int argc, char **argv)
 #ifdef BATTLEPOD_SDL
 	if (g_live && !live_open(g_liveframes)) return 1;
 #endif
+	if (g_recpath) rec_open();
 	printf("running...\n\n");
 
 	for (step = 0; step < budget; step++) {
@@ -3077,6 +3174,7 @@ int main(int argc, char **argv)
 		if ((step % g_clock_div) == 0) clock_tick();
 		if (g_net && (step & 0xFFF) == 0) net_poll(g_clock_val);
 		if (g_realtime && (step & 0xFFF) == 0) realtime_pace();
+		if (g_rec && (step & 0xFFF) == 0) rec_poll();
 		if (g_monstub && (pc - g_monstub) < MON_SLOTS * MON_STUB_SZ &&
 		    !((pc - g_monstub) % MON_STUB_SZ)) {
 			uint32_t slot = (pc - g_monstub) / MON_STUB_SZ;
@@ -3141,6 +3239,7 @@ int main(int argc, char **argv)
 #ifdef BATTLEPOD_SDL
 	if (g_live) { live_hold(step); live_close(); }
 #endif
+	if (g_rec) rec_close();
 	printf("\nstopped after %llu instructions: %s\n", (unsigned long long)step, stop);
 	printf("pc %08X  sp %08X  sr %04X\n",
 	       m68k_get_reg(NULL, M68K_REG_PC), m68k_get_reg(NULL, M68K_REG_SP),

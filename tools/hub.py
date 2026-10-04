@@ -25,6 +25,7 @@ usage:
 
 Needs VWE_GAME_FILES, `make` (and `make cockpit` for --human). Pod output
 goes to build/pod<N>.log.
+The wire between the hub and its pods is docs/api.md.
 """
 import math
 import os

@@ -19,6 +19,98 @@ make
 
 ---
 
+## The machine at a glance
+
+A BattleTech Center was organised in **sides** of eight cockpits. Each side had
+its own network and its own operator.
+
+```
+                         Ethernet / EtherTalk
+   Operations Macs ─── Mission Review ─── OpsCon Mac
+                                              │  A/ROSE ARCNET NuBus card
+                                              │
+                                     ARCNET (RG62 coax, star hub)
+          ┌──────────┬──────────┬─────────────┴────┬──────────────┐
+      cockpit 1  cockpit 2  cockpit 3    ...   cockpit 8     camera ship
+```
+
+The Macintosh side is **not** where the game lives. OpsCon is a file server with
+a launch button: the operator picks a scenario and a team list, and OpsCon
+pushes a set of binaries down the ARCNET into each cockpit's memory, then tells
+it to jump. Everything after that happens inside the pod.
+
+### Inside one cockpit
+
+The card cage holds four boards on a backplane:
+
+```
+  ┌──────────────────────────────────────────────────────────────┐
+  │ CPU board   68020 + 68881                                    │
+  │             game simulation, display lists, ARCNET           │──▶ main screen
+  │                                                              │
+  │   0x20000000  ──▶  TMS34020 renderer   (rasterises)          │
+  │                      └─▶ TMS34082 FPU (3D maths)            │
+  │   0x40000000  ──▶  "Secondary": an Amiga 500  ───────────────│──▶ MFD screen
+  │   0x50000000  ──▶  audio board                               │──▶ speakers
+  │   serial      ──▶  Remote I/O board                          │◀── stick, throttle,
+  │                    (lamps, bargraphs, heat scale, LCDs)      │    pedals, keypad
+  └──────────────────────────────────────────────────────────────┘
+```
+
+The two surprises, if you have only read the marketing:
+
+- The **"Amiga board" is a literal Amiga 500 motherboard** on a VWE carrier
+  card. It does not run the game — it draws the cockpit's secondary
+  multi-function display. Its code is 61 KB compiled with Manx Aztec C.
+- The **renderer is a Texas Instruments TMS34020 graphics processor with a
+  TMS34082 floating-point coprocessor**, and its entire bit-addressed address
+  space is mapped into the 68020 at `0x20000000`. The 68020 uploads the
+  renderer's microcode at boot, byte-reversing every longword on the way
+  because the TMS340 is little-endian and the 68020 is not. The '20 rasterises;
+  the '82 does the 3D arithmetic, driven over the coprocessor bus by 419
+  `CEXEC`/`CMOV*` instructions in R.BIN. See DEVICES.md for how the part was
+  identified from the instruction stream.
+
+### What gets loaded where
+
+`Full_Load_3_0` — a nine-line text file in the release — is the whole boot
+recipe:
+
+| image | loads at | what it is |
+|---|---|---|
+| `ROM3_0` | `0x020FFFE4` | the game: 68020 code, 534 KB |
+| `BattleTech_68020_Res` | `0x02AC0000` | 68020-side resources |
+| `R.BIN3_0` | `0x02AE0000` | TMS340 microcode |
+| `BattleTech_TI_Res` | `0x02B00000` | geometry and renderer resources, 1.5 MB |
+| `btAudio.dld` | `0x02D00000` | audio download image |
+| `AMIGA3_0` | `0x400003E4` | Amiga 500 MFD program |
+| `btsecond3_0` | `0x40010400` | Amiga 500 data |
+| `DEVELOPMENT` | `0x02FFFF00` | an 11-byte marker enabling developer mode |
+| `Go_Address` | `0x02100000` | entry point |
+
+### What the cockpit does at boot
+
+1. Clear bss, bring up the serial console, print `BTS2--Up`.
+2. Probe the audio board; report if it doesn't answer.
+3. Upload `R.BIN` into the TMS340's memory, reset it, and wait for it to write
+   **`0x31415926`** — π — into a shared word. That is the renderer saying hello.
+4. Ask the renderer to allocate memory, load the resource map, and free the
+   scratch. Commands go through a queue in the renderer's memory; replies come
+   back through the same buffer.
+5. Wait for the Amiga 500 to write `0x01234567`, answer with `0x76543210`, and
+   agree on a 1,652-byte shared communication block (the firmware prints its
+   size in hex, which is where the long-standing "674" came from).
+6. Push all 989 KB of `btAudio.dld` through a 32-entry ring FIFO to the audio
+   board.
+7. Enter the main game loop, and poll the boot monitor for an incoming packet
+   until the operator console sends one.
+
+`battlepod` replaces step 0 — the ARCNET download — by placing the same files at
+the same addresses, runs the 68020 with [Musashi](https://github.com/kstenerud/Musashi),
+and either logs or stands in for everything the CPU board talks to.
+
+---
+
 ## Image format
 
 Every downloadable image carries a 28-byte header:
