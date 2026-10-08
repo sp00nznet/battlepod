@@ -24,7 +24,7 @@ starts the way the operator console starts one, the main view draws the
 pod's own frames in a window, the keyboard is its throttle, stick and
 trigger, and pods joined over UDP can destroy each other. There is no sound,
 no secondary display, and the head-up display has its reticle but not yet
-its text. Conformance: **290/290**
+its text. Conformance: **292/292**
 checkpoints (`make conformance`).
 
 | | |
@@ -33,6 +33,7 @@ checkpoints (`make conformance`).
 | Renderer, audio and Amiga boards | stubbed; the renderer's display lists are read and drawn in C |
 | Main view, from the pod's own frames | yes: Mechs posed and walking, ground and shadows, the pod's sky |
 | Head-up display | the reticle and the drop bay; text readouts not yet |
+| Explosions, day, dusk and night skies | yes; night's lighting on the ground not yet |
 | Panel: lamps, displays, bar graphs (Remote I/O) | yes, one window per device |
 | Keyboard as throttle, stick, trigger, target select | yes |
 | Several pods over UDP, CPU pilots, the operator's view | yes (`tools/hub.py`) |
@@ -478,7 +479,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 290/290). Skips with a clear message if no
+reporting a pass count (currently 292/292). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

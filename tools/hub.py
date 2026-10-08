@@ -145,7 +145,7 @@ class Hub:
             f = line.split()
             if len(f) == 5 and f[4] == "-1":
                 drops.append([float(v) for v in f[:4]])
-        world = [pkt(0xE5, 0x60, [(0x3C, ">l", 600000),
+        world = [pkt(0xE5, 0x60, [(0x3C, ">l", 600000), (0x40, ">l", self.args.env),
                                   (0x44, ">l", self.args.range),
                                   (0x48, ">l", self.args.range)]),
                  addressed(bytes.fromhex(mapsend.reset_world()), 0)]
@@ -460,6 +460,7 @@ def main(argv):
     ap.add_argument("--human", action="store_true")
     ap.add_argument("--vehicles", default="0,8,12,30,34,4,26,13")
     ap.add_argument("--port", type=int, default=5170)
+    ap.add_argument("--env", type=int, default=0, help="0 day, 1 dusk, 2 night")
     ap.add_argument("--seconds", type=float, default=0)
     ap.add_argument("--range", type=int, default=500,
                     help="visibility range sent in 0xE5, each half")

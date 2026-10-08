@@ -253,9 +253,15 @@ move.*
   and let it seam is not read. The rasteriser's own field of view is 54
   degrees, not 60, which is the same question from the other side.
 - **Type 4s 126-130** carry data that is not a sprite.
-- **Explosions.** The archive's fire and its green twins are decoded
-  (RENDERING.md, *Images*); where the pod puts them - a HUD item, a record
-  type - is not followed yet, so they are not drawn.
+- **What the environment's colours light.** `$2C0` carries six floats after
+  the field of view - day `0.609 0.511 0.437` and `0.324 0.504 0.972`, night
+  much darker - and the environment entry more. They are surely the haze, the
+  ambient and the light, but which is which is not read, so dusk and night get
+  their skies and keep daylight on the ground and the models.
+- **95 and 96** are the drop bay's two doors (184, 185: a bulkhead each, with
+  a green screen), placed from the viewer's `+0x128`/`+0x12C` - which DEVICES.md
+  took for a target's screen position. How they move as the bay opens has not
+  been watched frame by frame.
 - **Two TMS34082 operations**: the short-form `CEXEC` command packing and one
   mode 3 routine. The scanned handbook is not legible at those tables, and
   guessing would put numbers on screen no cockpit produced.

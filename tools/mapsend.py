@@ -63,8 +63,11 @@ def packet(op, length, fields):
     return " ".join("%02X" % x for x in b)
 
 
-def welcome(visibility):
+def welcome(visibility, env=0):
+    """+0x40 is the environment the world reset picks: 0 day, 1 dusk, 2 night
+    (RENDERING.md, *The sky*)."""
     return packet(0xE5, 0x60, [(0x3C, ">l", 600000),
+                               (0x40, ">l", env),
                                (0x44, ">l", visibility),
                                (0x48, ">l", visibility)])
 
@@ -74,7 +77,7 @@ def reset_world():
     and before any vehicle. Its arm (0x0213CF72) clears the game's state and
     picks the environment - sky, haze, light - from the table at 0x02179A10
     (or 0x02179B9C under a 600 range), indexed by the welcome's +0x40. Without
-    it the pod keeps the bay's environment, whose sky is not in the archive."""
+    it the pod keeps the one it boots with, 2: night."""
     return packet(0xE4, 0x40, [(0x0E, ">l", -1)])
 
 
@@ -116,13 +119,15 @@ def main(argv):
     if len(argv) < 2:
         print(__doc__)
         return 1
-    first, visibility, limit, near = 11, 500, None, None
+    first, visibility, limit, near, env = 11, 500, None, None, 0
     i = 2
     while i < len(argv):
         if argv[i] == "--first":
             first = int(argv[i + 1]); i += 2
         elif argv[i] == "--range":
             visibility = int(argv[i + 1]); i += 2
+        elif argv[i] == "--env":
+            env = int(argv[i + 1]); i += 2
         elif argv[i] == "--limit":
             limit = int(argv[i + 1]); i += 2
         elif argv[i] == "--near":
@@ -131,7 +136,7 @@ def main(argv):
             print("unknown option %s" % argv[i], file=sys.stderr)
             return 1
     print("# " + argv[1].replace("\\", "/").split("/")[-1])
-    print(welcome(visibility))
+    print(welcome(visibility, env))
     print(reset_world())
     thing = first
     for o in objects(argv[1]):

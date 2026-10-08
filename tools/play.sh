@@ -20,6 +20,7 @@
 # Needs VWE_GAME_FILES set as for tools/conformance.sh, and `make cockpit`.
 # PLAY_STEPS bounds the run and PLAY_ARGS adds options; the harness uses both
 # with SDL_VIDEODRIVER=dummy and BATTLEPOD_NO_HOLD=1 to play one headless.
+# PLAY_ENV picks the environment: 0 day (the default), 1 dusk, 2 night.
 # PLAY_PKT=FILE keeps the start-of-game packets in FILE; with BIN=none it
 # stops there, for a machine that has the cockpit but no Python (netlab's
 # recipe runs cockpit.exe on its test VM with that file).
@@ -36,9 +37,10 @@ if [ -n "${PLAY_PKT:-}" ]; then OUT=$PLAY_PKT; else OUT=$(mktemp); trap 'rm -f "
 
 
 python - "$GF/Scenarios/$SCEN" "$VEH" > "$OUT" <<'PY'
-import struct, subprocess, sys
+import os, struct, subprocess, sys
 scen, veh = sys.argv[1], int(sys.argv[2])
-lines = subprocess.run([sys.executable, "tools/mapsend.py", scen],
+lines = subprocess.run([sys.executable, "tools/mapsend.py", scen,
+                        "--env", os.environ.get("PLAY_ENV", "0")],
                        capture_output=True, text=True, check=True).stdout.splitlines()
 
 # A drop point from the scenario - facing, x, y, height - preferring one

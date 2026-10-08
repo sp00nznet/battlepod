@@ -889,7 +889,7 @@ struct pod_frame {
 	int have_cam, seq;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
 	int n;
-	struct { uint32_t entity, model, arms; int pose, ground; float rot[9], at[3], scale, stretch; } obj[FRAME_OBJS];
+	struct { uint32_t entity, model, arms, var[4]; int pose, ground; float rot[9], at[3], scale, stretch; } obj[FRAME_OBJS];
 	/* A Mech's record carries fifteen instance transforms from word 94, a
 	 * 3x3 and a translation each, one per skeleton slot: the pose. */
 	int npose;
@@ -1293,17 +1293,121 @@ static void hud_sprite(struct raster *r, int x, int y, uint32_t id)
 	int i, j, ox, oy;
 
 	if (!im) return;
-	/* A sprite is placed by its hotspot; a full-screen image by its corner. */
-	ox = x - (im->w <= 128 ? im->hx : 0);
-	oy = y - (im->w <= 128 ? im->hy : 0);
+	/* Every image is placed by its anchor: a sprite's hotspot, a type 7's
+	 * reference row - the bay's is 360, half its 720, so (0, y) scrolls the
+	 * view up the shaft as the Mech rises and the screen stays covered. */
+	ox = x - im->hx;
+	oy = y - im->hy;
 	for (j = 0; j < im->h; j++)
 		for (i = 0; i < im->w; i++) {
 			int sx = ox + i, sy = oy + j;
 			unsigned v = im->px[j * im->w + i];
-			/* 0 is transparent in a sprite; a full-screen image is opaque. */
-			if ((!v && im->w <= 128) || sx < 0 || sy < 0 || sx >= RAS_W || sy >= RAS_H) continue;
+			/* 0 is transparent, except in an image as wide as the screen. */
+			if ((!v && im->w < RAS_W) || sx < 0 || sy < 0 || sx >= RAS_W || sy >= RAS_H) continue;
 			px555(&r->px[(sy * RAS_W + sx) * 3], v);
 		}
+}
+
+/* A model that blits images instead of drawing polygons - 80, the explosion;
+ * 81, the planet and moon - run with its predicates evaluated rather than
+ * walked both ways: the thing's own variables, and its distance from the eye.
+ * `$560 a b n ids` draws image ids[var b] at vertex a (only ever 0, the
+ * thing's own position). RENDERING.md, *Explosions*. */
+static int fx_pred(const uint32_t *w, uint32_t n, uint32_t at, uint32_t end,
+		   const uint32_t *var, float dist)
+{
+	float st[8];
+	int sp = 0;
+
+	while (at < end && at < n) {
+		uint32_t op = w[at++];
+		float a, b;
+		if (op == 0x020 || op == 0x040 || op == 0x060 || op == 0x080 || op == 0x0A0) {
+			uint32_t v = w[at++];
+			if (sp >= 8) return 0;
+			st[sp++] = op == 0x020 ? (float)(v < 4 ? var[v] : 0)
+				 : op == 0x040 ? (float)v
+				 : op == 0x060 ? 0.0f : dist;
+			continue;
+		}
+		if (op == 0) break;
+		if (op == 0x2A0) {			/* not */
+			if (sp < 1) return 0;
+			st[sp - 1] = st[sp - 1] == 0.0f;
+			continue;
+		}
+		if (sp < 2) return 0;
+		b = st[--sp]; a = st[sp - 1];
+		st[sp - 1] = op == 0x200 ? a == b		/* equal */
+			   : op == 0x220 ? a > b		/* greater */
+			   : op == 0x260 ? a < b		/* less */
+			   : op == 0x160 ? (float)((uint32_t)a & (uint32_t)b)
+			   : 0.0f;
+	}
+	return sp > 0 && st[sp - 1] != 0.0f;
+}
+
+static int fx_draw(struct raster *r, const struct ras_cam *cam, uint32_t id,
+		   const struct ras_place *place, const uint32_t *var, float dist)
+{
+	static uint32_t w[2048];
+	static uint8_t buf[8192];
+	uint32_t len = mesh_find(g_mesh_base, 0x200000u, id, buf, sizeof buf), n, at, i;
+	int guard = 0, drawn = 0;
+
+	if (!len) return 0;
+	n = len / 4;
+	for (i = 0; i < n; i++)
+		w[i] = (uint32_t)buf[i * 4] << 24 | buf[i * 4 + 1] << 16 | buf[i * 4 + 2] << 8 | buf[i * 4 + 3];
+	at = MESH_STREAM;
+	while (at < n && guard++ < 256) {
+		uint32_t op = w[at++];
+		if (op == 0x000) break;
+		if (op == 0x320 || op == 0x360) {
+			int bad = 0;
+			uint32_t end = mesh_predicate(w, n, at, &bad);
+			if (bad || end >= n) break;
+			at = fx_pred(w, n, at, end, var, dist) ? mesh_target(w[end]) : end + 1;
+			continue;
+		}
+		if (op == 0x2C0) { at = mesh_target(w[at]); continue; }
+		if (op == 0x0A0) { at += 4; continue; }
+		if ((op == 0x560 || op == 0x580) && at + 3 <= n) {
+			uint32_t b = w[at + 1], cnt = w[at + 2], pick = b < 4 ? var[b] : 0;
+			const struct image *im;
+			float wpt[3], cp[3], sc[3];
+			if (cnt && at + 3 + cnt <= n) {
+				if (pick >= cnt) pick = cnt - 1;
+				im = image_get(w[at + 3 + pick]);
+				ras_to_world(place, 0, 0, 0, wpt);
+				ras_view(cam, wpt[0], wpt[1], wpt[2], cp);
+				if (im && ras_project(cp, sc)) {
+					int ax = (int)sc[0], ay = (int)sc[1], x, y;
+					float zh = ax >= 0 && ay >= 0 && ax < RAS_W && ay < RAS_H ?
+						   r->z[ay * RAS_W + ax] : 1e30f;
+					/* Behind something nearer at its own spot: hidden. */
+					if (cp[2] <= zh + 1.0f)
+						for (y = 0; y < im->h; y++)
+							for (x = 0; x < im->w; x++) {
+								int sx = ax - im->w / 2 + x, sy = ay - im->hy + y;
+								unsigned v = im->px[y * im->w + x];
+								if (!v || sx < 0 || sy < 0 || sx >= RAS_W || sy >= RAS_H) continue;
+								px555(&r->px[(sy * RAS_W + sx) * 3], v);
+							}
+					drawn++;
+				}
+			}
+			at += 3 + cnt;
+			continue;
+		}
+		if (op == 0x020) { at++; continue; }
+		{
+			int k = mesh_fixed(op);
+			if (k < 0) break;
+			at += (uint32_t)k;
+		}
+	}
+	return drawn;
 }
 
 static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models, int log)
@@ -1354,6 +1458,15 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 		if (dx * dx + dz * dz < 1.0f) {
 			if (log) printf("  entity %u model %u: at the eye, not drawn\n",
 					fr->obj[i].entity, id);
+			continue;
+		}
+		if (id == 80 || id == 81) {
+			float dy = fr->obj[i].at[1] - eye[1];
+			at.x = fr->obj[i].at[0]; at.y = -fr->obj[i].at[2]; at.z = fr->obj[i].at[1];
+			at.heading = 0; at.scale = 1.0f; at.stretch = 0;
+			n = fx_draw(r, &cam, id, &at, fr->obj[i].var, sqrtf(dx * dx + dz * dz + dy * dy));
+			if (log) printf("  entity %u model %u at (%.1f, %.1f, %.1f): %d images\n",
+					fr->obj[i].entity, id, at.x, at.y, at.z, n);
 			continue;
 		}
 		if (id >= 451 && id <= 456 && fr->obj[i].pose >= 0)
@@ -2374,6 +2487,9 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 				int f = g_frame_cur.n++;
 				g_frame_cur.obj[f].entity = dl_word(ti_byte_addr, at + 2);
 				g_frame_cur.obj[f].model = dl_word(ti_byte_addr, at + 5);
+				for (k = 0; k < 4; k++)
+					g_frame_cur.obj[f].var[k] = MECH_VARS + k < len ?
+						dl_word(ti_byte_addr, at + MECH_VARS + k) : 0;
 				g_frame_cur.obj[f].ground = type == 4;
 				g_frame_cur.obj[f].scale = type == 4 ? as_float(dl_word(ti_byte_addr, at + 21)) : 1.0f;
 				g_frame_cur.obj[f].stretch = type == 4 ? as_float(dl_word(ti_byte_addr, at + 23)) : 0.0f;

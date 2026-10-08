@@ -619,7 +619,7 @@ lists them and writes them out, and the harness counts the exact unpacks.
 | skies: gradients | 180-183 (aliases 86-89) | 480x180 |
 | skies: panoramas | 186-188, 200 (200 is alias 71) | 3360x128 |
 | the drop bay | 189 (alias 70) | 480x720 |
-| two tall panels, cockpit furniture by the look | 184, 185 | 292x360, 268x360 |
+| the drop bay's doors | 184, 185 (aliases 95, 96) | 292x360, 268x360 |
 | explosions, fire and a green twin, frame by frame | 261-320, 381-440 (aliases 201-260, 321-380) | 12x12 to 289x188 |
 
 Four type 4s (126-130) carry data in some other form, not yet read.
@@ -634,19 +634,24 @@ when the two halves of the visibility range add up to less than 600), indexed
 by the `0xE5` welcome's `+0x40`:
 
 ```
-0x02179A10  0  sky 71  the mountain panorama        daylight
-            1  sky 92  not in this archive
-            2  sky 93  not in this archive          the drop bay's
-0x02179B9C  0  sky 86  dusty gradient
-            1  sky 87  dark gradient
-            2  sky 88  darker
+0x02179A10  0  sky 71 -> 200  the mountain panorama, day
+            1  sky 92 -> 187  dusk, purple and red
+            2  sky 93 -> 186  night, dark blue - what a pod boots with
+0x02179B9C  0  sky 86 -> 181  dusty gradient
+            1  sky 87 -> 182  dark gradient
+            2  sky 88 -> 183  darker
 ```
 
-The rest of an entry is the haze and light colours the same item carries.
+Every entry in the first table also names 91 (-> 188, the same mountains in
+night-vision green), and every one in the second 89 (-> 180, a green
+gradient): each environment carries the sky an image intensifier would show,
+which is what the explosions' green twins are for too. The rest of an entry
+is the haze and light colours the same item carries. `tools/play.sh` takes
+`PLAY_ENV` and `tools/hub.py` `--env` to pick one; both default to day.
 **The selection is made by "Reset world"** - an `0xE4` of class -1, which
 the console's own log shows it sending before it creates any vehicle, and
 whose arm (`0x0213CF72`) clears the game and picks the environment. Without
-it the pod keeps the bay's, and its sky is not in the archive.
+it the pod keeps the one it boots with, 2, which is night.
 `tools/mapsend.py` now sends it, and so play.sh and the hub do.
 
 `frame_draw` draws the sky first: the image's reference row on the horizon -
@@ -661,8 +666,37 @@ id` draws an image there. In a game it is the reticle at the screen's centre
 (72, or 73-79 while it has a target); during the drop it is also 70, the bay,
 at (0, 0) and sliding down as the Mech rises - its eye is below the ground
 then, which is why ground decals are not drawn from underneath. A sprite is
-placed by its hotspot and 0 is transparent in it; a full-screen image is
-placed by its corner and is opaque.
+placed by its anchor - a sprite's hotspot, a type 7's reference row (the bay's
+is 360, half its height, so `$100 0 y` scrolls the view up the shaft) - and 0
+is transparent except in an image as wide as the screen.
+
+### Explosions
+
+A hit is a thing - class 5, from the pool at the top of the arena - placed
+with model 80, and model 80 draws no polygons. It is one vertex and a program
+that blits images:
+
+```
+if var 2:            the green set (321-380): night vision
+if distance < 40:    201-210      the largest
+if distance < 60:    211-220
+...
+if distance < 340:   241-250
+otherwise            251-260      the smallest
+$560 0 1 10 ids      draw ids[var 1] at vertex 0
+```
+
+Six sizes of one explosion, ten frames each, chosen by how far away it is;
+var 1 is the frame, and it counts 0 to 9 over about fifty lists. Model 81
+does the same with the planet and the moon (`$560 0 3`: var 3 picks). The
+variables are the record's, from word 31 as a Mech's are.
+
+`frame_draw` runs such a model with its predicates *evaluated* - the
+thing's variables, its distance from the eye (`$080`/`$0A0` push it), and
+`$200` equal, `$220` greater, `$260` less, `$2A0` not, `$160` and - and
+draws the image it lands on at the thing's position, anchored on the image's
+reference row, unless something nearer is already at that spot. In the
+harness's fight, list 1500 has two of them on the Loki.
 
 ### The weapon table
 

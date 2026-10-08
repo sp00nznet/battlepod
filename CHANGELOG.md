@@ -12,12 +12,19 @@ All notable changes to this project are documented here. The format follows
   packed images, and the renderer's own decompressor (`0xFE0090F0`) reads them:
   all 131 unpack to exactly their declared size. Skies, panoramas, the drop
   bay, explosions in fire and green; `tools/images.py` lists and exports them.
-  RENDERING.md, *Images*. Two checkpoints hold all 131. **290/290.**
+  RENDERING.md, *Images*. Two checkpoints hold all 131.
 - **The pod's own sky.** The scene's `$2C0` names it, from the environment
   table the 68020 picks at "Reset world" - which play.sh, the hub and mapsend
-  never sent. They do now, and BadLands has its blue sky and mountain
-  panorama, on a horizon that follows the camera's pitch. RENDERING.md,
+  never sent, so every game ran at night. They do now, and BadLands has its
+  blue sky and mountain panorama, on a horizon that follows the camera's
+  pitch. Day, dusk and night (`PLAY_ENV`, `hub.py --env`), each with a
+  night-vision twin. RENDERING.md,
   *The sky*.
+- **Explosions.** Model 80, a hit, is one vertex and a program that blits one
+  of sixty explosion frames - six sizes by distance, ten frames, fire or
+  night-vision green. It is run with its predicates evaluated against the
+  thing's own variables and drawn where the hit is. Two checkpoints in the
+  fight scenario. **292/292.** RENDERING.md, *Explosions*.
 - **The head-up display.** `$100`/`$240` items are drawn: the reticle at the
   screen's centre, and the drop bay's backdrop while the Mech rises out of it.
   Ground decals are not drawn from underneath. RENDERING.md, *The HUD*.
