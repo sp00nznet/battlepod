@@ -69,6 +69,15 @@ def welcome(visibility):
                                (0x48, ">l", visibility)])
 
 
+def reset_world():
+    """The console's "Reset world": an 0xE4 of class -1, sent after the welcome
+    and before any vehicle. Its arm (0x0213CF72) clears the game's state and
+    picks the environment - sky, haze, light - from the table at 0x02179A10
+    (or 0x02179B9C under a 600 range), indexed by the welcome's +0x40. Without
+    it the pod keeps the bay's environment, whose sky is not in the archive."""
+    return packet(0xE4, 0x40, [(0x0E, ">l", -1)])
+
+
 def create(thing, cls, shape, x, y, z, heading, scale, extras):
     f = [(0x0A, ">l", extras[-1] if extras else 0),
          (0x0E, ">l", cls), (0x12, ">l", thing),
@@ -93,6 +102,8 @@ def selftest():
     assert p[0x22:0x26] == ["00", "00", "00", "84"]
     assert p[0x26:0x2A] == ["3F", "80", "00", "00"]      # scale
     assert p[0x2A:0x2E] == ["43", "34", "00", "00"]      # heading 180
+    r = reset_world().split()
+    assert r[0] == "E4" and r[0x0E:0x12] == ["FF", "FF", "FF", "FF"]
     w = welcome(500).split()
     assert w[0x44:0x48] == ["00", "00", "01", "F4"]
     print("mapsend selftest OK")
@@ -121,6 +132,7 @@ def main(argv):
             return 1
     print("# " + argv[1].replace("\\", "/").split("/")[-1])
     print(welcome(visibility))
+    print(reset_world())
     thing = first
     for o in objects(argv[1]):
         if near and (o[2] - near[0]) ** 2 + (o[3] - near[1]) ** 2 > near[2] ** 2:

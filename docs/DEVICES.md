@@ -388,7 +388,8 @@ ids give the game away — type 4 occupies 201–260 and 321–380, type 7 occup
 
 **Type 7 is the payload.** High entropy (6.8 bits per byte against 3.8 for
 geometry and 2.9 for type 2), large — one is 113 KB — and reached only through
-its alias. Compressed or packed data; not floats, not opcodes.
+its alias. **Packed images**, every one of the 131: RENDERING.md, *Images*,
+has the format and the renderer's code that unpacks them.
 
 **Type 2 is six bitmaps.** A constant tag `0x7F20`, a depth field of 8 or 24, a
 width of 48, 64, 384 or 480, a small paired field, and a declared size that
@@ -3489,8 +3490,9 @@ the Mech down at `0x02134D6C`. The slot is freed and the next shot reuses it.
 **The top-of-arena pool is used after all.** The class 5 things at 950 and
 951 are written from `0x0214C654`, inside `0x0214C61E` - the allocator the
 table above says nothing calls. Nothing calls it *directly*; it is reached
-through a pointer. Model 80 is a type 4 resource, in the same block as the
-HUD's reticle models 72-79.
+through a pointer. Model 80 is a type 1 model of one vertex whose program blits
+explosion frames - the images 201-260 alias - rather than drawing polygons
+(RENDERING.md, *Images*). It was once recorded here as a type 4.
 
 `--frame-at N` draws display list N instead of the last one that placed a
 model, which is how a moment in a fight is looked at: `--frame-out` reports

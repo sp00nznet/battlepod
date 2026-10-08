@@ -45,7 +45,7 @@ EOF
 fi
 
 OUT=$(mktemp)
-trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b" "$OUT.pool" "$OUT.mp4"' EXIT
+trap 'rm -f "$OUT" "$OUT.rgb" "$OUT.pkt" "$OUT.game" "$OUT.sent" "$OUT.b" "$OUT.pool" "$OUT.mp4" "$OUT.map"' EXIT
 
 # Scenario 1: a cold boot with everything the pod's absent boot monitor would
 # have supplied - vectors, a timebase and its service table - plus stubs for the
@@ -552,7 +552,10 @@ TERRAIN=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF
 MAP=""
 if [ -f "${VWE_GAME_FILES}/Scenarios/BadLands-16" ]; then
     python tools/mapsend.py "${VWE_GAME_FILES}/Scenarios/BadLands-16" > "$OUT.pkt"
-    MAP=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45A84800 --set-at 02122154 21F99D6=45ECB800     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet-file "$OUT.pkt"     --frame-out "$OUT.rgb"     --steps 900000000 --top 0 2>&1 || true)
+    # Without mapsend's world reset (line 3): this viewer is made by hand, with
+    # --set-at, and the reset would clear it. 4N starts a game properly.
+    sed '3d' "$OUT.pkt" > "$OUT.map"
+    MAP=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --set-at 02122154 21F99AE=00000001     --set-at 02122154 21F99D2=45A84800 --set-at 02122154 21F99D6=45ECB800     --set-at 02122154 21F9AC4=41F00000 --set-at 02122154 21F9AA4=43340000     --packet-file "$OUT.map"     --frame-out "$OUT.rgb"     --steps 900000000 --top 0 2>&1 || true)
 fi
 
 # Scenario 4M: MECH_CLASS is 0xE4 class 1. Its arm hands 0x0212D10A the
@@ -568,10 +571,10 @@ MECHCLASS=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3
 # Loki is in the frame with the terrain.
 GAME=""
 if [ -s "$OUT.pkt" ]; then
-    { head -2 "$OUT.pkt"
+    { head -3 "$OUT.pkt"                                                # comment, 0xE5, reset world
       echo 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 01 45 A8 48 00 45 EC B8 00 40 AC CC CD 4D 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
       echo 'E4 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 02 45 A8 48 00 45 E9 98 00 40 AC CC CD 54 68 65 6D 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00'
-      tail -n +3 "$OUT.pkt"
+      tail -n +4 "$OUT.pkt"
       echo 'ED 00 00 00 00 00 00 00 00 00 42 31 5F 42 61 74 74 6C 65 54 65 63 68 5F 31 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00'; } > "$OUT.game"
     GAME=$("$BIN" "${VWE_GAME_FILES}/Full_Load_3_0"     --duart 11000 --rstub 3FF00000 --rirq --astub --monitor --clock 2000808     --set 40000100=1234567     --packet-file "$OUT.game"     --peek 0218AEE4:4     --frame-out "$OUT.rgb"     --steps 900000000 --top 0 2>&1 || true)
 fi
@@ -718,7 +721,7 @@ CHECKTEXT="$SEEN"
 check_contains 'type 3, 286 longwords'                      # the Mech's model record
 check_contains 'FFFFFFFF        1C4'                        # naming model 452, the MadCat
 check_contains '300.0000   150.0000     0.9397     0.9848'  # its searchlight
-check_contains 'entity 1 model 452 at (8000.0, 8000.0, 5.4): 338 polygons'  # drawn from the pod's camera, arms and all
+check_contains 'entity 1 model 452 at (8000.0, 8000.0, 5.4): 340 polygons'  # drawn from the pod's camera, arms and all
 CHECKTEXT="$UNSEEN"
 check_count_zero 'type 3,'                                  # no visibility range, no Mech
 CHECKTEXT="$AVATAR"
@@ -755,7 +758,7 @@ if [ -n "$GAME" ]; then
     CHECKTEXT="$GAME"
     check_contains '0000  02 1F A0 60'                                   # the pod is flying thing 1
     check_contains 'height 8.20'                                         # from its cockpit
-    check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 320 polygons'  # and sees the Loki, arms and all
+    check_contains 'entity 2 model 451 at (5385.0, 7475.0, 5.4): 322 polygons'  # and sees the Loki, arms and all
 fi
 # Scenario 4Q: live play, headless. tools/play.sh starts a game the same way
 # and runs the SDL cockpit with the main view drawn from the pod's own
@@ -791,6 +794,17 @@ if [ -n "$MAP" ]; then
     check_contains 'the bots closed'                                    # two CPU pilots found each other
     CHECKTEXT="$HUB"
     check_contains 'EC:'                                                # and broadcast as they went
+fi
+
+# The archive's images: every type 7 payload unpacked the way the renderer's
+# 0xFE0090F0 does it has to come out exactly the size it declares, and be an
+# image of that size.
+if [ -f "${VWE_GAME_FILES}/Cockpit Software/battletech_ti_res" ]; then
+    echo
+    echo "== images =="
+    CHECKTEXT=$(python tools/images.py "${VWE_GAME_FILES}/Cockpit Software/battletech_ti_res" 2>/dev/null | tail -2)
+    check_at_least "type 7 payloads unpacked exactly" 131
+    check_at_least "type 7 payloads that are images" 131
 fi
 
 # The model archive gets its own checkpoints. These are floors, not equalities:
@@ -1037,7 +1051,7 @@ fi
 
 echo
 echo "== tool self-checks =="
-for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py tools/mission_dis.py tools/mapsend.py; do
+for t in tools/model.py tools/render.py tools/tms340run.py tools/vehicles.py tools/opscon.py tools/fnstr.py tools/netmsg.py tools/entityfields.py tools/musashi_fpu.py tools/missions.py tools/mission_dis.py tools/mapsend.py tools/images.py; do
     total=$((total + 1))
     if python "$t" --selftest >/dev/null 2>&1; then
         pass=$((pass + 1))

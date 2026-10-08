@@ -147,7 +147,8 @@ class Hub:
                 drops.append([float(v) for v in f[:4]])
         world = [pkt(0xE5, 0x60, [(0x3C, ">l", 600000),
                                   (0x44, ">l", self.args.range),
-                                  (0x48, ">l", self.args.range)])]
+                                  (0x48, ">l", self.args.range)]),
+                 addressed(bytes.fromhex(mapsend.reset_world()), 0)]
         spots = self.arena(scen) if self.args.arena else None
         for pod in self.pods:
             if spots:

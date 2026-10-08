@@ -65,10 +65,10 @@ def mech(thing, rec, x, y, heading, name):
                             (0x50, ">f", heading)])
 
 # Facing 0 walks toward -Y: the opponent stands 150 ahead of a drop facing 0.
-print(lines[0]); print(lines[1])                      # comment, 0xE5
+print(lines[0]); print(lines[1]); print(lines[2])     # comment, 0xE5, reset world
 print(mech(1, veh, x, y, facing, b"Pilot"))
 print(mech(2, 8, x, y - 150.0, 180.0, b"Loki"))
-for l in lines[2:]:
+for l in lines[3:]:
     print(l)
 print(pkt(0xED, 0x40, [(0x0A, "16s", b"B1_BattleTech_1"), (0x32, ">l", 1)]))
 PY

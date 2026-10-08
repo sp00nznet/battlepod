@@ -8,6 +8,31 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **Every image in the archive.** The 131 type 7 payloads - 607 KB - are
+  packed images, and the renderer's own decompressor (`0xFE0090F0`) reads them:
+  all 131 unpack to exactly their declared size. Skies, panoramas, the drop
+  bay, explosions in fire and green; `tools/images.py` lists and exports them.
+  RENDERING.md, *Images*. Two checkpoints hold all 131. **290/290.**
+- **The pod's own sky.** The scene's `$2C0` names it, from the environment
+  table the 68020 picks at "Reset world" - which play.sh, the hub and mapsend
+  never sent. They do now, and BadLands has its blue sky and mountain
+  panorama, on a horizon that follows the camera's pitch. RENDERING.md,
+  *The sky*.
+- **The head-up display.** `$100`/`$240` items are drawn: the reticle at the
+  screen's centre, and the drop bay's backdrop while the Mech rises out of it.
+  Ground decals are not drawn from underneath. RENDERING.md, *The HUD*.
+
+### Fixed
+
+- **Every Mech carried arm 501.** The arm variables were read two words
+  early; the Loki's arm is 503, with the long barrel. 322 polygons now.
+
+- **The ground.** The pod's type 4 records - flat models at a scale, with a
+  lengthwise stretch - are drawn: terrain patches (41), the dark pads at the
+  drop zones (101), and the shadow under every Mech (85). Pod frames no
+  longer get shadows of our own. The scenario column they come from was
+  documented as collision hulls; it is what the pod draws flat.
+  RENDERING.md, *Ground and shadows*.
 - **The Mechs walk.** Every Mech is posed per frame from the fifteen
   instance transforms in its display-list record: hips, knees and ankles
   move every frame, read by columns and composed onto the parent joint (the

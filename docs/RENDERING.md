@@ -514,7 +514,10 @@ Instances 5 and 3 are the skeleton's shoulder slots (nodes 9 and 11 on the
 Loki), and in the frame both are identity at rest, so an arm hangs at its
 offset from the Mech's root, authored pointing forward (+z, the way the toes
 point). `frame_draw` adds the shoulder (516/517's own few polygons) and the
-chosen arm to the assembled Mech: the Loki goes from 206 polygons to 320.
+chosen arm to the assembled Mech: the Loki goes from 206 polygons to 322.
+(The first version read the variables two words early - the walker prints a
+record's words from its third - and drew arm 501 on everything. The Loki's
+is 503, with the long barrel.)
 
 The arm models keep their forearm behind three kinds of branch - a distance
 test for the level of detail, the weapon pod's intact value, and face-facing
@@ -559,6 +562,107 @@ pairs that always add to 1, an intact and a damaged fraction, and on the
 word-31 alignment they are exactly the sub-part tags the vehicle record
 gives each hit location: the Loki's Right Torso (24, 25) and Right Arm (44,
 45) are the ones that took hits.
+
+### Ground and shadows
+
+A display list carries type 4 records as well as type 3s. They are laid out
+the same - entity, model, a 3x3, a position - and then scaled: word 21 is the
+scale, and word 23, where it is not zero, stretches the model along its own
+length. Every model one names is flat, at height 0, and they are what lies
+on the ground:
+
+```
+41    a terrain patch up to 750 units across, sand to grey   class 2 lines, column 1
+101   the dark pad at each team's drop zone                  class 2 lines, column 1
+85    the shadow under a Mech, stretched 2                    one per Mech
+35    no polygons (57 vertices)                               class 2 lines, column 1
+```
+
+Drawn as they come, the player starts on a black pad with the terrain
+patches stretching away, and each Mech carries the pod's own shadow - so
+`frame_draw` no longer casts shadows of its own, which the pod never did for
+mesas or buildings. Whether a class 2 line's column 8 model is also placed
+where its column 1 lies is not settled: in the frames seen so far the mesas
+it would put there were beyond the visibility range.
+
+### Images
+
+The archive's type 7 payloads - 131 of them, 607 KB - are **all images**,
+packed. The renderer's decompressor at `0xFE0090F0` is short enough to read
+whole, and its caller at `0xFE0089B0` says what comes first:
+
+```
+FE008950  MOVE  *A9+, A1, 1      ; a longword: the unpacked size, in bytes
+FE008960  SLL   #3, A1           ;  in bits, to allocate
+FE0089A0  MOVE  A9, A0
+FE0089B0  CALLR $FE0090F0        ; then the packed stream
+```
+
+The stream is in blocks, each opened by a 16-bit word (zero ends the
+payload), and read a byte at a time: `n` from 0 to 0x7F copies `n` literal
+bytes; `0x80`-`0xFE` copies `n & 0x7F` bytes from the start of the block
+plus a 16-bit offset; `0xFF` reads a 16-bit count, zero ending the block and
+anything else a long copy with an offset of its own. The renderer is
+little-endian and every longword was reversed on its way up, so the bytes it
+reads are each longword of the file back to front.
+
+Read that way, **all 131 unpack to exactly the size they declare**, and every
+one is an image: four 16-bit words - width, height, 0, and a reference row -
+then 15-bit RGB pixels. The type 4 resources that carry data are sprites in
+the same pixels, with a hotspot and big-endian headers. `tools/images.py`
+lists them and writes them out, and the harness counts the exact unpacks.
+
+| what | ids | size |
+|---|---|---|
+| the reticle, eight frames | 72-79 | 33x33 sprites |
+| a planet, a moon | 82, 83 | sprites |
+| skies: gradients | 180-183 (aliases 86-89) | 480x180 |
+| skies: panoramas | 186-188, 200 (200 is alias 71) | 3360x128 |
+| the drop bay | 189 (alias 70) | 480x720 |
+| two tall panels, cockpit furniture by the look | 184, 185 | 292x360, 268x360 |
+| explosions, fire and a green twin, frame by frame | 261-320, 381-440 (aliases 201-260, 321-380) | 12x12 to 289x188 |
+
+Four type 4s (126-130) carry data in some other form, not yet read.
+
+### The sky
+
+The scene's camera item, `$2C0`, names the sky: its first operand is a
+resource id, and `0xFE023CC0` hands it to the resource lookup and offsets the
+image by its reference row - the horizon. The id comes from the 68020's
+**environment table**, `0x84`-byte entries at `0x02179A10` (or `0x02179B9C`
+when the two halves of the visibility range add up to less than 600), indexed
+by the `0xE5` welcome's `+0x40`:
+
+```
+0x02179A10  0  sky 71  the mountain panorama        daylight
+            1  sky 92  not in this archive
+            2  sky 93  not in this archive          the drop bay's
+0x02179B9C  0  sky 86  dusty gradient
+            1  sky 87  dark gradient
+            2  sky 88  darker
+```
+
+The rest of an entry is the haze and light colours the same item carries.
+**The selection is made by "Reset world"** - an `0xE4` of class -1, which
+the console's own log shows it sending before it creates any vehicle, and
+whose arm (`0x0213CF72`) clears the game and picks the environment. Without
+it the pod keeps the bay's, and its sky is not in the archive.
+`tools/mapsend.py` now sends it, and so play.sh and the hub do.
+
+`frame_draw` draws the sky first: the image's reference row on the horizon -
+where a point far ahead at eye level projects, so it follows the camera's
+pitch - and wrapped round the heading, one image pixel to a screen pixel. The
+renderer keeps its sky as state; a list with no `$2C0` keeps the last.
+
+### The head-up display
+
+The HUD is its own item stream: `$100 x y` sets a screen position and `$240
+id` draws an image there. In a game it is the reticle at the screen's centre
+(72, or 73-79 while it has a target); during the drop it is also 70, the bay,
+at (0, 0) and sliding down as the Mech rises - its eye is below the ground
+then, which is why ground decals are not drawn from underneath. A sprite is
+placed by its hotspot and 0 is transparent in it; a full-screen image is
+placed by its corner and is opaque.
 
 ### The weapon table
 
@@ -748,12 +852,13 @@ each object by its own heading and scale. One decoded model is drawn hundreds
 of times, which is what the display list does too, and is why the rasteriser
 takes a placement rather than a merged mesh the size of a map.
 
-**Which column names the model differs by record length, and getting it wrong
-draws the collision hulls instead.** On a nine-field record, column 1 holds
-shapes of 0 to 7 polygons with radii in the hundreds - a hull, not a model -
-while column 8 holds the real geometry: 132 polygons for the terrain mesa, 151
-for a building. An eight-field record has no column 8 and its column 1 is the
-drawable one. That is what the console's `thing, class, shape` log line is
+**Which column names the model differs by record length.** On a nine-field
+record (class 2, ground) column 8 holds raised geometry - 132 polygons for the
+terrain mesa, 151 for a building - and column 1 holds shapes of 0 to 7
+polygons with radii in the hundreds. Those were taken for collision hulls, and
+they are not: **they are flat, and the pod draws them** (*Ground and
+shadows*, below). An eight-field record has no column 8 and its column 1 is
+the drawable one. That is what the console's `thing, class, shape` log line is
 doing with three ids.
 
 The maps are thousands of units across where a mech is nine tall, so from above

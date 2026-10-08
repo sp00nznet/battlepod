@@ -244,12 +244,18 @@ move.*
 - **What weapon each trigger fires, and what hit the Loki.** `A5` alone fires
   and destroys a Loki at 100 units; `A6` and `A7` set other bits of the same
   mask. Which of the MadCat's weapons each group holds, and what the class 11
-  shots are, is not read. Model 80, the hit effect, is a type 4 resource and
-  `--frame-out` does not draw it.
-- **Type 7**, 607 KB of the archive. Compressed, decompressor readable at
-  `0xFE0090F0`, but the first longword is shared across groups of records rather
-  than being a per-record length - so there is no oracle, and everything else
-  here was settled by having one.
+  shots are, is not read. Model 80, the hit effect, is a model of one vertex
+  that blits explosion frames (`$560`, images 201-260 and their green twins)
+  behind eleven predicates; `--frame-out` does not draw it yet.
+- **How fast the sky turns.** The panorama is drawn wrapping once per full
+  turn, 9.3 pixels a degree for the 3360-wide one, where the view moves 8 (480
+  pixels across the 60 degrees `$2C0` gives). Whether the pod scrolled it at 8
+  and let it seam is not read. The rasteriser's own field of view is 54
+  degrees, not 60, which is the same question from the other side.
+- **Type 4s 126-130** carry data that is not a sprite.
+- **Explosions.** The archive's fire and its green twins are decoded
+  (RENDERING.md, *Images*); where the pod puts them - a HUD item, a record
+  type - is not followed yet, so they are not drawn.
 - **Two TMS34082 operations**: the short-form `CEXEC` command packing and one
   mode 3 routine. The scanned handbook is not legible at those tables, and
   guessing would put numbers on screen no cockpit produced.

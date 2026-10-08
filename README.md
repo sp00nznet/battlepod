@@ -23,14 +23,16 @@ under an interpreter, which is all a 1996 board needs (see
 starts the way the operator console starts one, the main view draws the
 pod's own frames in a window, the keyboard is its throttle, stick and
 trigger, and pods joined over UDP can destroy each other. There is no sound,
-no secondary display and no heads-up display yet. Conformance: **287/287**
+no secondary display, and the head-up display has its reticle but not yet
+its text. Conformance: **290/290**
 checkpoints (`make conformance`).
 
 | | |
 |---|---|
 | Boots its own image set to the main game loop | yes |
 | Renderer, audio and Amiga boards | stubbed; the renderer's display lists are read and drawn in C |
-| Main view, from the pod's own frames | yes |
+| Main view, from the pod's own frames | yes: Mechs posed and walking, ground and shadows, the pod's sky |
+| Head-up display | the reticle and the drop bay; text readouts not yet |
 | Panel: lamps, displays, bar graphs (Remote I/O) | yes, one window per device |
 | Keyboard as throttle, stick, trigger, target select | yes |
 | Several pods over UDP, CPU pilots, the operator's view | yes (`tools/hub.py`) |
@@ -71,9 +73,10 @@ your own copy.
 
 ![Walking toward the Loki on BadLands, drawn from the pod's own display list](docs/screenshots/cockpit-loki.png)
 
-*The main view on the netlab test VM: a MadCat walking toward the Loki on
-BadLands, every polygon placed by the pod's own display list - arms
-included, which the pod's own record chooses (RENDERING.md, *The arms*).*
+*The main view on the netlab test VM: a MadCat walking up to the Loki on
+BadLands. Every polygon is placed by the pod's own display list, the Loki
+carries the arm its own record chooses and the shadow the pod sends, and the
+sky, the mountains and the reticle are the pod's own images.*
 
 ![The operator's view: three CPU pilots fighting on BadLands](docs/screenshots/operator-view.png)
 
@@ -475,7 +478,7 @@ make conformance VWE_GAME_FILES="$GF"
 ```
 
 Replays the boot and checks it still reaches every milestone it reached before,
-reporting a pass count (currently 287/287). Skips with a clear message if no
+reporting a pass count (currently 290/290). Skips with a clear message if no
 release is present, since the corpus cannot be redistributed.
 
 ### A note on the CPU profile

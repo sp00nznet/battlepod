@@ -176,6 +176,7 @@ struct ras_place {
 	float x, y, z;			/* world position; z is height */
 	float heading;			/* radians about the vertical */
 	float scale;
+	float stretch;			/* along the model's z as well; 0 is none */
 };
 
 static const struct ras_place RAS_HERE = { 0, 0, 0, 0, 1.0f };
@@ -187,6 +188,8 @@ static void ras_to_world(const struct ras_place *p, float mx, float my, float mz
 			 float *o)
 {
 	float c = cosf(p->heading), s = sinf(p->heading);
+
+	if (p->stretch != 0.0f) mz *= p->stretch;
 
 	o[0] = p->x + p->scale * (mx * c - mz * s);
 	o[1] = p->z + p->scale * my;

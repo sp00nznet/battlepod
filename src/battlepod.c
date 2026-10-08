@@ -411,8 +411,19 @@ static uint32_t mesh_be32(uint32_t a)
 }
 
 /* Find a type 1 resource by id, copying its body out. Returns its length. */
+static uint32_t res_find(uint32_t base, uint32_t limit, uint32_t want, uint32_t type,
+			 uint8_t *out, uint32_t cap);
+
 static uint32_t mesh_find(uint32_t base, uint32_t limit, uint32_t want,
 			  uint8_t *out, uint32_t cap)
+{
+	return res_find(base, limit, want, 1, out, cap);
+}
+
+/* Resource `want` of `type` out of the archive in emulator memory, inline
+ * data only (an alias, which has none, is not followed). */
+static uint32_t res_find(uint32_t base, uint32_t limit, uint32_t want, uint32_t type,
+			 uint8_t *out, uint32_t cap)
 {
 	uint32_t at = base;
 
@@ -423,7 +434,7 @@ static uint32_t mesh_find(uint32_t base, uint32_t limit, uint32_t want,
 		uint32_t i;
 
 		if (rid == 0xFFFFFFFFu) return 0;
-		if (rid == want && rtype == 1 && inline_len && inline_len <= cap) {
+		if (rid == want && rtype == type && inline_len && inline_len <= cap) {
 			for (i = 0; i < inline_len; i++)
 				out[i] = (uint8_t)m68k_read_memory_8(at + 16 + i);
 			return inline_len;
@@ -871,17 +882,23 @@ static void scene_report(void)
  * the culler - so a frame is fully described, for our purposes, by these. */
 #define FRAME_OBJS 1024
 #define FRAME_POSES 64
+#define FRAME_HUD 64
 #define MECH_SLOTS 15
 #define MECH_POSE 94			/* record word of slot 1's transform */
 struct pod_frame {
 	int have_cam, seq;
 	float cam[12];			/* 3x3 rotation, then the eye, display-list axes */
 	int n;
-	struct { uint32_t entity, model, arms; int pose; float rot[9], at[3]; } obj[FRAME_OBJS];
+	struct { uint32_t entity, model, arms; int pose, ground; float rot[9], at[3], scale, stretch; } obj[FRAME_OBJS];
 	/* A Mech's record carries fifteen instance transforms from word 94, a
 	 * 3x3 and a translation each, one per skeleton slot: the pose. */
 	int npose;
 	float pose[FRAME_POSES][MECH_SLOTS][12];
+	/* The head-up display: each $240 in an item stream, with the screen
+	 * position the $100 before it set. */
+	int nhud;
+	struct { int x, y; uint32_t id; } hud[FRAME_HUD];
+	uint32_t sky;			/* the scene's $2C0: the sky's resource id */
 };
 static struct pod_frame g_frame_cur, g_frame_last;
 static struct pod_frame g_frame_latest;	/* the last complete list, placed or not */
@@ -906,7 +923,7 @@ static int g_mcache_n;
  * where 516/517's own $040 puts it, (+-1.38, 1.80, -1.50) from the Mech's
  * root, through an instance transform that is identity at rest.
  * RENDERING.md, *The arms*. */
-#define MECH_VARS 31			/* record word of var 0 */
+#define MECH_VARS 33			/* record word of var 0: the walker prints it as word 31 */
 
 static uint32_t dl_word(uint32_t ti_byte_addr, uint32_t i);
 
@@ -1119,6 +1136,176 @@ static const struct mesh *model_mesh(uint32_t id, uint32_t arms)
  * that direction. The viewer's own record, which sits at the eye, is skipped.
  * Joint angles are not applied: the stance is the rig's rest pose. Says what
  * it drew when `log` is set; returns the polygons drawn. */
+/* Any resource by id, following an alias (a type 4 whose count is the
+ * target's id) to what it names. Returns the length; *type is what was found. */
+static uint32_t res_any(uint32_t want, uint8_t *out, uint32_t cap, uint32_t *type, int depth)
+{
+	uint32_t base = g_mesh_base, at = base;
+
+	while (at + 16 <= base + 0x200000u && depth < 4) {
+		uint32_t rid = mesh_be32(at), rtype = mesh_be32(at + 4);
+		uint32_t flags = mesh_be32(at + 8), count = mesh_be32(at + 12);
+		uint32_t inline_len = ((flags & 0xFF) & 0x10) ? 0 : count * 4, i;
+
+		if (rid == 0xFFFFFFFFu) return 0;
+		if (rid == want) {
+			if (!inline_len) return res_any(count, out, cap, type, depth + 1);
+			if (inline_len > cap) return 0;
+			for (i = 0; i < inline_len; i++)
+				out[i] = (uint8_t)m68k_read_memory_8(at + 16 + i);
+			*type = rtype;
+			return inline_len;
+		}
+		at += 16 + inline_len;
+	}
+	return 0;
+}
+
+/* A type 7 payload, unpacked the way the renderer's 0xFE0090F0 does it: a
+ * longword of unpacked size, then blocks, each a 16-bit word (0 ends) and
+ * commands - n >= 0 copies n literal bytes; 0x80-0xFE copies n & 0x7F bytes
+ * from block start + a 16-bit offset; 0xFF reads a 16-bit count, 0 ending the
+ * block. The renderer is little-endian and every longword was reversed on
+ * upload, so the byte stream is each longword back to front. RENDERING.md,
+ * *Images*. */
+static uint32_t t7_unpack(const uint8_t *in, uint32_t inlen, uint8_t *out, uint32_t cap)
+{
+	uint32_t size = (uint32_t)in[0] << 24 | in[1] << 16 | in[2] << 8 | in[3];
+	uint32_t at = 4, o = 0;
+#define T7(i) in[((i) & ~3u) + 3 - ((i) & 3u)]
+
+	if (size > cap) return 0;
+	while (at + 2 <= inlen && o < size) {
+		uint32_t start = o;
+		if (!T7(at) && !T7(at + 1)) break;
+		at += 2;
+		for (;;) {
+			int n;
+			uint32_t off, k;
+			if (at >= inlen) return o;
+			n = (int8_t)T7(at); at++;
+			if (n > 0) {
+				for (k = 0; k < (uint32_t)n && at < inlen && o < size; k++, at++) out[o++] = T7(at);
+				continue;
+			}
+			if (n == 0) return o;		/* malformed: a literal run of nothing */
+			n &= 0xFF;
+			if (n == 0xFF) {
+				n = T7(at) | T7(at + 1) << 8; at += 2;
+				if (!n) break;		/* next block */
+			} else {
+				n &= 0x7F;
+			}
+			off = T7(at) | T7(at + 1) << 8; at += 2;
+			for (k = 0; k < (uint32_t)n && o < size && start + off + k < o; k++)
+				out[o] = out[start + off + k], o++;
+		}
+	}
+#undef T7
+	return o;
+}
+
+/* An image resource, decoded once: a type 7 (header w, h, ?, a reference
+ * row, all 16-bit little-endian, then 15-bit pixels) or a type 4 sprite
+ * (w, h, hotspot x, y big-endian, then pixels). 0 is transparent. */
+struct image { uint32_t id; int w, h, hx, hy; uint16_t *px; };
+#define IMAGES 16
+static struct image g_image[IMAGES];
+static int g_images;
+
+static const struct image *image_get(uint32_t id)
+{
+	static uint8_t raw[0x40000], big[0xE0000];
+	struct image *im;
+	uint32_t type = 0, len, n, i;
+	const uint8_t *p;
+	int le;
+
+	for (i = 0; i < (uint32_t)g_images; i++)
+		if (g_image[i].id == id) return g_image[i].px ? &g_image[i] : NULL;
+	if (g_images >= IMAGES) return NULL;
+	im = &g_image[g_images++];
+	memset(im, 0, sizeof *im);
+	im->id = id;
+	len = res_any(id, raw, sizeof raw, &type, 0);
+	if (type == 7) {
+		len = t7_unpack(raw, len, big, sizeof big);
+		p = big; le = 1;
+	} else if (type == 4) {
+		p = raw; le = 0;
+	} else {
+		return NULL;
+	}
+	if (len < 8) return NULL;
+	if (le) {
+		im->w = p[0] | p[1] << 8; im->h = p[2] | p[3] << 8;
+		im->hx = 0; im->hy = p[6] | p[7] << 8;
+	} else {
+		im->w = p[0] << 8 | p[1]; im->h = p[2] << 8 | p[3];
+		im->hx = p[4] << 8 | p[5]; im->hy = p[6] << 8 | p[7];
+	}
+	n = (uint32_t)(im->w * im->h);
+	if (!n || 8 + n * 2 > len || !(im->px = malloc(n * 2))) return NULL;
+	for (i = 0; i < n; i++)
+		im->px[i] = le ? (uint16_t)(p[8 + i * 2] | p[9 + i * 2] << 8)
+			       : (uint16_t)(p[8 + i * 2] << 8 | p[9 + i * 2]);
+	return im;
+}
+
+static void px555(uint8_t *d, unsigned v)
+{
+	d[0] = (uint8_t)(((v >> 10) & 31) * 255 / 31);
+	d[1] = (uint8_t)(((v >> 5) & 31) * 255 / 31);
+	d[2] = (uint8_t)((v & 31) * 255 / 31);
+}
+
+/* The sky: the scene's image, its reference row on the horizon and wrapped
+ * around the heading, one image pixel to a screen pixel. Above it, its top
+ * row carries on; the rows below the horizon are its own ground and haze. */
+static void sky_draw(struct raster *r, uint32_t id, float turn, int horizon)
+{
+	const struct image *im = image_get(id);
+	int x, y, shift;
+
+	if (!im) return;
+	/* The image spans the full turn, so one wrap is 360 degrees: 9.3 pixels
+	 * a degree for the 3360-wide panorama, against the view's 8 - whether the
+	 * pod scrolled it at 8 and let it seam is not known (UNRESOLVED.md). */
+	shift = -(int)(turn / 6.2831853f * (float)im->w);
+	for (y = 0; y < RAS_H && y < horizon - im->hy + im->h; y++) {
+		int sy = y - (horizon - im->hy);
+		if (sy < 0) sy = 0;
+		for (x = 0; x < RAS_W; x++) {
+			int sx = ((x + shift) % im->w + im->w) % im->w;
+			px555(&r->px[(y * RAS_W + x) * 3], im->px[sy * im->w + sx]);
+		}
+	}
+}
+
+/* A HUD sprite is a type 4 resource that carries data: width, height and a
+ * hotspot, 16 bits each, then 15-bit RGB pixels, 0 transparent. 72-79 are
+ * the reticle's frames, 82 a planet, 83 a moon. Those with no data are
+ * aliases onto a compressed type 7 - 70, the full-screen layer every frame
+ * draws at (0, 0), is one - and are not drawn yet. RENDERING.md, *The HUD*. */
+static void hud_sprite(struct raster *r, int x, int y, uint32_t id)
+{
+	const struct image *im = image_get(id);
+	int i, j, ox, oy;
+
+	if (!im) return;
+	/* A sprite is placed by its hotspot; a full-screen image by its corner. */
+	ox = x - (im->w <= 128 ? im->hx : 0);
+	oy = y - (im->w <= 128 ? im->hy : 0);
+	for (j = 0; j < im->h; j++)
+		for (i = 0; i < im->w; i++) {
+			int sx = ox + i, sy = oy + j;
+			unsigned v = im->px[j * im->w + i];
+			/* 0 is transparent in a sprite; a full-screen image is opaque. */
+			if ((!v && im->w <= 128) || sx < 0 || sy < 0 || sx >= RAS_W || sy >= RAS_H) continue;
+			px555(&r->px[(sy * RAS_W + sx) * 3], v);
+		}
+}
+
 static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models, int log)
 {
 	struct ras_cam cam;
@@ -1139,7 +1326,21 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 		       eye[0], eye[2], 0.0f, eye[1], cam.turn * 57.29578f, fr->n);
 	}
 
-	ras_background(r, RAS_H / 2);
+	{
+		/* Where the horizon falls: a point far ahead at eye level, through
+		 * the camera's pitch - not the middle of the screen, which only
+		 * holds while the view is level. */
+		float far[3], sc[3];
+		int horizon = RAS_H / 2;
+		far[0] = 0; far[1] = -sinf(cam.pitch) * 1e5f; far[2] = cosf(cam.pitch) * 1e5f;
+		if (ras_project(far, sc) && sc[1] > -RAS_H && sc[1] < 2 * RAS_H) horizon = (int)sc[1];
+		/* The sky is the renderer's state: a list without a $2C0 (the
+		 * bay's) keeps the one it had. */
+		static uint32_t sky;
+		if (fr->sky) sky = fr->sky;
+		ras_background(r, horizon);
+		if (sky) sky_draw(r, sky, cam.turn, horizon);
+	}
 	for (i = 0; i < fr->n; i++) {
 		struct ras_place at;
 		const struct mesh *m;
@@ -1147,6 +1348,9 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 		float dx = fr->obj[i].at[0] - eye[0], dz = -fr->obj[i].at[2] - eye[2];
 		int n;
 
+		/* Ground is seen from above: while the Mech rises out of its bay the
+		 * eye is under the drop pad, and the pad faces away from it. */
+		if (fr->obj[i].ground && eye[1] < fr->obj[i].at[1]) continue;
 		if (dx * dx + dz * dz < 1.0f) {
 			if (log) printf("  entity %u model %u: at the eye, not drawn\n",
 					fr->obj[i].entity, id);
@@ -1164,12 +1368,18 @@ static int frame_draw(struct raster *r, const struct pod_frame *fr, int *models,
 		at.y = -fr->obj[i].at[2];
 		at.z = fr->obj[i].at[1];
 		at.heading = atan2f(fr->obj[i].rot[2], fr->obj[i].rot[0]);
-		at.scale = 1.0f;
-		n = ras_draw_at(r, m, &cam, &at, 0.0f, 1);
+		at.scale = fr->obj[i].scale > 0.0f ? fr->obj[i].scale : 1.0f;
+		at.stretch = fr->obj[i].stretch;
+		/* No shadow of our own: the pod sends one for each Mech, a type 4. */
+		n = ras_draw_at(r, m, &cam, &at, 0.0f, 0);
 		if (log) printf("  entity %u model %u at (%.1f, %.1f, %.1f): %d polygons\n",
 				fr->obj[i].entity, id, at.x, at.y, at.z, n);
 		poly += n;
 		(*models)++;
+	}
+	for (i = 0; i < fr->nhud; i++) {
+		if (log) printf("  hud %u at (%d, %d)\n", fr->hud[i].id, fr->hud[i].x, fr->hud[i].y);
+		hud_sprite(r, fr->hud[i].x, fr->hud[i].y, fr->hud[i].id);
 	}
 	return poly;
 }
@@ -2017,7 +2227,7 @@ static uint32_t dl_string(uint32_t ti_byte_addr, uint32_t at, uint32_t room,
 
 static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
 {
-	int guard = 0;
+	int guard = 0, x = 0, y = 0;
 	while (room && guard++ < 128) {
 		uint32_t op = dl_word(ti_byte_addr, at), len;
 		if (op & 0x1F || op > 0x300) {
@@ -2047,6 +2257,18 @@ static void dl_items(uint32_t ti_byte_addr, uint32_t at, uint32_t room)
 			rslog("\n");
 		}
 		if (op == 0 || len > room) return;
+		/* $100 x y sets a screen position; $240 id draws there. */
+		if (op == 0x2C0 && len >= 2) {
+			g_frame_cur.sky = dl_word(ti_byte_addr, at + 1);
+		} else if (op == 0x100 && len >= 3) {
+			x = (int)dl_word(ti_byte_addr, at + 1);
+			y = (int)dl_word(ti_byte_addr, at + 2);
+		} else if (op == 0x240 && len >= 2 && g_frame_cur.nhud < FRAME_HUD) {
+			int h = g_frame_cur.nhud++;
+			g_frame_cur.hud[h].x = x;
+			g_frame_cur.hud[h].y = y;
+			g_frame_cur.hud[h].id = dl_word(ti_byte_addr, at + 1);
+		}
 		at += len;
 		room -= len;
 	}
@@ -2060,6 +2282,8 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 
 	rslog("  display list at TI %08X: %u longwords\n", ti_byte_addr, count);
 	if (g_frame_cur.have_cam) g_frame_latest = g_frame_cur;
+	/* --frame-out's copy was taken mid-list, at a Mech; the list is whole now. */
+	if (g_frame_last.seq == g_frame_cur.seq) g_frame_last = g_frame_cur;
 	memset(&g_frame_cur, 0, sizeof g_frame_cur);
 	g_frame_cur.seq = ++g_frames_walked;
 	if (count == 0 || count > 0x40000) {
@@ -2140,14 +2364,22 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 			uint32_t k;
 			rslog("    type %u, %u longwords\n", type, len);
 			/* A type 3 is an entity, a model id, a 3x3 and a
-			 * position; the rest is its joints. */
-			if (type == 3 && len >= 18 && g_frame_cur.n < FRAME_OBJS) {
+			 * position; the rest is its joints. A type 4 is laid
+			 * out the same and then scaled - word 21, and word 23
+			 * stretches it lengthwise - and is what lies on the
+			 * ground: the gravel under a mesa (41), a dark marking
+			 * (101), the shadow under each Mech (85, stretched 2). */
+			if ((type == 3 || (type == 4 && len >= 24)) && len >= 18 &&
+			    g_frame_cur.n < FRAME_OBJS) {
 				int f = g_frame_cur.n++;
 				g_frame_cur.obj[f].entity = dl_word(ti_byte_addr, at + 2);
 				g_frame_cur.obj[f].model = dl_word(ti_byte_addr, at + 5);
-				g_frame_cur.obj[f].arms = mech_arms(ti_byte_addr, at, len);
+				g_frame_cur.obj[f].ground = type == 4;
+				g_frame_cur.obj[f].scale = type == 4 ? as_float(dl_word(ti_byte_addr, at + 21)) : 1.0f;
+				g_frame_cur.obj[f].stretch = type == 4 ? as_float(dl_word(ti_byte_addr, at + 23)) : 0.0f;
+				g_frame_cur.obj[f].arms = type == 3 ? mech_arms(ti_byte_addr, at, len) : 0;
 				g_frame_cur.obj[f].pose = -1;
-				if (len >= MECH_POSE + MECH_SLOTS * 12 && g_frame_cur.npose < FRAME_POSES) {
+				if (type == 3 && len >= MECH_POSE + MECH_SLOTS * 12 && g_frame_cur.npose < FRAME_POSES) {
 					int q = g_frame_cur.npose++, sl;
 					for (sl = 0; sl < MECH_SLOTS; sl++)
 						for (k = 0; k < 12; k++)
@@ -2193,6 +2425,8 @@ static void rstub_dlist(uint32_t ti_byte_addr)
 static void frame_report(void)
 {
 	struct pod_frame *fr = &g_frame_last;
+
+	if (fr->seq == g_frame_cur.seq) fr = &g_frame_cur;	/* the run stopped mid-list's successor */
 	int poly, drawn;
 	FILE *f;
 

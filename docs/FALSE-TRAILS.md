@@ -26,6 +26,23 @@ from a 1994 press kit. Period footage and the archive's six 22 KB bitmaps both
 say flat-shaded untextured polygons. Corrected before the renderer was built,
 which is the only reason it was built the right way.
 
+**Type 7 had an oracle all along.** UNRESOLVED.md said its first longword was
+shared across groups of records, so it could not be a per-record length and
+there was nothing to check a decompressor against. It is the unpacked size;
+records share it because their images are the same size - four 480x180 skies,
+the frames of one explosion. Read as that, all 131 unpack to exactly it.
+
+**A ground model is not a collision hull.** A nine-field scenario line's column
+1 names shapes of a few polygons with radii in the hundreds, and those were set
+aside as hulls. They are flat, and the pod draws them: the terrain patches and
+the drop-zone pads, sent as type 4 records.
+
+**Word 31 is the walker's word 31.** The variables in a Mech's record were
+found at "word 31" of the walker's printout, which starts at the record's third
+word - and the code that read them used record word 31. It drew arm 501 on
+every Mech, because the variable two words early happened to read 1. A world
+reset cleared that variable, the arms vanished, and that is how it was found.
+
 **A part has two extents and they are not interchangeable.** The box a model
 *states* for itself decides which node it hangs on; where its vertices
 *actually are* decides whether two placed parts touch. The C port used the
